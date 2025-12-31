@@ -1,86 +1,232 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, TextInput, FlatList, Alert } from "react-native";
+import {
+    View,
+    Text,
+    TextInput,
+    FlatList,
+    Alert,
+    StyleSheet,
+    Pressable,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+
+import GradientScreen from "../ui/GradientScreen";
 import Card from "../ui/Card";
 import AppButton from "../ui/AppButton";
+import AiHeader from "../ui/AiHeader";
 import { listTasks, createTask, updateTask } from "../api/tasks";
 
 export default function TasksScreen() {
-  const [tasks, setTasks] = useState([]);
-  const [title, setTitle] = useState("");
+    const [tasks, setTasks] = useState([]);
+    const [title, setTitle] = useState("");
+    const [expandedId, setExpandedId] = useState(null);
+    const [streak, setStreak] = useState(0);
 
-  async function load() {
-    const data = await listTasks();
-    setTasks(data);
-  }
-
-  useEffect(() => {
-    load();
-  }, []);
-
-  async function add() {
-    try {
-      if (!title.trim()) return;
-      await createTask(title.trim(), null);
-      setTitle("");
-      await load();
-    } catch (e) {
-      Alert.alert("Create task failed", e?.response?.data || e.message);
+    async function load() {
+        const data = await listTasks();
+        setTasks(data);
     }
-  }
 
-  async function toggleDone(t) {
-    try {
-      const next = t.status === "DONE" ? "OPEN" : "DONE";
-      await updateTask(t.id, { status: next });
-      await load();
-    } catch (e) {
-      Alert.alert("Update task failed", e?.response?.data || e.message);
+    useEffect(() => {
+        load();
+    }, []);
+
+    async function add() {
+        try {
+            if (!title.trim()) return;
+            await createTask(title.trim(), null);
+            setTitle("");
+            await load();
+        } catch (e) {
+            Alert.alert("Create task failed", e?.response?.data || e.message);
+        }
     }
-  }
 
-  return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#F9FAFB" }}>
-      <View style={{ flex: 1, padding: 16 }}>
-        <Text style={{ fontSize: 22, fontWeight: "700", marginBottom: 12 }}>
-          Tasks
-        </Text>
+    async function toggleDone(t) {
+        try {
+            const next = t.status === "DONE" ? "OPEN" : "DONE";
+            await updateTask(t.id, { status: next });
+            if (next === "DONE") setStreak((s) => s + 1);
+            await load();
+        } catch (e) {
+            Alert.alert("Update task failed", e?.response?.data || e.message);
+        }
+    }
 
-        <Card>
-          <TextInput
-            placeholder="New task..."
-            value={title}
-            onChangeText={setTitle}
-            style={{
-              borderWidth: 1,
-              borderColor: "#ddd",
-              borderRadius: 12,
-              padding: 12,
-              marginBottom: 10,
-            }}
-          />
-          <AppButton title="Add task" onPress={add} />
-        </Card>
+    function priorityFor(task) {
+        const len = task.title.length;
+        if (len > 40) return "High";
+        if (len > 20) return "Medium";
+        return "Low";
+    }
 
-        <FlatList
-          data={tasks}
-          keyExtractor={(x) => x.id}
-          renderItem={({ item }) => (
-            <Card>
-              <Text style={{ fontWeight: "700" }}>{item.title}</Text>
-              <Text style={{ marginTop: 6, color: "#555" }}>
-                Status: {item.status}
-              </Text>
-              <Text
-                onPress={() => toggleDone(item)}
-                style={{ marginTop: 10, fontWeight: "600" }}
-              >
-                Toggle Done →
-              </Text>
-            </Card>
-          )}
-        />
-      </View>
-    </SafeAreaView>
-  );
+    return (
+        <GradientScreen>
+            <SafeAreaView style={{ flex: 1 }}>
+                <View style={styles.container}>
+                    <AiHeader
+                        title="AI Action Hub"
+                        subtitle={`🔥 ${streak}-task completion streak`}
+                    />
+
+                    <Card style={styles.card}>
+                        <TextInput
+                            placeholder="Ask AI to track an action…"
+                            placeholderTextColor="rgba(255,255,255,0.5)"
+                            value={title}
+                            onChangeText={setTitle}
+                            style={styles.input}
+                        />
+                        <AppButton title="Add task" onPress={add} />
+                    </Card>
+
+                    <FlatList
+                        data={tasks}
+                        keyExtractor={(x) => x.id}
+                        contentContainerStyle={{ paddingBottom: 60 }}
+                        renderItem={({ item }) => {
+                            const priority = priorityFor(item);
+                            const expanded = expandedId === item.id;
+
+                            return (
+                                <Card style={styles.card}>
+                                    <Pressable onPress={() => toggleDone(item)}>
+                                        <View style={styles.row}>
+                                            <Ionicons
+                                                name={
+                                                    item.status === "DONE"
+                                                        ? "checkmark-circle"
+                                                        : "ellipse-outline"
+                                                }
+                                                size={20}
+                                                color={item.status === "DONE" ? "#22C55E" : "#A5B4FC"}
+                                            />
+                                            <Text style={styles.taskTitle}>
+                                                {item.title}
+                                            </Text>
+                                        </View>
+                                    </Pressable>
+
+                                    <View style={styles.metaRow}>
+                                        <Badge text="AI suggested" />
+                                        <PriorityBadge level={priority} />
+                                        <Text style={styles.due}>Due: Soon</Text>
+                                    </View>
+
+                                    <Pressable
+                                        onPress={() =>
+                                            setExpandedId(expanded ? null : item.id)
+                                        }
+                                    >
+                                        <Text style={styles.why}>
+                                            Why this task? →
+                                        </Text>
+                                    </Pressable>
+
+                                    {expanded && (
+                                        <Text style={styles.explain}>
+                                            This task was suggested by AI based on patterns
+                                            found in your document analysis and action items.
+                                        </Text>
+                                    )}
+                                </Card>
+                            );
+                        }}
+                    />
+                </View>
+            </SafeAreaView>
+        </GradientScreen>
+    );
 }
+
+function Badge({ text }) {
+    return (
+        <View style={styles.badge}>
+            <Text style={styles.badgeText}>{text}</Text>
+        </View>
+    );
+}
+
+function PriorityBadge({ level }) {
+    const map = {
+        High: "#EF4444",
+        Medium: "#F59E0B",
+        Low: "#22C55E",
+    };
+    return (
+        <View style={[styles.badge, { backgroundColor: map[level] + "40" }]}>
+            <Text style={styles.badgeText}>{level}</Text>
+        </View>
+    );
+}
+
+const styles = StyleSheet.create({
+    container: { flex: 1, padding: 18 },
+
+    card: {
+        backgroundColor: "transparent",
+        borderColor: "rgba(255,255,255,0.15)",
+    },
+
+    input: {
+        backgroundColor: "transparent",
+        borderRadius: 14,
+        padding: 12,
+        marginBottom: 12,
+        color: "black",
+        fontWeight: "600",
+        borderWidth: 1
+    },
+
+    row: {
+        flexDirection: "row",
+        gap: 10,
+        alignItems: "center",
+    },
+
+    taskTitle: {
+        flex: 1,
+        fontSize: 15,
+        fontWeight: "900",
+        color: "black",
+    },
+
+    metaRow: {
+        marginTop: 10,
+        flexDirection: "row",
+        gap: 8,
+        alignItems: "center",
+    },
+
+    badge: {
+        backgroundColor: "rgba(99,102,241,0.3)",
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 999,
+    },
+
+    badgeText: {
+        color: "black",
+        fontWeight: "800",
+        fontSize: 11,
+    },
+
+    due: {
+        color: "rgba(255,255,255,0.6)",
+        fontWeight: "600",
+    },
+
+    why: {
+        marginTop: 10,
+        color: "#004aad",
+        fontWeight: "700",
+    },
+
+    explain: {
+        marginTop: 6,
+        color: "grey",
+        fontWeight: "600",
+        lineHeight: 20,
+    },
+});

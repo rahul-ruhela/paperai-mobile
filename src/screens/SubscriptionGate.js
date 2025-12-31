@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, ActivityIndicator } from "react-native";
-import { getEntitlement } from "../api/billing";
+import { View, Text, ActivityIndicator, StyleSheet } from "react-native";
 import AppButton from "../ui/AppButton";
+import { getEntitlement } from "../api/billing";
 
 export default function SubscriptionGate({ navigation, children }) {
     const [loading, setLoading] = useState(true);
@@ -20,21 +20,19 @@ export default function SubscriptionGate({ navigation, children }) {
 
     if (loading) {
         return (
-            <View style={{ marginTop: 24, alignItems: "center" }}>
+            <View style={styles.center}>
                 <ActivityIndicator size="large" />
-                <Text style={{ marginTop: 12 }}>Checking subscription…</Text>
+                <Text style={styles.text}>Checking subscription…</Text>
             </View>
         );
     }
 
     if (!entitlement?.isActive) {
         return (
-            <View style={{ marginTop: 24, gap: 12 }}>
-                <Text style={{ fontSize: 18, fontWeight: "800" }}>
-                    Pro required
-                </Text>
-                <Text style={{ color: "#6B7280" }}>
-                    Subscribe to unlock premium processing.
+            <View style={styles.card}>
+                <Text style={styles.title}>Pro Required</Text>
+                <Text style={styles.text}>
+                    Upgrade your plan to unlock this feature.
                 </Text>
                 <AppButton
                     title="View Plans"
@@ -46,3 +44,16 @@ export default function SubscriptionGate({ navigation, children }) {
 
     return children;
 }
+
+const styles = StyleSheet.create({
+    center: { marginTop: 40, alignItems: "center", gap: 12 },
+    card: {
+        marginTop: 24,
+        padding: 16,
+        borderRadius: 18,
+        backgroundColor: "rgba(255,255,255,0.06)",
+        gap: 12,
+    },
+    title: { fontSize: 18, fontWeight: "900", color: "#fff" },
+    text: { color: "rgba(255,255,255,0.7)", fontWeight: "700" },
+});

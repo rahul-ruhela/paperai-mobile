@@ -1,64 +1,89 @@
 import React from "react";
-import { View, Text, ScrollView } from "react-native";
-import Card from "../ui/Card";
+import { ScrollView, Text, StyleSheet, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import GradientScreen from "../ui/GradientScreen";
 
 export default function DocumentDetailScreen({ route }) {
-    const { title, result } = route.params;
+    const { result, title } = route.params;
 
-    const summary = (result?.summary || "").trim();
-    const extractedText = (result?.extractedText || "").trim();
-    const hasAnyContent = summary.length > 0 || extractedText.length > 0;
-
-    if (!hasAnyContent) {
+    function Section({ title, children }) {
         return (
-            <View style={{ flex: 1, padding: 16, backgroundColor: "#F9FAFB" }}>
-                <Text style={{ fontSize: 18, fontWeight: "600" }}>
-                    No content detected
-                </Text>
-                <Text style={{ marginTop: 8, color: "#6B7280" }}>
-                    The document may be scanned, encrypted, or contain very little text.
-                </Text>
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>{title}</Text>
+                {children}
             </View>
         );
     }
 
     return (
-        <ScrollView style={{ flex: 1, backgroundColor: "#F9FAFB" }} contentContainerStyle={{ padding: 16, gap: 12 }}>
-            <Text style={{ fontSize: 20, fontWeight: "700" }}>{title}</Text>
+        <GradientScreen>
+            <SafeAreaView style={{ flex: 1 }}>
+                <ScrollView contentContainerStyle={styles.container}>
+                    <Text style={styles.header}>{title}</Text>
 
-            <Card>
-                <Text style={{ fontWeight: "700" }}>Summary</Text>
-                <Text style={{ marginTop: 8 }}>
-                    {summary.length ? summary : "(Summary was empty — showing extracted text below.)"}
-                </Text>
-            </Card>
+                    <Section title="Summary">
+                        <Text style={styles.text}>{result.summary}</Text>
+                    </Section>
 
-            <Card>
-                <Text style={{ fontWeight: "700" }}>Action Items</Text>
-                {(result?.actionItems || []).length ? (
-                    (result.actionItems || []).map((x, idx) => (
-                        <Text key={idx} style={{ marginTop: 6 }}>• {x}</Text>
-                    ))
-                ) : (
-                    <Text style={{ marginTop: 8, color: "#6B7280" }}>No action items found.</Text>
-                )}
-            </Card>
+                    <Section title="Action Items">
+                        {result.actionItems.map((a, i) => (
+                            <Text key={i} style={styles.bullet}>
+                                • {a}
+                            </Text>
+                        ))}
+                    </Section>
 
-            <Card>
-                <Text style={{ fontWeight: "700" }}>Category</Text>
-                <Text style={{ marginTop: 8 }}>{result?.category || "General"}</Text>
-            </Card>
+                    <Section title="Category">
+                        <Text style={styles.text}>{result.category}</Text>
+                    </Section>
+                    <Section title="Usage">
+                        <Text style={styles.text}>
+                            Credits used: {result.creditsUsed ?? "-"}
+                        </Text>
+                        <Text style={styles.text}>
+                            Credits left: {result.creditsLeft ?? "-"}
+                        </Text>
+                    </Section>
+                </ScrollView>
 
-            <Card>
-                <Text style={{ fontWeight: "700" }}>Extracted Text</Text>
-                <Text style={{ marginTop: 8, color: "#6B7280" }}>
-                    Length: {extractedText.length}
-                </Text>
-                <Text style={{ marginTop: 8, color: "#333" }}>
-                    {extractedText.slice(0, 3000)}
-                    {extractedText.length > 3000 ? "..." : ""}
-                </Text>
-            </Card>
-        </ScrollView>
+              
+
+
+            </SafeAreaView>
+        </GradientScreen>
     );
 }
+
+const styles = StyleSheet.create({
+    container: {
+        padding: 18,
+        gap: 16,
+    },
+    header: {
+        color: "#fff",
+        fontSize: 22,
+        fontWeight: "900",
+    },
+    section: {
+        backgroundColor: "rgba(255,255,255,0.06)",
+        padding: 16,
+        borderRadius: 18,
+        borderWidth: 1,
+        borderColor: "rgba(255,255,255,0.1)",
+    },
+    sectionTitle: {
+        color: "#A5B4FC",
+        fontWeight: "900",
+        marginBottom: 8,
+    },
+    text: {
+        color: "rgba(255,255,255,0.8)",
+        fontWeight: "700",
+        lineHeight: 22,
+    },
+    bullet: {
+        color: "rgba(255,255,255,0.85)",
+        fontWeight: "700",
+        marginBottom: 6,
+    },
+});
