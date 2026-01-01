@@ -1,75 +1,117 @@
-import React, { useState } from "react";
-import { View, Text, TextInput, StyleSheet } from "react-native";
+﻿import React, { useEffect, useState } from "react";
+import {
+    View, Text, TextInput, StyleSheet, ScrollView, Alert ,  KeyboardAvoidingView,
+    Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import GradientScreen from "../ui/GradientScreen";
 import AppButton from "../ui/AppButton";
+import { api } from "../api/client";
 
-export default function ProfileScreen({ navigation }) {
-    const [name, setName] = useState("");
-    const [email, setEmail] = useState("");
-    const [phone, setPhone] = useState("");
+export default function ProfileScreen() {
+    const [data, setData] = useState({});
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        api.get("/api/profile")
+            .then(res => setData(res.data))
+            .finally(() => setLoading(false));
+    }, []);
+
+    async function save() {
+        try {
+            await api.post("/api/profile", data);
+            Alert.alert("Saved", "Profile updated successfully");
+        } catch {
+            Alert.alert("Error", "Failed to save profile");
+        }
+    }
+
+    if (loading) return null;
 
     return (
         <GradientScreen>
             <SafeAreaView style={{ flex: 1 }}>
-                <View style={styles.container}>
+                <KeyboardAvoidingView
+                    style={{ flex: 1 }}
+                    behavior={Platform.OS === "ios" ? "padding" : undefined}
+                    keyboardVerticalOffset={90}
+                >
+                    <ScrollView
+                        contentContainerStyle={styles.container}
+                        showsVerticalScrollIndicator={false}
+                        keyboardShouldPersistTaps="handled"
+                    >
                     <Text style={styles.title}>Profile</Text>
-                    <Text style={styles.subtitle}>Update your basic account details.</Text>
+                    <Text style={styles.subtitle}>Your personal information</Text>
 
-                    <View style={styles.card}>
-                        <Label text="Name" />
-                        <TextInput
-                            value={name}
-                            onChangeText={setName}
-                            placeholder="Your name"
-                            placeholderTextColor="rgba(255,255,255,0.45)"
-                            style={styles.input}
-                        />
+                    <Card title="Account">
+                        <ReadOnly label="Email" value={data.email} />
+                        <ReadOnly label="Phone" value={data.phone || "—"} />
+                    </Card>
 
-                        <Label text="Email" />
-                        <TextInput
-                            value={email}
-                            onChangeText={setEmail}
-                            placeholder="Email address"
-                            placeholderTextColor="rgba(255,255,255,0.45)"
-                            autoCapitalize="none"
-                            keyboardType="email-address"
-                            style={styles.input}
-                        />
+                    <Card title="Personal">
+                     {/*   <ReadOnly label="FullName" value={data.fullName || "—"} />*/}
+                        <Input label="Full Name" k="fullName"  data={data} setData={setData} />
+                        <Input label="Profession" k="profession" data={data} setData={setData} />
+                        <Input label="Primary Use Case" k="primaryUseCase" data={data} setData={setData} />
+                        <Input label="Company / School" k="companyOrSchool" data={data} setData={setData} />
+                    </Card>
 
-                        <Label text="Phone" />
-                        <TextInput
-                            value={phone}
-                            onChangeText={setPhone}
-                            placeholder="Phone number"
-                            placeholderTextColor="rgba(255,255,255,0.45)"
-                            keyboardType="phone-pad"
-                            style={styles.input}
-                        />
-                    </View>
+                    <Card title="Address">
+                        <Input label="Address Line 1" k="addressLine1" data={data} setData={setData} />
+                        <Input label="Address Line 2" k="addressLine2" data={data} setData={setData} />
+                        <Input label="City" k="city" data={data} setData={setData} />
+                        <Input label="State" k="state" data={data} setData={setData} />
+                        <Input label="Postal Code" k="postalCode" data={data} setData={setData} />
+                        <Input label="Country" k="country" data={data} setData={setData} />
+                    </Card>
 
-                    <AppButton
-                        title="Save Changes"
-                        onPress={() => navigation.goBack()}
-                    />
-
-                    <Text style={styles.note}>
-                        UI only for now. Hook up API later without changing the layout.
-                    </Text>
-                </View>
+                    <AppButton title="Save Changes" onPress={save} />
+                </ScrollView>
+            </KeyboardAvoidingView>
             </SafeAreaView>
         </GradientScreen>
     );
 }
 
-function Label({ text }) {
-    return <Text style={styles.label}>{text}</Text>;
+function Card({ title, children }) {
+    return (
+        <View style={styles.card}>
+            <Text style={styles.section}>{title}</Text>
+            {children}
+        </View>
+    );
+}
+
+function Input({ label, k, data, setData }) {
+    return (
+        <>
+            <Text style={styles.label}>{label}</Text>
+            <TextInput
+                value={data[k] || ""}
+                onChangeText={v => setData({ ...data, [k]: v })}
+                style={styles.input}
+                placeholderTextColor="rgba(255,255,255,0.4)"
+            />
+        </>
+    );
+}
+
+function ReadOnly({ label, value }) {
+    return (
+        <>
+            <Text style={styles.label}>{label}</Text>
+            <View style={styles.readOnly}>
+                <Text style={styles.readOnlyText}>{value}</Text>
+            </View>
+        </>
+    );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, padding: 18, gap: 14 },
+    container: { padding: 18, gap: 16 },
     title: { color: "#fff", fontSize: 26, fontWeight: "900" },
-    subtitle: { color: "rgba(255,255,255,0.7)", fontWeight: "700" },
+    subtitle: { color: "rgba(255,255,255,0.65)", fontWeight: "700" },
 
     card: {
         backgroundColor: "rgba(255,255,255,0.06)",
@@ -79,23 +121,24 @@ const styles = StyleSheet.create({
         padding: 16,
         gap: 10,
     },
+    section: { color: "#A5B4FC", fontSize: 18, fontWeight: "900" },
     label: { color: "#A5B4FC", fontWeight: "900" },
+
     input: {
-        backgroundColor: "rgba(0,0,0,0.18)",
-        borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.10)",
-        borderRadius: 16,
-        paddingHorizontal: 12,
-        paddingVertical: 12,
+        backgroundColor: "rgba(0,0,0,0.2)",
+        borderRadius: 14,
+        padding: 12,
         color: "#fff",
         fontWeight: "700",
     },
 
-    note: {
-        marginTop: 6,
-        textAlign: "center",
-        color: "rgba(255,255,255,0.55)",
-        fontSize: 12,
+    readOnly: {
+        backgroundColor: "rgba(255,255,255,0.08)",
+        borderRadius: 14,
+        padding: 12,
+    },
+    readOnlyText: {
+        color: "rgba(255,255,255,0.8)",
         fontWeight: "700",
     },
 });

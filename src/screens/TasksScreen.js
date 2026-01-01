@@ -54,13 +54,6 @@ export default function TasksScreen() {
         }
     }
 
-    function priorityFor(task) {
-        const len = task.title.length;
-        if (len > 40) return "High";
-        if (len > 20) return "Medium";
-        return "Low";
-    }
-
     return (
         <GradientScreen>
             <SafeAreaView style={{ flex: 1 }}>
@@ -86,8 +79,8 @@ export default function TasksScreen() {
                         keyExtractor={(x) => x.id}
                         contentContainerStyle={{ paddingBottom: 60 }}
                         renderItem={({ item }) => {
-                            const priority = priorityFor(item);
                             const expanded = expandedId === item.id;
+                            const isAi = item.isAiSuggested === true;
 
                             return (
                                 <Card style={styles.card}>
@@ -100,7 +93,11 @@ export default function TasksScreen() {
                                                         : "ellipse-outline"
                                                 }
                                                 size={20}
-                                                color={item.status === "DONE" ? "#22C55E" : "#A5B4FC"}
+                                                color={
+                                                    item.status === "DONE"
+                                                        ? "#22C55E"
+                                                        : "#A5B4FC"
+                                                }
                                             />
                                             <Text style={styles.taskTitle}>
                                                 {item.title}
@@ -109,26 +106,33 @@ export default function TasksScreen() {
                                     </Pressable>
 
                                     <View style={styles.metaRow}>
-                                        <Badge text="AI suggested" />
-                                        <PriorityBadge level={priority} />
+                                        {isAi && <Badge text="AI suggested" />}
+                                        {isAi && item.priority && (
+                                            <PriorityBadge level={item.priority} />
+                                        )}
                                         <Text style={styles.due}>Due: Soon</Text>
                                     </View>
 
-                                    <Pressable
-                                        onPress={() =>
-                                            setExpandedId(expanded ? null : item.id)
-                                        }
-                                    >
-                                        <Text style={styles.why}>
-                                            Why this task? →
-                                        </Text>
-                                    </Pressable>
+                                    {isAi && item.aiReason && (
+                                        <>
+                                            <Pressable
+                                                onPress={() =>
+                                                    setExpandedId(
+                                                        expanded ? null : item.id
+                                                    )
+                                                }
+                                            >
+                                                <Text style={styles.why}>
+                                                    Why this task? →
+                                                </Text>
+                                            </Pressable>
 
-                                    {expanded && (
-                                        <Text style={styles.explain}>
-                                            This task was suggested by AI based on patterns
-                                            found in your document analysis and action items.
-                                        </Text>
+                                            {expanded && (
+                                                <Text style={styles.explain}>
+                                                    {item.aiReason}
+                                                </Text>
+                                            )}
+                                        </>
                                     )}
                                 </Card>
                             );
@@ -150,9 +154,9 @@ function Badge({ text }) {
 
 function PriorityBadge({ level }) {
     const map = {
-        High: "#EF4444",
-        Medium: "#F59E0B",
-        Low: "#22C55E",
+        HIGH: "#EF4444",
+        MEDIUM: "#F59E0B",
+        LOW: "#22C55E",
     };
     return (
         <View style={[styles.badge, { backgroundColor: map[level] + "40" }]}>
@@ -176,7 +180,7 @@ const styles = StyleSheet.create({
         marginBottom: 12,
         color: "black",
         fontWeight: "600",
-        borderWidth: 1
+        borderWidth: 1,
     },
 
     row: {

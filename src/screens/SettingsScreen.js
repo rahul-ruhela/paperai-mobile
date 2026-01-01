@@ -1,5 +1,16 @@
 ﻿import React from "react";
-import { View, Text, Alert, StyleSheet, Pressable, ScrollView, Linking } from "react-native";
+
+import {
+    View,
+    Text,
+    Alert,
+    StyleSheet,
+    Pressable,
+    ScrollView,
+    Linking,
+    KeyboardAvoidingView,
+    Platform,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import GradientScreen from "../ui/GradientScreen";
@@ -42,10 +53,16 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
     return (
         <GradientScreen>
             <SafeAreaView style={{ flex: 1 }}>
-                <ScrollView
-                    contentContainerStyle={styles.container}
-                    showsVerticalScrollIndicator={false}
+                <KeyboardAvoidingView
+                    style={{ flex: 1 }}
+                    behavior={Platform.OS === "ios" ? "padding" : undefined}
+                    keyboardVerticalOffset={90}
                 >
+                    <ScrollView
+                        contentContainerStyle={styles.container}
+                        showsVerticalScrollIndicator={false}
+                        keyboardShouldPersistTaps="handled"
+                    >
 
                {/* <View style={styles.container}>*/}
                     <Text style={styles.title}>Settings</Text>
@@ -124,7 +141,8 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
                     </Text>
 
                  
-                   </ScrollView>
+                    </ScrollView>
+                </KeyboardAvoidingView>
             </SafeAreaView>
         </GradientScreen>
     );

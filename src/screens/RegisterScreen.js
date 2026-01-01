@@ -11,9 +11,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import GradientScreen from "../ui/GradientScreen";
 import AppButton from "../ui/AppButton";
-import { register } from "../api/auth";
+import { sendEmailOtp,register } from "../api/auth";
 
-export default function RegisterScreen({ onAuthed, navigation }) {
+export default function RegisterScreen({ navigation }) {
     const [name, setName] = useState("");
     const [email, setEmail] = useState("");
     const [phone, setPhone] = useState("");
@@ -23,10 +23,27 @@ export default function RegisterScreen({ onAuthed, navigation }) {
     const logo = useMemo(() => require("../../assets/logo.png"), []);
 
     async function onRegister() {
+        debugger
         try {
+            if (!name.trim())
+                return Alert.alert("Validation", "Name is required");
+            if (!email.trim())
+                return Alert.alert("Validation", "Email is required");
+            if (!password)
+                return Alert.alert("Validation", "Password is required");
+
             setBusy(true);
-            await register(name.trim(), email.trim(), password, phone || null);
-            onAuthed();
+
+            // ✅ STEP 1: SEND EMAIL OTP
+            await sendEmailOtp(email.trim());
+
+            // ✅ STEP 2: GO TO OTP VERIFY SCREEN
+            navigation.navigate("EmailOtpVerify", {
+                name: name.trim(),
+                email: email.trim(),
+                password,
+                phone: phone?.trim() || null,
+            });
         } catch (e) {
             Alert.alert("Register failed", e?.response?.data || e.message);
         } finally {
@@ -43,7 +60,9 @@ export default function RegisterScreen({ onAuthed, navigation }) {
                             <Image source={logo} style={styles.logo} resizeMode="contain" />
                         </View>
                         <Text style={styles.title}>Create your account</Text>
-                        <Text style={styles.subtitle}>Start analyzing documents in seconds.</Text>
+                        <Text style={styles.subtitle}>
+                            We’ll email you a verification code.
+                        </Text>
                     </View>
 
                     <View style={styles.card}>
@@ -56,7 +75,12 @@ export default function RegisterScreen({ onAuthed, navigation }) {
                             autoCapitalize="none"
                             keyboardType="email-address"
                         />
-                        <Field icon="call-outline" placeholder="Phone (optional)" value={phone} onChangeText={setPhone} />
+                        <Field
+                            icon="call-outline"
+                            placeholder="Phone (optional)"
+                            value={phone}
+                            onChangeText={setPhone}
+                        />
                         <Field
                             icon="lock-closed-outline"
                             placeholder="Password"
@@ -67,7 +91,7 @@ export default function RegisterScreen({ onAuthed, navigation }) {
 
                         <View style={{ marginTop: 6 }}>
                             <AppButton
-                                title={busy ? "Creating..." : "Create account"}
+                                title={busy ? "Sending code..." : "Continue"}
                                 onPress={onRegister}
                                 disabled={busy}
                             />
@@ -112,8 +136,11 @@ const styles = StyleSheet.create({
     },
     logo: { width: 50, height: 50 },
     title: { fontSize: 22, fontWeight: "900", color: "#fff" },
-    subtitle: { marginTop: 6, color: "rgba(255,255,255,0.72)", textAlign: "center" },
-
+    subtitle: {
+        marginTop: 6,
+        color: "rgba(255,255,255,0.72)",
+        textAlign: "center",
+    },
     card: {
         backgroundColor: "rgba(255,255,255,0.06)",
         borderWidth: 1,
@@ -134,5 +161,10 @@ const styles = StyleSheet.create({
         marginBottom: 10,
     },
     input: { flex: 1, color: "#fff", fontSize: 15 },
-    link: { marginTop: 14, color: "#A5B4FC", fontWeight: "900", textAlign: "center" },
+    link: {
+        marginTop: 14,
+        color: "#A5B4FC",
+        fontWeight: "900",
+        textAlign: "center",
+    },
 });
