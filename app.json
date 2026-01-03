@@ -16,7 +16,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.bholeshankar.paperaiassistant",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "PaperAI needs camera access to scan documents.",
+        "NSPhotoLibraryUsageDescription": "PaperAI needs photo access to upload images."
       }
     },
     "android": {
@@ -24,7 +26,8 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.bholeshankar.paperaiassistant"
     },
     "web": {
       "favicon": "./assets/favicon.png"

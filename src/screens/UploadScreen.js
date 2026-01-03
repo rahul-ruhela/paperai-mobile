@@ -11,13 +11,12 @@ import { getCreditsBalance } from "../api/credits";
 export default function UploadScreen({ navigation }) {
     const [busy, setBusy] = useState(false);
     const [credits, setCredits] = useState(null);
-
     const lift = useRef(new Animated.Value(0)).current;
 
     async function refreshCredits() {
         try {
-            const b = await getCreditsBalance();
-            setCredits(b.credits);
+            const res = await getCreditsBalance();
+            setCredits(res.credits);
         } catch {
             // ignore
         }
@@ -39,21 +38,23 @@ export default function UploadScreen({ navigation }) {
     }, [lift]);
 
     async function pickAndUpload() {
+        if (busy) return;
+
         try {
             setBusy(true);
 
             const picked = await DocumentPicker.getDocumentAsync({
                 copyToCacheDirectory: true,
                 multiple: false,
+                type: ["application/pdf", "image/*"],
             });
 
             if (picked.canceled) return;
 
             const file = picked.assets[0];
-            const accessToken = await SecureStore.getItemAsync("accessToken");
-            if (!accessToken) throw new Error("No access token");
+            const token = await SecureStore.getItemAsync("accessToken");
+            if (!token) throw new Error("Authentication required");
 
-            const uploadUrl = "http://192.168.29.223:5263/api/documents/upload";
             const form = new FormData();
             form.append("file", {
                 uri: file.uri,
@@ -61,19 +62,22 @@ export default function UploadScreen({ navigation }) {
                 type: file.mimeType || "application/octet-stream",
             });
 
-            const res = await fetch(uploadUrl, {
-                method: "POST",
-                headers: { Authorization: `Bearer ${accessToken}` },
-                body: form,
-            });
+            const res = await fetch(
+                "http://192.168.29.223:5263/api/documents/upload",
+                {
+                    method: "POST",
+                    headers: { Authorization: `Bearer ${token}` },
+                    body: form,
+                }
+            );
 
-            const text = await res.text();
-            if (!res.ok) throw new Error(text);
+            const body = await res.text();
+            if (!res.ok) throw new Error(body);
 
-            const json = JSON.parse(text);
+            const json = JSON.parse(body);
             navigation.navigate("Process", { docId: json.id, title: json.title });
-        } catch (e) {
-            Alert.alert("Upload failed", e.message);
+        } catch (err) {
+            Alert.alert("Upload failed", err.message);
         } finally {
             setBusy(false);
             refreshCredits();
@@ -127,7 +131,7 @@ export default function UploadScreen({ navigation }) {
                     <View style={styles.tips}>
                         <Tip icon="lock-closed-outline" text="Your documents stay private to your account." />
                         <Tip icon="time-outline" text="Most uploads process in seconds." />
-                        <Tip icon="bulb-outline" text="Best results with clear text PDFs." />
+                        <Tip icon="bulb-outline" text="Best results with clear text PDFs or images." />
                     </View>
                 </View>
             </SafeAreaView>
@@ -160,7 +164,6 @@ const styles = StyleSheet.create({
         borderRadius: 999,
     },
     badgeText: { color: "#E0E7FF", fontWeight: "800" },
-
     uploader: {
         backgroundColor: "rgba(255,255,255,0.06)",
         borderWidth: 1,
@@ -181,9 +184,7 @@ const styles = StyleSheet.create({
     },
     uTitle: { color: "#fff", fontSize: 16, fontWeight: "900" },
     uSub: { marginTop: 4, color: "rgba(255,255,255,0.68)", lineHeight: 18 },
-
     divider: { height: 1, backgroundColor: "rgba(255,255,255,0.10)", marginVertical: 14 },
-
     upgrade: {
         marginTop: 12,
         flexDirection: "row",
@@ -193,7 +194,6 @@ const styles = StyleSheet.create({
         paddingVertical: 10,
     },
     upgradeText: { color: "#FBCFE8", fontWeight: "900" },
-
     tips: { marginTop: 4, gap: 10 },
     tipRow: { flexDirection: "row", gap: 10, alignItems: "center" },
     tipText: { color: "rgba(255,255,255,0.70)", fontWeight: "700" },

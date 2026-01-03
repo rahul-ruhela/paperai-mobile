@@ -92,6 +92,10 @@ export default function HomeScreen({ navigation }) {
 
     const isFirstTime = docs.length === 0;
 
+    // 🔹 NEW: split documents safely (no mutation)
+    const processedDocs = docs.filter(d => d.hasAiResult === true);
+    const pendingDocs = docs.filter(d => d.hasAiResult !== true);
+
     return (
         <GradientScreen>
             <SafeAreaView style={{ flex: 1 }}>
@@ -138,8 +142,19 @@ export default function HomeScreen({ navigation }) {
                         </View>
                     ) : (
                         <FlatList
-                            data={docs}
-                            keyExtractor={(i) => i.id}
+                            data={[
+                                ...(processedDocs.length
+                                    ? [{ _type: "header", title: "Previous AI Analysis" }]
+                                    : []),
+                                ...processedDocs,
+                                ...(pendingDocs.length
+                                    ? [{ _type: "header", title: "Pending Documents" }]
+                                    : []),
+                                ...pendingDocs,
+                            ]}
+                            keyExtractor={(item, index) =>
+                                item._type ? `h-${index}` : item.id
+                            }
                             refreshControl={
                                 <RefreshControl
                                     refreshing={refreshing}
@@ -148,7 +163,16 @@ export default function HomeScreen({ navigation }) {
                                 />
                             }
                             contentContainerStyle={{ paddingBottom: 60 }}
-                            renderItem={renderItem}
+                            renderItem={({ item }) => {
+                                if (item._type === "header") {
+                                    return (
+                                        <Text style={styles.sectionHeader}>
+                                            {item.title}
+                                        </Text>
+                                    );
+                                }
+                                return renderItem({ item });
+                            }}
                         />
                     )}
                 </View>
@@ -186,6 +210,18 @@ function Badge({ text, success }) {
 
 const styles = StyleSheet.create({
     container: { flex: 1, padding: 18 },
+
+    /* ===== SECTION HEADERS ===== */
+
+    sectionHeader: {
+        marginTop: 18,
+        marginBottom: 8,
+        color: "rgba(255,255,255,0.7)",
+        fontWeight: "900",
+        fontSize: 13,
+        letterSpacing: 0.5,
+        textTransform: "uppercase",
+    },
 
     /* ===== DOCUMENT LIST ===== */
 
