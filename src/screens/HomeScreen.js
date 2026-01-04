@@ -16,23 +16,30 @@ import AiHeader from "../ui/AiHeader";
 import AppButton from "../ui/AppButton";
 import { listDocuments } from "../api/documents";
 
+import { useFocusEffect } from "@react-navigation/native";
+import BottomFade from "../ui/BottomFade";
+
 export default function HomeScreen({ navigation }) {
     const [docs, setDocs] = useState([]);
     const [refreshing, setRefreshing] = useState(false);
 
-    const load = useCallback(async () => {
-        setRefreshing(true);
+    const load = useCallback(async (opts = { silent: false }) => {
+        if (!opts.silent) setRefreshing(true);
+
         try {
             const data = await listDocuments();
             setDocs(data);
         } finally {
-            setRefreshing(false);
+            if (!opts.silent) setRefreshing(false);
         }
     }, []);
 
-    useEffect(() => {
-        load();
-    }, [load]);
+    // ✅ CORRECT: refresh on screen focus
+    useFocusEffect(
+        useCallback(() => {
+            load({ silent: true });
+        }, [load])
+    );
 
     function handleOpen(doc) {
         if (doc.hasAiResult === true) {
@@ -49,7 +56,30 @@ export default function HomeScreen({ navigation }) {
     }
 
     function renderItem({ item }) {
-        const processed = item.hasAiResult === true;
+        // 🔹 NEW: derive state safely
+        const status = item.status || (item.hasAiResult ? "PROCESSED" : "PENDING");
+
+        let badgeText = "Pending";
+        let badgeType = "pending";
+        let actionText = "Run AI Analysis →";
+
+        if (status === "QUEUED") {
+            badgeText = "Queued";
+            badgeType = "pending";
+            actionText = "Waiting in queue…";
+        } else if (status === "PROCESSING") {
+            badgeText = "Processing";
+            badgeType = "pending";
+            actionText = "Analyzing…";
+        } else if (status === "PROCESSED") {
+            badgeText = "Processed";
+            badgeType = "success";
+            actionText = "Open AI Analysis →";
+        } else if (status === "FAILED") {
+            badgeText = "Failed";
+            badgeType = "failed";
+            actionText = "Retry analysis →";
+        }
 
         return (
             <Pressable
@@ -69,10 +99,7 @@ export default function HomeScreen({ navigation }) {
                     </View>
 
                     <View style={styles.metaRow}>
-                        <Badge
-                            text={processed ? "Processed" : "Pending"}
-                            success={processed}
-                        />
+                        <Badge text={badgeText} type={badgeType} />
                         {item.category && (
                             <Text style={styles.category}>
                                 {item.category}
@@ -80,11 +107,7 @@ export default function HomeScreen({ navigation }) {
                         )}
                     </View>
 
-                    <Text style={styles.action}>
-                        {processed
-                            ? "Open AI Analysis →"
-                            : "Run AI Analysis →"}
-                    </Text>
+                    <Text style={styles.action}>{actionText}</Text>
                 </Card>
             </Pressable>
         );
@@ -92,9 +115,9 @@ export default function HomeScreen({ navigation }) {
 
     const isFirstTime = docs.length === 0;
 
-    // 🔹 NEW: split documents safely (no mutation)
-    const processedDocs = docs.filter(d => d.hasAiResult === true);
-    const pendingDocs = docs.filter(d => d.hasAiResult !== true);
+    // 🔹 Keep your safe split
+    const processedDocs = docs.filter(d => d.status === "PROCESSED");
+    const pendingDocs = docs.filter(d => d.status !== "PROCESSED");
 
     return (
         <GradientScreen>
@@ -177,6 +200,7 @@ export default function HomeScreen({ navigation }) {
                     )}
                 </View>
             </SafeAreaView>
+            <BottomFade />
         </GradientScreen>
     );
 }
@@ -195,12 +219,17 @@ function Feature({ icon, text }) {
     );
 }
 
-function Badge({ text, success }) {
+// 🔹 UPDATED Badge to support more states
+function Badge({ text, type }) {
     return (
         <View
             style={[
                 styles.badge,
-                success ? styles.badgeSuccess : styles.badgePending,
+                type === "success"
+                    ? styles.badgeSuccess
+                    : type === "failed"
+                        ? styles.badgeFailed
+                        : styles.badgePending,
             ]}
         >
             <Text style={styles.badgeText}>{text}</Text>
@@ -211,8 +240,6 @@ function Badge({ text, success }) {
 const styles = StyleSheet.create({
     container: { flex: 1, padding: 18 },
 
-    /* ===== SECTION HEADERS ===== */
-
     sectionHeader: {
         marginTop: 18,
         marginBottom: 8,
@@ -222,8 +249,6 @@ const styles = StyleSheet.create({
         letterSpacing: 0.5,
         textTransform: "uppercase",
     },
-
-    /* ===== DOCUMENT LIST ===== */
 
     card: {
         backgroundColor: "rgba(255,255,255,0.08)",
@@ -269,6 +294,10 @@ const styles = StyleSheet.create({
         backgroundColor: "rgba(251,191,36,0.3)",
     },
 
+    badgeFailed: {
+        backgroundColor: "rgba(239,68,68,0.3)",
+    },
+
     badgeText: {
         color: "#020c45",
         fontWeight: "800",
@@ -280,8 +309,6 @@ const styles = StyleSheet.create({
         fontWeight: "800",
         color: "#004aad",
     },
-
-    /* ===== FIRST-TIME WELCOME ===== */
 
     welcomeWrap: {
         marginTop: 40,

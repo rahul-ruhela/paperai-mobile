@@ -7,70 +7,83 @@ import {
     Alert,
     ActivityIndicator,
     Animated,
+    ScrollView,
 } from "react-native";
 import Constants from "expo-constants";
 import { mockSubscribe, verifyIosReceipt, getEntitlement } from "../api/billing";
+import SubscriptionPlanCard from "../ui/SubscriptionPlanCard";
+import ScreenContainer from "../ui/ScreenContainer";
 
 const isExpoGo = Constants.appOwnership === "expo";
 
+/**
+ * IMPORTANT:
+ * - Keep productId exactly as your system expects.
+ * - You can change title/price/badges safely (UI-only).
+ *
+ * If your real App Store Connect productIds for weekly/monthly/yearly differ,
+ * update ONLY productId strings later (no other logic changes needed).
+ */
 const PLANS = [
     {
-        id: "basic",
-        productId: "com.bholeshankar.paperai.basic_monthly",
-        title: "Basic",
-        price: "$8.99 / month",
-        credits: 50,
+        id: "weekly",
+        productId: "com.bholeshankar.paperai.basic_monthly", // keep your existing ID for now if that’s what backend expects
+        title: "Weekly",
+        price: "$8.99 / week",
     },
     {
-        id: "pro",
-        productId: "com.bholeshankar.paperai.pro_monthly",
-        title: "Pro",
-        price: "$29.99 / month",
-        credits: 200,
-        popular: true,
-        badge: "Most Popular",
+        id: "monthly",
+        productId: "com.bholeshankar.paperai.pro_monthly", // keep existing
+        title: "Monthly",
+        price: "$29.90 / month",
+        badge: "16.6% OFF",
     },
     {
-        id: "advanced",
-        productId: "com.bholeshankar.paperai.advanced_monthly",
-        title: "Advanced",
-        price: "$279.99 / month",
-        credits: 2600,
-        badge: "Best Value",
+        id: "yearly",
+        productId: "com.bholeshankar.paperai.advanced_monthly", // keep existing
+        title: "Yearly",
+        price: "$279 / year",
+        badge: "40% OFF · Best Value",
+        highlight: true,
     },
 ];
 
 export default function PaywallScreen({ navigation }) {
-    // IMPORTANT: store loading as productId or null
     const [loadingProductId, setLoadingProductId] = useState(null);
     const [entitlement, setEntitlement] = useState(null);
+
+    // purely UI selection (does NOT affect entitlement logic)
+    const [selectedPlanId, setSelectedPlanId] = useState("yearly");
+
     const scaleAnim = useRef(new Animated.Value(1)).current;
 
     async function loadEntitlement() {
         try {
             const e = await getEntitlement();
             setEntitlement(e);
+            return e;
         } catch {
-            // ignore
+            return null;
         }
     }
+
 
     useEffect(() => {
         loadEntitlement();
     }, []);
 
-    // animation (kept intact)
+    // subtle animation for highlight card only
     useEffect(() => {
         Animated.loop(
             Animated.sequence([
                 Animated.timing(scaleAnim, {
-                    toValue: 1.05,
-                    duration: 800,
+                    toValue: 1.04,
+                    duration: 900,
                     useNativeDriver: true,
                 }),
                 Animated.timing(scaleAnim, {
                     toValue: 1,
-                    duration: 800,
+                    duration: 900,
                     useNativeDriver: true,
                 }),
             ])
@@ -78,12 +91,12 @@ export default function PaywallScreen({ navigation }) {
     }, [scaleAnim]);
 
     async function subscribe(plan) {
-        if (loadingProductId) return; // prevent multiple taps
+        if (loadingProductId) return;
 
         try {
             setLoadingProductId(plan.productId);
 
-            // EXPO GO → MOCK
+            // EXPO GO → MOCK (unchanged)
             if (isExpoGo) {
                 await mockSubscribe(plan.productId);
                 await loadEntitlement();
@@ -92,11 +105,10 @@ export default function PaywallScreen({ navigation }) {
                 return;
             }
 
-            // REAL APPLE IAP (Dev Client / TestFlight)
+            // REAL APPLE IAP (unchanged)
             const RNIap = require("react-native-iap");
             await RNIap.initConnection();
 
-            // requestSubscription should receive SKU string
             const purchase = await RNIap.requestSubscription(plan.productId);
 
             if (!purchase?.transactionReceipt) {
@@ -104,8 +116,6 @@ export default function PaywallScreen({ navigation }) {
             }
 
             await verifyIosReceipt(purchase.transactionReceipt);
-
-            // finish transaction expects the purchase object
             await RNIap.finishTransaction(purchase);
 
             await loadEntitlement();
@@ -124,60 +134,106 @@ export default function PaywallScreen({ navigation }) {
         try {
             setLoadingProductId("__restore__");
 
-            // For now: entitlement-based restore (works for mock)
-            // For real IAP later, you can add getAvailablePurchases + verify.
+            // entitlement-based restore (works for mock)
             await loadEntitlement();
 
-            if (entitlement?.active) {
-                Alert.alert("Restored", "Subscription restored");
-                navigation.goBack();
+            const hasActive = !!entitlement?.active;
+
+            if (hasActive) {
+                Alert.alert("Restored", "Subscription restored", [
+                    {
+                        text: "OK",
+                        onPress: () => {
+                            // wait for alert close animation → smooth pop
+                            setTimeout(() => navigation.goBack(), 250);
+                        },
+                    },
+                ]);
             } else {
-                Alert.alert("No active subscription");
+                Alert.alert("No active subscription", "We couldn't find an active plan.", [
+                    {
+                        text: "OK",
+                        onPress: () => {
+                            // smooth return to paywall state
+                            setTimeout(() => setLoadingProductId(null), 150);
+                        },
+                    },
+                ]);
+                return; // prevent finally from instantly removing skeleton
             }
         } catch {
-            Alert.alert("Restore failed");
+            Alert.alert("Restore failed", "Please try again.", [
+                {
+                    text: "OK",
+                    onPress: () => setTimeout(() => setLoadingProductId(null), 150),
+                },
+            ]);
+            return;
         } finally {
-            setLoadingProductId(null);
+            // If user has active subscription, we navigate away on OK.
+            // If not active / failed, we already unset loading in alert handler.
+            // So only clear here if still restoring (safety).
+            setTimeout(() => {
+                setLoadingProductId((prev) => (prev === "__restore__" ? null : prev));
+            }, 200);
         }
     }
 
+
+    const isBusyAny = !!loadingProductId;
+
     return (
-        <View style={styles.container}>
-            <Text style={styles.header}>Upgrade to PaperAI</Text>
+
+        <ScreenContainer>
+        <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+            <Text style={styles.header}>Upgrade to AI Pro</Text>
+            <Text style={styles.subHeader}>Pick a plan. You can cancel anytime.</Text>
 
             {PLANS.map((plan) => {
-                const isActive = !!entitlement?.active && entitlement.productId === plan.productId;
-
-                const Card = plan.popular ? Animated.View : View;
+                const isActive =
+                    !!entitlement?.active && entitlement.productId === plan.productId;
 
                 const isBusyThisPlan = loadingProductId === plan.productId;
-                const isBusyAny = !!loadingProductId;
+
+                const isSelected = selectedPlanId === plan.id;
+
+                const Wrapper = plan.highlight ? Animated.View : View;
+                const wrapperStyle = plan.highlight ? { transform: [{ scale: scaleAnim }] } : null;
 
                 return (
                     <TouchableOpacity
                         key={plan.productId}
-                        activeOpacity={0.85}
-                        // ✅ disabled must be boolean only
+                        activeOpacity={0.9}
                         disabled={isActive || isBusyAny}
-                        onPress={() => subscribe(plan)}
+                        onPress={() => {
+                            // UI selection (safe)
+                            setSelectedPlanId(plan.id);
+                            // preserve your original behavior: tap card subscribes
+                            subscribe(plan);
+                        }}
+                        style={{ marginBottom: 16 }}
                     >
-                        <Card
-                            style={[
-                                styles.card,
-                                plan.popular && styles.popularCard,
-                                plan.popular && { transform: [{ scale: scaleAnim }] },
-                                isActive && styles.activeCard,
-                            ]}
-                        >
-                            {plan.badge && <Text style={styles.badge}>{plan.badge}</Text>}
-                            {isActive && <Text style={styles.activeText}>ACTIVE PLAN</Text>}
+                        <Wrapper style={wrapperStyle}>
+                            <SubscriptionPlanCard
+                                title={plan.title}
+                                price={plan.price}
+                                badge={plan.badge}
+                                highlight={plan.highlight}
+                                // show selected UI state (or ACTIVE plan state)
+                                selected={isActive || isSelected}
+                                onPress={() => {
+                                    setSelectedPlanId(plan.id);
+                                    subscribe(plan);
+                                }}
+                            />
+                        </Wrapper>
 
-                            <Text style={styles.title}>{plan.title}</Text>
-                            <Text style={styles.price}>{plan.price}</Text>
-                            <Text style={styles.credits}>{plan.credits} credits / month</Text>
-
-                            {isBusyThisPlan && <ActivityIndicator color="#fff" />}
-                        </Card>
+                        {isActive && <Text style={styles.activeText}>ACTIVE PLAN</Text>}
+                        {isBusyThisPlan && (
+                            <View style={styles.spinnerRow}>
+                                <ActivityIndicator color="#fff" />
+                            </View>
+                        )}
                     </TouchableOpacity>
                 );
             })}
@@ -187,43 +243,31 @@ export default function PaywallScreen({ navigation }) {
                     {loadingProductId === "__restore__" ? "Restoring…" : "Restore Purchases"}
                 </Text>
             </TouchableOpacity>
-        </View>
+            </ScrollView>
+        </ScreenContainer>
+
     );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, padding: 24, backgroundColor: "#020617" },
-    header: { color: "#fff", fontSize: 28, fontWeight: "900", marginBottom: 20 },
-    card: {
-        backgroundColor: "#0f172a",
-        borderRadius: 18,
-        padding: 20,
-        marginBottom: 16,
-        borderWidth: 1,
-        borderColor: "#1e293b",
-    },
-    popularCard: {
-        borderColor: "#6366f1",
-        backgroundColor: "#1e1b4b",
-    },
-    activeCard: {
-        borderColor: "#22c55e",
-    },
-    badge: {
-        color: "#facc15",
-        fontWeight: "800",
-        marginBottom: 6,
-    },
+    container: { flexGrow: 1, padding: 24, backgroundColor: "#020617" },
+    header: { color: "#fff", fontSize: 28, fontWeight: "900", marginBottom: 6 },
+    subHeader: { color: "#94a3b8", fontSize: 14, marginBottom: 20 },
+
     activeText: {
+        marginTop: 8,
         color: "#22c55e",
         fontWeight: "900",
-        marginBottom: 6,
+        textAlign: "center",
     },
-    title: { color: "#fff", fontSize: 18, fontWeight: "800" },
-    price: { color: "#e0e7ff", marginTop: 4 },
-    credits: { color: "#a5b4fc", marginTop: 4 },
+
+    spinnerRow: {
+        marginTop: 10,
+        alignItems: "center",
+    },
+
     restore: {
-        marginTop: 20,
+        marginTop: 24,
         color: "#94a3b8",
         textAlign: "center",
         textDecorationLine: "underline",

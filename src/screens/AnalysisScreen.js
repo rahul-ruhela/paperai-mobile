@@ -18,8 +18,10 @@ import AiHeader from "../ui/AiHeader";
 import AppButton from "../ui/AppButton";
 import { api } from "../api/client";
 import { listTasks } from "../api/tasks";
+import { useFocusEffect } from "@react-navigation/native"; // 🔹 NEW
 
-export default function AnalysisScreen({ route }) {
+
+export default function AnalysisScreen({ route, navigation }) {
     const { docId, title } = route.params;
 
     const [loading, setLoading] = useState(true);
@@ -28,10 +30,23 @@ export default function AnalysisScreen({ route }) {
     const [tasks, setTasks] = useState([]);
     const [expanded, setExpanded] = useState(false);
 
+    // 🔹 NEW: polling control
+    const isInProgress =
+        doc?.status === "QUEUED" || doc?.status === "PROCESSING";
+
+    useFocusEffect(
+        React.useCallback(() => {
+            loadFromDb();
+        }, [])
+    );
+
+    // 🔹 NEW: poll only while queued / processing
     useEffect(() => {
-        loadFromDb();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+        if (!isInProgress) return;
+
+        const id = setInterval(loadFromDb, 4000);
+        return () => clearInterval(id);
+    }, [isInProgress]);
 
     async function loadFromDb() {
         try {
@@ -40,12 +55,14 @@ export default function AnalysisScreen({ route }) {
             const { data } = await api.get(`/api/documents/${docId}`);
             setDoc(data);
 
-            const allTasks = await listTasks();
-            setTasks(
-                allTasks.filter(
-                    t => String(t.sourceDocumentId) === String(docId)
-                )
-            );
+            if (data?.status === "PROCESSED") {
+                const allTasks = await listTasks();
+                setTasks(
+                    allTasks.filter(
+                        t => String(t.sourceDocumentId) === String(docId)
+                    )
+                );
+            }
         } catch (e) {
             Alert.alert(
                 "Failed to load analysis",
@@ -105,88 +122,141 @@ export default function AnalysisScreen({ route }) {
                     <ScrollView contentContainerStyle={styles.container}>
                         <AiHeader title="AI Analysis" subtitle={title} />
 
-                        {lastAnalyzedText && (
-                            <Text style={styles.timestamp}>
-                                Last analyzed {lastAnalyzedText}
-                            </Text>
+                        {/* 🔹 NEW: QUEUED / PROCESSING STATE */}
+                        {isInProgress && (
+                            <Card style={styles.card}>
+                                <View style={styles.centerBox}>
+                                    <ActivityIndicator
+                                        size="large"
+                                        color="#A5B4FC"
+                                    />
+                                    <Text style={styles.inProgressTitle}>
+                                        {doc.status === "QUEUED"
+                                            ? "Waiting in queue"
+                                            : "Analyzing document"}
+                                    </Text>
+                                    <Text style={styles.inProgressText}>
+                                        This may take a few moments. You can
+                                        leave this screen.
+                                    </Text>
+                                </View>
+                            </Card>
                         )}
 
-                        {/* SUMMARY */}
-                        <Card style={styles.card}>
-                            <View style={styles.cardHeader}>
-                                <Text style={styles.heading}>Summary</Text>
-                                <Pressable onPress={shareSummary}>
-                                    <Ionicons
-                                        name="share-outline"
-                                        size={18}
-                                        color="#004aad"
-                                    />
-                                </Pressable>
-                            </View>
-
-                            <Text style={styles.body}>
-                                {doc?.summary || "No summary available."}
-                            </Text>
-                        </Card>
-
-                        {/* AI TASKS */}
-                        <Card style={styles.card}>
-                            <Text style={styles.heading}>AI Action Tasks</Text>
-
-                            {tasks.length === 0 ? (
-                                <Text style={styles.muted}>
-                                    No AI tasks generated.
-                                </Text>
-                            ) : (
-                                tasks.map(t => (
-                                    <View key={t.id} style={styles.task}>
-                                        {renderTaskTitle(t.title)}
-                                        {t.aiReason && (
-                                            <Text style={styles.taskReason}>
-                                                {t.aiReason}
-                                            </Text>
-                                        )}
-                                    </View>
-                                ))
-                            )}
-                        </Card>
-
-                        {/* EXTRACTED TEXT (COLLAPSIBLE) */}
-                        <Card style={styles.card}>
-                            <Pressable
-                                style={styles.cardHeader}
-                                onPress={() => setExpanded(v => !v)}
-                            >
+                        {/* 🔹 FAILED STATE */}
+                        {doc?.status === "FAILED" && (
+                            <Card style={styles.card}>
                                 <Text style={styles.heading}>
-                                    Extracted Text
+                                    Analysis failed
                                 </Text>
-                                <Ionicons
-                                    name={
-                                        expanded
-                                            ? "chevron-up"
-                                            : "chevron-down"
-                                    }
-                                    size={18}
-                                    color="#004aad"
+                                <Text style={styles.muted}>
+                                    Something went wrong while analyzing this
+                                    document.
+                                </Text>
+                            </Card>
+                        )}
+
+                        {/* 🔹 ONLY RENDER RESULTS WHEN PROCESSED */}
+                        {doc?.status === "PROCESSED" && (
+                            <>
+                                {lastAnalyzedText && (
+                                    <Text style={styles.timestamp}>
+                                        Last analyzed {lastAnalyzedText}
+                                    </Text>
+                                )}
+
+                                {/* SUMMARY */}
+                                <Card style={styles.card}>
+                                    <View style={styles.cardHeader}>
+                                        <Text style={styles.heading}>
+                                            Summary
+                                        </Text>
+                                        <Pressable onPress={shareSummary}>
+                                            <Ionicons
+                                                name="share-outline"
+                                                size={18}
+                                                color="#004aad"
+                                            />
+                                        </Pressable>
+                                    </View>
+
+                                    <Text style={styles.body}>
+                                        {doc.summary ||
+                                            "No summary available."}
+                                    </Text>
+                                </Card>
+
+                                {/* AI TASKS */}
+                                <Card style={styles.card}>
+                                    <Text style={styles.heading}>
+                                        AI Action Tasks
+                                    </Text>
+
+                                    {tasks.length === 0 ? (
+                                        <Text style={styles.muted}>
+                                            No AI tasks generated.
+                                        </Text>
+                                    ) : (
+                                        tasks.map(t => (
+                                            <View
+                                                key={t.id}
+                                                style={styles.task}
+                                            >
+                                                {renderTaskTitle(t.title)}
+                                                {t.aiReason && (
+                                                    <Text
+                                                        style={
+                                                            styles.taskReason
+                                                        }
+                                                    >
+                                                        {t.aiReason}
+                                                    </Text>
+                                                )}
+                                            </View>
+                                        ))
+                                    )}
+                                </Card>
+
+                                {/* EXTRACTED TEXT */}
+                                <Card style={styles.card}>
+                                    <Pressable
+                                        style={styles.cardHeader}
+                                        onPress={() =>
+                                            setExpanded(v => !v)
+                                        }
+                                    >
+                                        <Text style={styles.heading}>
+                                            Extracted Text
+                                        </Text>
+                                        <Ionicons
+                                            name={
+                                                expanded
+                                                    ? "chevron-up"
+                                                    : "chevron-down"
+                                            }
+                                            size={18}
+                                            color="#004aad"
+                                        />
+                                    </Pressable>
+
+                                    {expanded && (
+                                        <Text style={styles.body}>
+                                            {doc.extractedText ||
+                                                "No extracted text."}
+                                        </Text>
+                                    )}
+                                </Card>
+
+                                <AppButton
+                                    title="Re-run AI Analysis (uses credits)"
+                                    onPress={rerunAnalysis}
+                                    disabled={rerunning}
                                 />
-                            </Pressable>
-
-                            {expanded && (
-                                <Text style={styles.body}>
-                                    {doc?.extractedText ||
-                                        "No extracted text."}
-                                </Text>
-                            )}
-                        </Card>
-
-                        <AppButton
-                            title="Re-run AI Analysis (uses credits)"
-                            onPress={rerunAnalysis}
-                            disabled={rerunning}
-                        />
+                            </>
+                        )}
                     </ScrollView>
 
-                    {/* LOADER OVERLAY */}
+                    {/* LOADER OVERLAY (initial load / rerun) */}
                     {(loading || rerunning) && (
                         <View style={styles.overlay}>
                             <ActivityIndicator
@@ -211,8 +281,6 @@ const styles = StyleSheet.create({
         padding: 18,
         paddingBottom: 80,
     },
-
-    /* ===== Card ===== */
 
     card: {
         marginBottom: 16,
@@ -252,8 +320,6 @@ const styles = StyleSheet.create({
         fontSize: 12,
     },
 
-    /* ===== Tasks ===== */
-
     task: {
         marginBottom: 12,
     },
@@ -269,12 +335,28 @@ const styles = StyleSheet.create({
     },
 
     taskReason: {
-        marginTop: 4,
+        marginTop: 0,
         color: "#475569",
         fontWeight: "600",
     },
 
-    /* ===== Overlay ===== */
+    centerBox: {
+        alignItems: "center",
+        gap: 1,
+        paddingVertical: 2,
+    },
+
+    inProgressTitle: {
+        fontWeight: "900",
+        color: "#020c45",
+        fontSize: 16,
+    },
+
+    inProgressText: {
+        color: "#475569",
+        fontWeight: "600",
+        textAlign: "center",
+    },
 
     overlay: {
         position: "absolute",
@@ -293,5 +375,3 @@ const styles = StyleSheet.create({
         fontWeight: "800",
     },
 });
-
-

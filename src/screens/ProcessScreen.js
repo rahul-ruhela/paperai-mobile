@@ -12,32 +12,37 @@ import Card from "../ui/Card";
 import GradientScreen from "../ui/GradientScreen";
 import { processDocument } from "../api/documents";
 
-
-
-
 export default function ProcessScreen({ route, navigation }) {
     const { docId, title } = route.params;
 
-    const [status, setStatus] = useState("IDLE");
+    const [status, setStatus] = useState("IDLE"); // IDLE | QUEUED | PROCESSING | DONE
     const [result, setResult] = useState(null);
     const [dots, setDots] = useState("");
 
+    // Animated dots for queued / processing
     useEffect(() => {
-        if (status !== "ANALYZING") return;
+        if (status !== "QUEUED" && status !== "PROCESSING") return;
         const id = setInterval(() => {
             setDots((d) => (d.length >= 3 ? "" : d + "."));
         }, 350);
         return () => clearInterval(id);
     }, [status]);
 
-
-
     async function runAI() {
         try {
-            setStatus("ANALYZING");
+            // Optimistic UI: user initiated analysis
+            setStatus("PROCESSING");
 
-            const data = await processDocument(docId);
-            setResult(data);
+            const res = await processDocument(docId);
+
+            // 🟡 BACKGROUND MODE (202 Accepted)
+            if (res?.status === "QUEUED" || res?.status === "PROCESSING") {
+                setStatus(res.status); // QUEUED or PROCESSING
+                return;
+            }
+
+            // 🟢 SYNCHRONOUS MODE (200 OK)
+            setResult(res);
             setStatus("DONE");
         } catch (e) {
             const code = e?.response?.status;
@@ -59,7 +64,10 @@ export default function ProcessScreen({ route, navigation }) {
                 return;
             }
 
-            Alert.alert("AI processing failed", e?.response?.data || e.message);
+            Alert.alert(
+                "AI processing failed",
+                e?.response?.data || e.message
+            );
             setStatus("IDLE");
         }
     }
@@ -79,36 +87,55 @@ export default function ProcessScreen({ route, navigation }) {
                             </Text>
                         )}
 
-                        {status === "ANALYZING" && (
+                        {status === "QUEUED" && (
+                            <View style={styles.loadingBox}>
+                                <ActivityIndicator size="large" color="#FBBF24" />
+                                <Text style={styles.loadingText}>
+                                    ⏳ Your document is waiting in queue{dots}
+                                </Text>
+                                <Text style={styles.helper}>
+                                    You can leave this screen. We’ll notify you when it’s ready.
+                                </Text>
+                            </View>
+                        )}
+
+                        {status === "PROCESSING" && (
                             <View style={styles.loadingBox}>
                                 <ActivityIndicator size="large" color="#A5B4FC" />
                                 <Text style={styles.loadingText}>
-                                    🧠 AI is analyzing your document{dots}
+                                    🤖 AI is analyzing your document{dots}
                                 </Text>
                             </View>
                         )}
 
                         {status === "DONE" && (
-                            <Text style={styles.doneText}>✅ Analysis complete</Text>
+                            <Text style={styles.doneText}>
+                                ✅ Analysis complete
+                            </Text>
                         )}
                     </Card>
 
-                    {status !== "DONE" ? (
-                        <AppButton
-                            title={
-                                status === "ANALYZING"
-                                    ? "Analyzing…"
-                                    : "Run AI Analysis"
-                            }
-                            onPress={runAI}
-                            disabled={status === "ANALYZING"}
-                        />
-                    ) : (
+                    {status === "DONE" ? (
                         <AppButton
                             title="View AI Result"
                             onPress={() =>
-                                navigation.navigate("Document", { title, result })
+                                navigation.navigate("Analysis", {
+                                    docId,
+                                    title,
+                                })
                             }
+                        />
+                    ) : (
+                        <AppButton
+                            title={
+                                status === "QUEUED"
+                                    ? "Queued"
+                                    : status === "PROCESSING"
+                                        ? "Analyzing…"
+                                        : "Run AI Analysis"
+                            }
+                            onPress={runAI}
+                            disabled={status === "QUEUED" || status === "PROCESSING"}
                         />
                     )}
 
@@ -157,6 +184,13 @@ const styles = StyleSheet.create({
     loadingText: {
         color: "#E0E7FF",
         fontWeight: "800",
+        textAlign: "center",
+    },
+    helper: {
+        color: "rgba(255,255,255,0.6)",
+        fontSize: 12,
+        fontWeight: "600",
+        textAlign: "center",
     },
     doneText: {
         marginTop: 10,

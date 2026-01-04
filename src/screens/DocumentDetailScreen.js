@@ -3,8 +3,8 @@ import { ScrollView, Text, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import GradientScreen from "../ui/GradientScreen";
 
-export default function DocumentDetailScreen({ route }) {
-    const { result, title } = route.params;
+export default function DocumentDetailScreen({ route, navigation }) {
+    const { result, title } = route.params || {};
 
     function Section({ title, children }) {
         return (
@@ -15,6 +15,31 @@ export default function DocumentDetailScreen({ route }) {
         );
     }
 
+    // 🔹 NEW: Defensive guard (QUEUED / PROCESSING case)
+    if (!result) {
+        return (
+            <GradientScreen>
+                <SafeAreaView style={{ flex: 1 }}>
+                    <View style={styles.container}>
+                        <Text style={styles.header}>{title}</Text>
+
+                        <View style={styles.section}>
+                            <Text style={styles.sectionTitle}>
+                                Analysis in progress
+                            </Text>
+                            <Text style={styles.text}>
+                                Your document is still being analyzed.
+                            </Text>
+                            <Text style={styles.text}>
+                                You can go back and check again in a few moments.
+                            </Text>
+                        </View>
+                    </View>
+                </SafeAreaView>
+            </GradientScreen>
+        );
+    }
+
     return (
         <GradientScreen>
             <SafeAreaView style={{ flex: 1 }}>
@@ -22,20 +47,32 @@ export default function DocumentDetailScreen({ route }) {
                     <Text style={styles.header}>{title}</Text>
 
                     <Section title="Summary">
-                        <Text style={styles.text}>{result.summary}</Text>
+                        <Text style={styles.text}>
+                            {result.summary || "No summary available yet."}
+                        </Text>
                     </Section>
 
                     <Section title="Action Items">
-                        {result.actionItems.map((a, i) => (
-                            <Text key={i} style={styles.bullet}>
-                                • {a}
+                        {Array.isArray(result.actionItems) &&
+                            result.actionItems.length > 0 ? (
+                            result.actionItems.map((a, i) => (
+                                <Text key={i} style={styles.bullet}>
+                                    • {a}
+                                </Text>
+                            ))
+                        ) : (
+                            <Text style={styles.text}>
+                                No action items detected.
                             </Text>
-                        ))}
+                        )}
                     </Section>
 
                     <Section title="Category">
-                        <Text style={styles.text}>{result.category}</Text>
+                        <Text style={styles.text}>
+                            {result.category || "—"}
+                        </Text>
                     </Section>
+
                     <Section title="Usage">
                         <Text style={styles.text}>
                             Credits used: {result.creditsUsed ?? "-"}
@@ -45,10 +82,6 @@ export default function DocumentDetailScreen({ route }) {
                         </Text>
                     </Section>
                 </ScrollView>
-
-              
-
-
             </SafeAreaView>
         </GradientScreen>
     );

@@ -12,13 +12,14 @@ export async function verifyIosReceipt(receiptDataBase64) {
     return data;
 }
 
-// Expo Go cannot run Apple IAP. Use this to test paywall + credits end-to-end.
-// Backend only enables this when DevMode:BypassSubscription = true.
-//export async function mockSubscribe(plan) {
-//    debugger    
-//    const { data } = await api.post("/api/billing/mock/subscribe", { plan });
-//    return data;
-//}
+// OPTIONAL but recommended:
+// Call on app launch if you cache last receipt locally
+export async function syncIosReceipt(receiptDataBase64) {
+    const { data } = await api.post("/api/billing/ios/sync-receipt", {
+        receiptDataBase64,
+    });
+    return data;
+}
 
 
 export async function mockSubscribe(productId) {
@@ -30,12 +31,3 @@ export async function mockSubscribe(productId) {
     );
     return data;
 }
-
-
-
-//export async function verifyIosReceipt(receiptDataBase64) {
-//    const { data } = await api.post("/api/billing/ios/verify-receipt", {
-//        receiptDataBase64,
-//    });
-//    return data;
-//}

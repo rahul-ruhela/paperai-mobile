@@ -138,8 +138,10 @@ export default function TasksScreen() {
                             );
                         }}
                     />
+                 
                 </View>
             </SafeAreaView>
+
         </GradientScreen>
     );
 }

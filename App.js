@@ -140,7 +140,24 @@ export default function App() {
 
     return (
         <NavigationContainer>
-            <Stack.Navigator>
+            <Stack.Navigator
+                screenOptions={{
+                    headerStyle: {
+                        backgroundColor: "#020617", // dark app background
+                    },
+                    headerTitleAlign: "center",
+
+                    headerTintColor: "#FFFFFF", // back arrow + title
+                    headerTitleStyle: {
+                        fontWeight: "700",
+                        fontSize: 16,
+                    },
+                    headerShadowVisible: false, // removes white bottom border
+                    contentStyle: {
+                        backgroundColor: "#020617", // PREVENTS white flash
+                    },
+                }}
+            >
                 {!authed ? (
                     <>
                         <Stack.Screen
