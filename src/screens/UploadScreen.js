@@ -8,6 +8,8 @@ import GradientScreen from "../ui/GradientScreen";
 import AppButton from "../ui/AppButton";
 import { getCreditsBalance } from "../api/credits";
 
+import { API } from "../constants/api";
+
 export default function UploadScreen({ navigation }) {
     const [busy, setBusy] = useState(false);
     const [credits, setCredits] = useState(null);
@@ -63,7 +65,8 @@ export default function UploadScreen({ navigation }) {
             });
 
             const res = await fetch(
-                "http://192.168.29.223:5263/api/documents/upload",
+                /*  "http://192.168.29.223:5263/api/documents/upload",*/ /*local apis call*/
+                API.BASE_URL + '/api/documents/upload',
                 {
                     method: "POST",
                     headers: { Authorization: `Bearer ${token}` },
