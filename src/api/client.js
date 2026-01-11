@@ -1,10 +1,10 @@
 import axios from "axios";
 import { getAccessToken, getRefreshToken, setTokens, clearTokens } from "../storage/tokenStore";
-
-const API_BASE_URL = "https://apis.bseptechnologies.com"; // <-- change this
+import { API } from "../constants/api";
+//const API_BASE_URL = "https://apis.bseptechnologies.com"; // <-- change this
 
 export const api = axios.create({
-  baseURL: API_BASE_URL,
+    baseURL: API.BASE_URL,
   timeout: 300000,
 });
 

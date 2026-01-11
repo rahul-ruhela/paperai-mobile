@@ -1,13 +1,20 @@
 import React, { useEffect, useRef, useState } from "react";
-import { View, Text, Alert, StyleSheet, Animated, Pressable } from "react-native";
+import {
+    View,
+    Text,
+    Alert,
+    StyleSheet,
+    Animated,
+    Pressable,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import * as SecureStore from "expo-secure-store";
+
 import GradientScreen from "../ui/GradientScreen";
 import AppButton from "../ui/AppButton";
 import { getCreditsBalance } from "../api/credits";
-
 import { API } from "../constants/api";
 
 export default function UploadScreen({ navigation }) {
@@ -33,8 +40,16 @@ export default function UploadScreen({ navigation }) {
     useEffect(() => {
         Animated.loop(
             Animated.sequence([
-                Animated.timing(lift, { toValue: -4, duration: 1200, useNativeDriver: true }),
-                Animated.timing(lift, { toValue: 0, duration: 1200, useNativeDriver: true }),
+                Animated.timing(lift, {
+                    toValue: -4,
+                    duration: 1200,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(lift, {
+                    toValue: 0,
+                    duration: 1200,
+                    useNativeDriver: true,
+                }),
             ])
         ).start();
     }, [lift]);
@@ -65,20 +80,28 @@ export default function UploadScreen({ navigation }) {
             });
 
             const res = await fetch(
-                /*  "http://192.168.29.223:5263/api/documents/upload",*/ /*local apis call*/
-                API.BASE_URL + '/api/documents/upload',
+                `${API.BASE_URL}/api/documents/upload`,
                 {
                     method: "POST",
-                    headers: { Authorization: `Bearer ${token}` },
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
                     body: form,
                 }
             );
 
-            const body = await res.text();
-            if (!res.ok) throw new Error(body);
+            const text = await res.text();
+            const data = JSON.parse(text);
 
-            const json = JSON.parse(body);
-            navigation.navigate("Process", { docId: json.id, title: json.title });
+            if (!res.ok) {
+                throw new Error(data?.message || "Upload failed");
+            }
+
+            navigation.navigate("Process", {
+                docId: data.id,
+                title: data.title,
+                fileUrl: data.url,
+            });
         } catch (err) {
             Alert.alert("Upload failed", err.message);
         } finally {
@@ -87,6 +110,7 @@ export default function UploadScreen({ navigation }) {
         }
     }
 
+
     return (
         <GradientScreen>
             <SafeAreaView style={{ flex: 1 }}>
@@ -94,22 +118,40 @@ export default function UploadScreen({ navigation }) {
                     <View style={styles.header}>
                         <Text style={styles.hTitle}>Upload</Text>
                         <View style={styles.badge}>
-                            <Ionicons name="flash-outline" size={14} color="#A5B4FC" />
+                            <Ionicons
+                                name="flash-outline"
+                                size={14}
+                                color="#A5B4FC"
+                            />
                             <Text style={styles.badgeText}>
-                                {credits === null ? "Loading…" : `${credits} credits`}
+                                {credits === null
+                                    ? "Loading…"
+                                    : `${credits} credits`}
                             </Text>
                         </View>
                     </View>
 
-                    <Animated.View style={[styles.uploader, { transform: [{ translateY: lift }] }]}>
+                    <Animated.View
+                        style={[
+                            styles.uploader,
+                            { transform: [{ translateY: lift }] },
+                        ]}
+                    >
                         <View style={styles.uploaderTop}>
                             <View style={styles.iconCircle}>
-                                <Ionicons name="cloud-upload-outline" size={26} color="#E0E7FF" />
+                                <Ionicons
+                                    name="cloud-upload-outline"
+                                    size={26}
+                                    color="#E0E7FF"
+                                />
                             </View>
                             <View style={{ flex: 1 }}>
-                                <Text style={styles.uTitle}>Drop in a document</Text>
+                                <Text style={styles.uTitle}>
+                                    Drop in a document
+                                </Text>
                                 <Text style={styles.uSub}>
-                                    PDF or image — we’ll extract text and run AI analysis.
+                                    PDF or image — we’ll extract text and run AI
+                                    analysis.
                                 </Text>
                             </View>
                         </View>
@@ -124,17 +166,35 @@ export default function UploadScreen({ navigation }) {
 
                         <Pressable
                             onPress={() => navigation.navigate("Paywall")}
-                            style={({ pressed }) => [styles.upgrade, pressed && { opacity: 0.7 }]}
+                            style={({ pressed }) => [
+                                styles.upgrade,
+                                pressed && { opacity: 0.7 },
+                            ]}
                         >
-                            <Ionicons name="sparkles-outline" size={16} color="#FBCFE8" />
-                            <Text style={styles.upgradeText}>Upgrade for more credits</Text>
+                            <Ionicons
+                                name="sparkles-outline"
+                                size={16}
+                                color="#FBCFE8"
+                            />
+                            <Text style={styles.upgradeText}>
+                                Upgrade for more credits
+                            </Text>
                         </Pressable>
                     </Animated.View>
 
                     <View style={styles.tips}>
-                        <Tip icon="lock-closed-outline" text="Your documents stay private to your account." />
-                        <Tip icon="time-outline" text="Most uploads process in seconds." />
-                        <Tip icon="bulb-outline" text="Best results with clear text PDFs or images." />
+                        <Tip
+                            icon="lock-closed-outline"
+                            text="Your documents stay private to your account."
+                        />
+                        <Tip
+                            icon="time-outline"
+                            text="Most uploads process in seconds."
+                        />
+                        <Tip
+                            icon="bulb-outline"
+                            text="Best results with clear text PDFs or images."
+                        />
                     </View>
                 </View>
             </SafeAreaView>
@@ -145,7 +205,11 @@ export default function UploadScreen({ navigation }) {
 function Tip({ icon, text }) {
     return (
         <View style={styles.tipRow}>
-            <Ionicons name={icon} size={16} color="rgba(255,255,255,0.75)" />
+            <Ionicons
+                name={icon}
+                size={16}
+                color="rgba(255,255,255,0.75)"
+            />
             <Text style={styles.tipText}>{text}</Text>
         </View>
     );
@@ -153,7 +217,11 @@ function Tip({ icon, text }) {
 
 const styles = StyleSheet.create({
     container: { flex: 1, padding: 18, gap: 14 },
-    header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+    header: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+    },
     hTitle: { color: "#fff", fontSize: 26, fontWeight: "900" },
     badge: {
         flexDirection: "row",
@@ -174,7 +242,11 @@ const styles = StyleSheet.create({
         borderRadius: 22,
         padding: 16,
     },
-    uploaderTop: { flexDirection: "row", gap: 12, alignItems: "center" },
+    uploaderTop: {
+        flexDirection: "row",
+        gap: 12,
+        alignItems: "center",
+    },
     iconCircle: {
         width: 46,
         height: 46,
@@ -186,8 +258,16 @@ const styles = StyleSheet.create({
         justifyContent: "center",
     },
     uTitle: { color: "#fff", fontSize: 16, fontWeight: "900" },
-    uSub: { marginTop: 4, color: "rgba(255,255,255,0.68)", lineHeight: 18 },
-    divider: { height: 1, backgroundColor: "rgba(255,255,255,0.10)", marginVertical: 14 },
+    uSub: {
+        marginTop: 4,
+        color: "rgba(255,255,255,0.68)",
+        lineHeight: 18,
+    },
+    divider: {
+        height: 1,
+        backgroundColor: "rgba(255,255,255,0.10)",
+        marginVertical: 14,
+    },
     upgrade: {
         marginTop: 12,
         flexDirection: "row",
@@ -199,5 +279,8 @@ const styles = StyleSheet.create({
     upgradeText: { color: "#FBCFE8", fontWeight: "900" },
     tips: { marginTop: 4, gap: 10 },
     tipRow: { flexDirection: "row", gap: 10, alignItems: "center" },
-    tipText: { color: "rgba(255,255,255,0.70)", fontWeight: "700" },
+    tipText: {
+        color: "rgba(255,255,255,0.70)",
+        fontWeight: "700",
+    },
 });
