@@ -1,7 +1,7 @@
 import axios from "axios";
 import { getAccessToken, getRefreshToken, setTokens, clearTokens } from "../storage/tokenStore";
 
-const API_BASE_URL = "http://192.168.29.223:5263"; // <-- change this
+const API_BASE_URL = "https://apis.bseptechnologies.com"; // <-- change this
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
