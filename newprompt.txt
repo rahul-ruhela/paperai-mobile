@@ -1,0 +1,34 @@
+You are working on my React Native (Expo) app. I want a UI redesign + consistency refactor, but you MUST NOT break existing functionality, routing, or file names. Do NOT rename routes or screens. Keep all API calls, navigation targets, and params exactly the same.
+
+Goals:
+1) Create a single global theme system and shared styles that every screen uses:
+   - Create: src/ui/theme.js (colors, spacing, typography, radius)
+   - Create: src/ui/styles.js (Common styles + Screen-specific style exports)
+   - Refactor: GradientScreen.js, Card.js, AppButton.js, AiHeader.js, BottomFade.tsx, ConfirmActionSheet.js, and all screens to use Theme + shared styles.
+   - Remove per-screen StyleSheet duplication where possible.
+   - Ensure excellent contrast on dark theme (no invisible text/icons).
+
+2) UI requirements:
+   - Premium “AI app” look, Apple/iOS safe, smooth, minimal, dense (more items visible).
+   - HomeScreen: pinned works reliably (press doesn’t open card), 3-dot menu always visible, “Apply Intelligence” floating button included.
+   - TasksScreen: fix collapsed layout, consistent padding, consistent card style, no black text on dark bg.
+   - UploadScreen: keep upload logic intact (DocumentPicker → fetch upload → navigate("Process", {docId,title,fileUrl})), but improve UI and button styling + icons and empty states.
+   - Provide empty states with icons for screens with no data.
+
+3) Non-negotiables:
+   - Don’t introduce deprecated Swipeable.
+   - Don’t add babel.config.js.
+   - Don’t add new heavy animation libraries or require reanimated setup changes.
+   - Do not remove existing features; only enhance.
+   - Provide COMPLETE copy-paste code for each file you touch.
+
+I will upload these files:
+- App.js, index.js, package.json
+- HomeScreen.js, UploadScreen.js, TasksScreen.js, AnalysisScreen.js
+- ui components: GradientScreen.js, Card.js, AppButton.js, AiHeader.js, BottomFade.tsx, ConfirmActionSheet.js
+After I upload, read them completely and return the updated, complete code for:
+- src/ui/theme.js
+- src/ui/styles.js
+- all updated ui components
+- HomeScreen.js, UploadScreen.js, TasksScreen.js (and any other screen needing consistency)
+Make sure the app runs without route changes and nothing breaks.

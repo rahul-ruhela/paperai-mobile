@@ -1,20 +1,20 @@
 import React from "react";
 import { View, StyleSheet, StatusBar } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { Theme } from "./theme";
 
 export default function GradientScreen({ children }) {
     return (
         <View style={styles.root}>
             <StatusBar barStyle="light-content" />
             <LinearGradient
-                colors={["#0B1220", "#111B33", "#1C2A57"]}
+                colors={[Theme.colors.bg0, Theme.colors.bg1, Theme.colors.bg2]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={StyleSheet.absoluteFill}
             />
-            {/* soft “glow” layer */}
-            <View style={styles.glowTop} />
-            <View style={styles.glowBottom} />
+            <View style={styles.glowTop} pointerEvents="none" />
+            <View style={styles.glowBottom} pointerEvents="none" />
             {children}
         </View>
     );
@@ -29,15 +29,15 @@ const styles = StyleSheet.create({
         width: 260,
         height: 260,
         borderRadius: 260,
-        backgroundColor: "rgba(99,102,241,0.28)",
+        backgroundColor: "rgba(99,102,241,0.26)",
     },
     glowBottom: {
         position: "absolute",
-        bottom: -140,
-        right: -90,
-        width: 300,
-        height: 300,
-        borderRadius: 300,
+        bottom: -150,
+        right: -100,
+        width: 320,
+        height: 320,
+        borderRadius: 320,
         backgroundColor: "rgba(236,72,153,0.18)",
     },
 });

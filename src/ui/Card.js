@@ -1,10 +1,22 @@
 import React from "react";
 import { View } from "react-native";
+import { Theme } from "./theme";
 
-export default function Card({ children }) {
-  return (
-    <View style={{ padding: 14, borderRadius: 14, backgroundColor: "#fff", marginBottom: 12, borderWidth: 1, borderColor: "#eee" }}>
-      {children}
-    </View>
-  );
+export default function Card({ children, style }) {
+    return (
+        <View
+            style={[
+                {
+                    backgroundColor: Theme.colors.surface,
+                    borderWidth: 1,
+                    borderColor: Theme.colors.border,
+                    borderRadius: Theme.radius.lg,
+                    padding: 12,
+                },
+                style,
+            ]}
+        >
+            {children}
+        </View>
+    );
 }
