@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import {
     View,
     Text,
@@ -6,259 +6,209 @@ import {
     RefreshControl,
     StyleSheet,
     Pressable,
+    Modal,
+    Alert,
+    Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 
 import GradientScreen from "../ui/GradientScreen";
 import Card from "../ui/Card";
 import AiHeader from "../ui/AiHeader";
 import AppButton from "../ui/AppButton";
-import { listDocuments } from "../api/documents";
-
-import { useFocusEffect } from "@react-navigation/native";
 import BottomFade from "../ui/BottomFade";
+
+import { listDocuments, deleteDocument } from "../api/documents";
 
 export default function HomeScreen({ navigation }) {
     const [docs, setDocs] = useState([]);
     const [refreshing, setRefreshing] = useState(false);
+    const [selectedDoc, setSelectedDoc] = useState(null);
 
-    const load = useCallback(async (opts = { silent: false }) => {
-        if (!opts.silent) setRefreshing(true);
-
+    const load = useCallback(async () => {
+        setRefreshing(true);
         try {
             const data = await listDocuments();
-            setDocs(data);
+            setDocs(data.filter(d => d.status !== "DELETED"));
         } finally {
-            if (!opts.silent) setRefreshing(false);
+            setRefreshing(false);
         }
     }, []);
 
-    // ✅ CORRECT: refresh on screen focus
-    useFocusEffect(
-        useCallback(() => {
-            load({ silent: true });
-        }, [load])
-    );
+    useFocusEffect(useCallback(() => { load(); }, [load]));
 
-    function handleOpen(doc) {
-        if (doc.hasAiResult === true) {
-            navigation.navigate("Analysis", {
-                docId: doc.id,
-                title: doc.title,
-            });
-        } else {
-            navigation.navigate("Process", {
-                docId: doc.id,
-                title: doc.title,
-            });
-        }
+    function openDoc(doc) {
+        closeMenu();
+        navigation.navigate(doc.hasAiResult ? "Analysis" : "Process", {
+            docId: doc.id,
+            title: doc.title,
+        });
     }
 
-    function renderItem({ item }) {
-        // 🔹 NEW: derive state safely
-        const status = item.status || (item.hasAiResult ? "PROCESSED" : "PENDING");
+    function closeMenu() {
+        setSelectedDoc(null);
+    }
 
-        let badgeText = "Pending";
-        let badgeType = "pending";
-        let actionText = "Run AI Analysis →";
+    function confirmDelete() {
+        const doc = selectedDoc;
+        closeMenu();
 
-        if (status === "QUEUED") {
-            badgeText = "Queued";
-            badgeType = "pending";
-            actionText = "Waiting in queue…";
-        } else if (status === "PROCESSING") {
-            badgeText = "Processing";
-            badgeType = "pending";
-            actionText = "Analyzing…";
-        } else if (status === "PROCESSED") {
-            badgeText = "Processed";
-            badgeType = "success";
-            actionText = "Open AI Analysis →";
-        } else if (status === "FAILED") {
-            badgeText = "Failed";
-            badgeType = "failed";
-            actionText = "Retry analysis →";
-        }
-
-        return (
-            <Pressable
-                onPress={() => handleOpen(item)}
-                style={({ pressed }) => pressed && { opacity: 0.85 }}
-            >
-                <Card style={styles.card}>
-                    <View style={styles.row}>
-                        <Ionicons
-                            name="document-text-outline"
-                            size={20}
-                            color="#A5B4FC"
-                        />
-                        <Text style={styles.title} numberOfLines={2}>
-                            {item.title}
-                        </Text>
-                    </View>
-
-                    <View style={styles.metaRow}>
-                        <Badge text={badgeText} type={badgeType} />
-                        {item.category && (
-                            <Text style={styles.category}>
-                                {item.category}
-                            </Text>
-                        )}
-                    </View>
-
-                    <Text style={styles.action}>{actionText}</Text>
-                </Card>
-            </Pressable>
+        Alert.alert(
+            "Delete document?",
+            `"${doc.title}" will be permanently deleted.`,
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: async () => {
+                        setDocs(d => d.filter(x => x.id !== doc.id));
+                        await deleteDocument(doc.id);
+                    },
+                },
+            ]
         );
     }
 
-    const isFirstTime = docs.length === 0;
+    function renderItem({ item }) {
+        return (
+            <Card style={styles.card}>
+                <Pressable onPress={() => openDoc(item)}>
+                    <View style={styles.row}>
+                        <Ionicons name="document-text-outline" size={20} color="#A5B4FC" />
+                        <Text style={styles.title} numberOfLines={2}>
+                            {item.title}
+                        </Text>
 
-    // 🔹 Keep your safe split
-    const processedDocs = docs.filter(d => d.status === "PROCESSED");
-    const pendingDocs = docs.filter(d => d.status !== "PROCESSED");
+                        <Pressable
+                            onPress={() => setSelectedDoc(item)}
+                            hitSlop={10}
+                        >
+                            <Ionicons name="ellipsis-horizontal" size={20} color="#64748B" />
+                        </Pressable>
+                    </View>
+
+                    <Text style={styles.action}>
+                        {item.hasAiResult ? "Open AI Analysis →" : "Run AI Analysis →"}
+                    </Text>
+                </Pressable>
+            </Card>
+        );
+    }
 
     return (
         <GradientScreen>
             <SafeAreaView style={{ flex: 1 }}>
                 <View style={styles.container}>
                     <AiHeader
-                        title="PaperAI"
-                        subtitle="Your AI document intelligence hub"
+                        title="Documents"
+                        subtitle="Your AI document workspace"
                     />
 
-                    {isFirstTime ? (
-                        <View style={styles.welcomeWrap}>
-                            <Text style={styles.welcomeTitle}>
-                                Welcome to PaperAI 👋
-                            </Text>
-
-                            <Text style={styles.welcomeText}>
-                                Upload documents and let AI instantly summarize,
-                                extract insights, and save your reading time.
-                            </Text>
-
-                            <View style={styles.features}>
-                                <Feature
-                                    icon="document-text-outline"
-                                    text="Smart summaries & key points"
-                                />
-                                <Feature
-                                    icon="flash-outline"
-                                    text="Instant AI-powered analysis"
-                                />
-                                <Feature
-                                    icon="lock-closed-outline"
-                                    text="Private & secure processing"
+                    <FlatList
+                        data={docs}
+                        keyExtractor={i => i.id}
+                        renderItem={renderItem}
+                        refreshControl={
+                            <RefreshControl refreshing={refreshing} onRefresh={load} />
+                        }
+                        contentContainerStyle={{ paddingBottom: 80 }}
+                        ListEmptyComponent={
+                            <View style={styles.empty}>
+                                <Text style={styles.emptyTitle}>No documents yet</Text>
+                                <AppButton
+                                    title="Upload document"
+                                    onPress={() => navigation.navigate("Upload")}
                                 />
                             </View>
-
-                            <AppButton
-                                title="Upload your first document"
-                                onPress={() => navigation.navigate("Upload")}
-                            />
-
-                            <Text style={styles.helper}>
-                                Supported: PDF, images, scans & text files
-                            </Text>
-                        </View>
-                    ) : (
-                        <FlatList
-                            data={[
-                                ...(processedDocs.length
-                                    ? [{ _type: "header", title: "Previous AI Analysis" }]
-                                    : []),
-                                ...processedDocs,
-                                ...(pendingDocs.length
-                                    ? [{ _type: "header", title: "Pending Documents" }]
-                                    : []),
-                                ...pendingDocs,
-                            ]}
-                            keyExtractor={(item, index) =>
-                                item._type ? `h-${index}` : item.id
-                            }
-                            refreshControl={
-                                <RefreshControl
-                                    refreshing={refreshing}
-                                    onRefresh={load}
-                                    tintColor="#A5B4FC"
-                                />
-                            }
-                            contentContainerStyle={{ paddingBottom: 60 }}
-                            renderItem={({ item }) => {
-                                if (item._type === "header") {
-                                    return (
-                                        <Text style={styles.sectionHeader}>
-                                            {item.title}
-                                        </Text>
-                                    );
-                                }
-                                return renderItem({ item });
-                            }}
-                        />
-                    )}
+                        }
+                    />
                 </View>
             </SafeAreaView>
+
+            {/* ACTION SHEET */}
+            <Modal
+                visible={!!selectedDoc}
+                transparent
+                animationType="slide"
+                onRequestClose={closeMenu}
+            >
+                <Pressable style={styles.overlay} onPress={closeMenu} />
+
+                <View style={styles.sheet}>
+                    <Text style={styles.sheetTitle}>
+                        {selectedDoc?.title}
+                    </Text>
+
+                    <SheetAction
+                        icon="sparkles-outline"
+                        text="Open AI Analysis"
+                        onPress={() => openDoc(selectedDoc)}
+                    />
+
+                    <SheetAction
+                        icon="trash-outline"
+                        text="Delete Document"
+                        danger
+                        onPress={confirmDelete}
+                    />
+
+                    <SheetAction
+                        icon="close"
+                        text="Cancel"
+                        onPress={closeMenu}
+                    />
+                </View>
+            </Modal>
+
             <BottomFade />
         </GradientScreen>
     );
 }
 
-function Feature({ icon, text }) {
+function SheetAction({ icon, text, onPress, danger }) {
     return (
-        <View style={styles.featureRow}>
+        <Pressable onPress={onPress} style={styles.sheetAction}>
             <Ionicons
                 name={icon}
-                size={18}
-                color="#A5B4FC"
-                style={{ marginTop: 2 }}
+                size={20}
+                color={danger ? "#EF4444" : "#020c45"}
             />
-            <Text style={styles.featureText}>{text}</Text>
-        </View>
-    );
-}
-
-// 🔹 UPDATED Badge to support more states
-function Badge({ text, type }) {
-    return (
-        <View
-            style={[
-                styles.badge,
-                type === "success"
-                    ? styles.badgeSuccess
-                    : type === "failed"
-                        ? styles.badgeFailed
-                        : styles.badgePending,
-            ]}
-        >
-            <Text style={styles.badgeText}>{text}</Text>
-        </View>
+            <Text
+                style={[
+                    styles.sheetText,
+                    danger && { color: "#EF4444" },
+                ]}
+            >
+                {text}
+            </Text>
+        </Pressable>
     );
 }
 
 const styles = StyleSheet.create({
     container: { flex: 1, padding: 18 },
 
-    sectionHeader: {
-        marginTop: 18,
-        marginBottom: 8,
-        color: "rgba(255,255,255,0.7)",
-        fontWeight: "900",
-        fontSize: 13,
-        letterSpacing: 0.5,
-        textTransform: "uppercase",
-    },
-
     card: {
         backgroundColor: "rgba(255,255,255,0.08)",
-        borderColor: "rgba(255,255,255,0.15)",
+        borderRadius: 22,
+        marginBottom: 12,
+        ...(Platform.OS === "ios"
+            ? {
+                shadowColor: "#000",
+                shadowOpacity: 0.08,
+                shadowRadius: 10,
+                shadowOffset: { height: 4 },
+            }
+            : {}),
     },
 
     row: {
         flexDirection: "row",
-        gap: 10,
         alignItems: "center",
+        gap: 10,
     },
 
     title: {
@@ -268,95 +218,51 @@ const styles = StyleSheet.create({
         color: "#020c45",
     },
 
-    metaRow: {
-        marginTop: 10,
-        flexDirection: "row",
-        gap: 10,
-        alignItems: "center",
-    },
-
-    category: {
-        color: "rgba(255,255,255,0.65)",
-        fontWeight: "600",
-    },
-
-    badge: {
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 999,
-    },
-
-    badgeSuccess: {
-        backgroundColor: "rgba(34,197,94,0.3)",
-    },
-
-    badgePending: {
-        backgroundColor: "rgba(251,191,36,0.3)",
-    },
-
-    badgeFailed: {
-        backgroundColor: "rgba(239,68,68,0.3)",
-    },
-
-    badgeText: {
-        color: "#020c45",
-        fontWeight: "800",
-        fontSize: 12,
-    },
-
     action: {
         marginTop: 14,
         fontWeight: "800",
         color: "#004aad",
     },
 
-    welcomeWrap: {
-        marginTop: 40,
+    empty: {
+        marginTop: 60,
         alignItems: "center",
-        paddingHorizontal: 8,
     },
 
-    welcomeTitle: {
-        fontSize: 24,
-        fontWeight: "900",
+    emptyTitle: {
         color: "#fff",
-        marginBottom: 12,
-        textAlign: "center",
+        fontWeight: "900",
+        fontSize: 20,
+        marginBottom: 14,
     },
 
-    welcomeText: {
-        color: "rgba(255,255,255,0.7)",
-        fontSize: 15,
-        fontWeight: "600",
-        textAlign: "center",
-        marginBottom: 26,
-        lineHeight: 22,
-    },
-
-    features: {
-        width: "100%",
-        gap: 14,
-        marginBottom: 28,
-    },
-
-    featureRow: {
-        flexDirection: "row",
-        gap: 12,
-        alignItems: "flex-start",
-    },
-
-    featureText: {
+    overlay: {
         flex: 1,
-        color: "rgba(255,255,255,0.85)",
-        fontWeight: "700",
-        lineHeight: 20,
+        backgroundColor: "rgba(0,0,0,0.4)",
     },
 
-    helper: {
-        marginTop: 16,
-        color: "rgba(255,255,255,0.55)",
-        fontSize: 12,
-        textAlign: "center",
-        fontWeight: "600",
+    sheet: {
+        backgroundColor: "#fff",
+        padding: 20,
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+    },
+
+    sheetTitle: {
+        fontWeight: "900",
+        fontSize: 16,
+        marginBottom: 12,
+    },
+
+    sheetAction: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        paddingVertical: 14,
+    },
+
+    sheetText: {
+        fontSize: 15,
+        fontWeight: "700",
     },
 });

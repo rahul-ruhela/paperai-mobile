@@ -51,7 +51,7 @@ api.interceptors.response.use(
       const refreshToken = await getRefreshToken();
         if (!refreshToken) throw new Error("User is not registered with us, Please Register ");
 
-      const resp = await axios.post(`${API_BASE_URL}/api/auth/refresh`, { refreshToken });
+      const resp = await axios.post(`${API.BASE_URL}/api/auth/refresh`, { refreshToken });
       const { accessToken, refreshToken: newRefresh } = resp.data;
 
       await setTokens({ accessToken, refreshToken: newRefresh });
