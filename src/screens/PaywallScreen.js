@@ -27,7 +27,7 @@ const isExpoGo = Constants.appOwnership === "expo";
 const PLANS = [
     {
         id: "weekly",
-        productId: "com.bholeshankar.paperai.basic_monthly", // keep your existing ID for now if that’s what backend expects
+        productId: "com.bholeshankar.paperai.pro_weekly", // keep your existing ID for now if that’s what backend expects
         title: "Weekly",
         price: "$8.99 / week",
     },
@@ -40,7 +40,7 @@ const PLANS = [
     },
     {
         id: "yearly",
-        productId: "com.bholeshankar.paperai.advanced_monthly", // keep existing
+        productId: "com.bholeshankar.paperai.pro_yearly", // keep existing
         title: "Yearly",
         price: "$279 / year",
         badge: "40% OFF · Best Value",
