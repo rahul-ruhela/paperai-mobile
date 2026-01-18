@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -18,7 +18,8 @@
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "PaperAI needs camera access to scan documents.",
-        "NSPhotoLibraryUsageDescription": "PaperAI needs photo access to upload images."
+        "NSPhotoLibraryUsageDescription": "PaperAI needs photo access to upload images.",
+        "deploymentTarget": "13.0"
       }
     },
     "android": {
@@ -36,6 +37,7 @@
       "expo-secure-store",
       "react-native-iap"
     ],
+   
     "extra": {
       "eas": {
         "projectId": "b0bec626-8107-4130-95be-749068adbcd7"
