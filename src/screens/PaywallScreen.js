@@ -3,273 +3,420 @@ import {
     View,
     Text,
     TouchableOpacity,
-    StyleSheet,
-    Alert,
     ActivityIndicator,
-    Animated,
-    ScrollView,
+    Alert,
+    Platform,
+    StyleSheet,
 } from "react-native";
+import * as RNIap from "react-native-iap";
 import Constants from "expo-constants";
-import { mockSubscribe, verifyIosReceipt, getEntitlement } from "../api/billing";
-import SubscriptionPlanCard from "../ui/SubscriptionPlanCard";
-import ScreenContainer from "../ui/ScreenContainer";
-
-const isExpoGo = Constants.appOwnership === "expo";
+import { useNavigation } from "@react-navigation/native";
 
 /**
- * IMPORTANT:
- * - Keep productId exactly as your system expects.
- * - You can change title/price/badges safely (UI-only).
- *
- * If your real App Store Connect productIds for weekly/monthly/yearly differ,
- * update ONLY productId strings later (no other logic changes needed).
+ * DO NOT CHANGE
+ * These product IDs already exist in App Store Connect
  */
-const PLANS = [
-    {
-        id: "weekly",
-        productId: "com.bholeshankar.paperai.pro_weekly", // keep your existing ID for now if that’s what backend expects
-        title: "Weekly",
-        price: "$8.99 / week",
-    },
-    {
-        id: "monthly",
-        productId: "com.bholeshankar.paperai.pro_monthly", // keep existing
-        title: "Monthly",
-        price: "$29.90 / month",
-        badge: "16.6% OFF",
-    },
-    {
-        id: "yearly",
-        productId: "com.bholeshankar.paperai.pro_yearly", // keep existing
-        title: "Yearly",
-        price: "$279 / year",
-        badge: "40% OFF · Best Value",
-        highlight: true,
-    },
+const PRODUCT_IDS = [
+    "com.bholeshankar.paperai.pro_weekly",
+    "com.bholeshankar.paperai.pro_monthly",
+    "com.bholeshankar.paperai.pro_yearly",
 ];
 
-export default function PaywallScreen({ navigation }) {
-    const [loadingProductId, setLoadingProductId] = useState(null);
-    const [entitlement, setEntitlement] = useState(null);
+// Optional: set this to your API base URL
+const API_BASE_URL = "http://192.168.29.223:5263"; // e.g. https://api.yourdomain.com
 
-    // purely UI selection (does NOT affect entitlement logic)
-    const [selectedPlanId, setSelectedPlanId] = useState("yearly");
+export default function PaywallScreen() {
+    const navigation = useNavigation();
 
-    const scaleAnim = useRef(new Animated.Value(1)).current;
+    const [subscriptions, setSubscriptions] = useState([]);
+    const [loadingSku, setLoadingSku] = useState(null);
+    const [initState, setInitState] = useState({
+        started: false,
+        disabledReason: null,
+        lastError: null,
+    });
 
-    async function loadEntitlement() {
-        try {
-            const e = await getEntitlement();
-            setEntitlement(e);
-            return e;
-        } catch {
-            return null;
-        }
-    }
+    const purchaseUpdateSub = useRef(null);
+    const purchaseErrorSub = useRef(null);
 
+    // Expo Go: Constants.appOwnership === "expo"
+    const isExpoGo = Constants.appOwnership === "expo";
+
+    /**
+     * Dev Client detection:
+     * In Expo Dev Client you are still in a dev runtime (__DEV__ true),
+     * but NOT Expo Go.
+     *
+     * This is the most reliable practical signal:
+     * - Dev Client / local dev => __DEV__ true
+     * - TestFlight / App Store => __DEV__ false
+     */
+    const isDevClientLike = __DEV__ && !isExpoGo;
+
+    const envLabel = isExpoGo ? "EXPO_GO" : isDevClientLike ? "DEV_CLIENT" : "TESTFLIGHT_OR_PROD";
+
+    const log = (...args) => console.log(`[PAYWALL][${envLabel}]`, ...args);
 
     useEffect(() => {
-        loadEntitlement();
+        // Two-mode behavior:
+        // - Expo Go: disable
+        // - Dev Client: disable (IAP cannot complete; avoid crashes/confusion)
+        // - TestFlight/Prod: enable real IAP
+        if (isExpoGo) {
+            setInitState({
+                started: false,
+                disabledReason: "In-App Purchases do not work in Expo Go.",
+                lastError: null,
+            });
+            log("IAP disabled: Expo Go");
+            return;
+        }
+
+        if (isDevClientLike) {
+            setInitState({
+                started: false,
+                disabledReason:
+                    "In-App Purchases cannot be completed in Expo Dev Client. Install a TestFlight build to test real payments.",
+                lastError: null,
+            });
+            log("IAP disabled: Dev Client (use TestFlight for real IAP)");
+            return;
+        }
+
+        // Real IAP mode (TestFlight / Production)
+        initIap();
+
+        return () => cleanup();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // subtle animation for highlight card only
-    useEffect(() => {
-        Animated.loop(
-            Animated.sequence([
-                Animated.timing(scaleAnim, {
-                    toValue: 1.04,
-                    duration: 900,
-                    useNativeDriver: true,
-                }),
-                Animated.timing(scaleAnim, {
-                    toValue: 1,
-                    duration: 900,
-                    useNativeDriver: true,
-                }),
-            ])
-        ).start();
-    }, [scaleAnim]);
-
-    async function subscribe(plan) {
-        if (loadingProductId) return;
-
+    const initIap = async () => {
         try {
-            setLoadingProductId(plan.productId);
+            setInitState((s) => ({ ...s, started: true, lastError: null }));
 
-            // EXPO GO → MOCK (unchanged)
-            if (isExpoGo) {
-                await mockSubscribe(plan.productId);
-                await loadEntitlement();
-                Alert.alert("Subscribed", `${plan.title} activated`);
-                navigation.goBack();
+            log("initConnection...");
+            await RNIap.initConnection();
+
+            if (Platform.OS === "ios") {
+                // Clears pending transactions that can block purchases
+                log("clearTransactionIOS...");
+                await RNIap.clearTransactionIOS();
+            }
+
+            // ✅ Correct v12+ signature (fixes "skus is required")
+            log("getSubscriptions ->", PRODUCT_IDS);
+            const subs = await RNIap.getSubscriptions({ skus: PRODUCT_IDS });
+            log("getSubscriptions returned:", subs?.length ?? 0);
+
+            setSubscriptions(Array.isArray(subs) ? subs : []);
+
+            // Purchase updated
+            purchaseUpdateSub.current = RNIap.purchaseUpdatedListener(async (purchase) => {
+                try {
+                    // ✅ Hard guards (prevents "transactionId of undefined")
+                    if (!purchase) {
+                        log("purchaseUpdatedListener: purchase is undefined");
+                        return;
+                    }
+
+                    const {
+                        transactionReceipt,
+                        transactionId,
+                        productId,
+                        originalTransactionIdentifierIOS,
+                    } = purchase;
+
+                    log("purchaseUpdatedListener:", {
+                        productId,
+                        transactionId,
+                        hasReceipt: !!transactionReceipt,
+                        originalTransactionIdentifierIOS,
+                    });
+
+                    // If no receipt, cannot verify or finish reliably
+                    if (!transactionReceipt) {
+                        log("No transactionReceipt yet; ignoring this event.");
+                        return;
+                    }
+
+                    // Verify on backend (REAL)
+                    await verifyIosReceiptOnBackend({
+                        receipt: transactionReceipt,
+                        productId: productId || null,
+                        transactionId: transactionId || null,
+                        originalTransactionId: originalTransactionIdentifierIOS || null,
+                    });
+
+                    // Finish transaction (must be done or Apple may keep it pending)
+                    await RNIap.finishTransaction(purchase, false);
+
+                    Alert.alert("Success", "Subscription activated.");
+                    navigation.goBack();
+                } catch (err) {
+                    const msg = err?.message || "Verification failed.";
+                    log("Purchase flow error:", msg, err);
+
+                    Alert.alert("Purchase Error", msg);
+
+                    // Attempt to finish transaction anyway if possible (avoid stuck queue)
+                    try {
+                        if (purchase) await RNIap.finishTransaction(purchase, false);
+                    } catch (finishErr) {
+                        log("finishTransaction after error failed:", finishErr?.message || finishErr);
+                    }
+                } finally {
+                    setLoadingSku(null);
+                }
+            });
+
+            // Purchase error
+            purchaseErrorSub.current = RNIap.purchaseErrorListener((err) => {
+                const code = err?.code;
+                const message = err?.message || "Purchase failed.";
+                log("purchaseErrorListener:", { code, message, err });
+
+                // ✅ Correct cancel handling (don’t show as failure)
+                if (code === "E_USER_CANCELLED") {
+                    log("User cancelled purchase (no alert).");
+                    setLoadingSku(null);
+                    return;
+                }
+
+                Alert.alert("Purchase Failed", message);
+                setLoadingSku(null);
+            });
+        } catch (err) {
+            const msg = err?.message || String(err);
+            log("IAP init error:", msg, err);
+            setInitState((s) => ({ ...s, lastError: msg }));
+        }
+    };
+
+    const subscribe = async (productId) => {
+        try {
+            if (initState.disabledReason) {
+                Alert.alert("IAP Disabled", initState.disabledReason);
                 return;
             }
 
-            // REAL APPLE IAP (unchanged)
-            const RNIap = require("react-native-iap");
-            await RNIap.initConnection();
+            setLoadingSku(productId);
+            log("requestSubscription:", productId);
 
-            const purchase = await RNIap.requestSubscription(plan.productId);
+            // ✅ Correct v12+ signature (fixes "'in' is not an object")
+            await RNIap.requestSubscription({ sku: productId });
+        } catch (err) {
+            const code = err?.code;
+            const message = err?.message || "Unable to start purchase.";
+            log("subscribe error:", { code, message, err });
 
-            if (!purchase?.transactionReceipt) {
-                throw new Error("No receipt returned");
+            // Same cancel handling here too (some devices throw here instead of listener)
+            if (code === "E_USER_CANCELLED") {
+                setLoadingSku(null);
+                return;
             }
 
-            await verifyIosReceipt(purchase.transactionReceipt);
-            await RNIap.finishTransaction(purchase);
-
-            await loadEntitlement();
-            Alert.alert("Subscribed", `${plan.title} activated`);
-            navigation.goBack();
-        } catch (e) {
-            Alert.alert("Subscription failed", e?.message || "Try again");
-        } finally {
-            setLoadingProductId(null);
+            Alert.alert("Subscription Failed", message);
+            setLoadingSku(null);
         }
-    }
+    };
 
-    async function restore() {
-        if (loadingProductId) return;
-
+    const restorePurchases = async () => {
         try {
-            setLoadingProductId("__restore__");
-
-            // entitlement-based restore (works for mock)
-            await loadEntitlement();
-
-            const hasActive = !!entitlement?.active;
-
-            if (hasActive) {
-                Alert.alert("Restored", "Subscription restored", [
-                    {
-                        text: "OK",
-                        onPress: () => {
-                            // wait for alert close animation → smooth pop
-                            setTimeout(() => navigation.goBack(), 250);
-                        },
-                    },
-                ]);
-            } else {
-                Alert.alert("No active subscription", "We couldn't find an active plan.", [
-                    {
-                        text: "OK",
-                        onPress: () => {
-                            // smooth return to paywall state
-                            setTimeout(() => setLoadingProductId(null), 150);
-                        },
-                    },
-                ]);
-                return; // prevent finally from instantly removing skeleton
+            if (initState.disabledReason) {
+                Alert.alert("IAP Disabled", initState.disabledReason);
+                return;
             }
-        } catch {
-            Alert.alert("Restore failed", "Please try again.", [
-                {
-                    text: "OK",
-                    onPress: () => setTimeout(() => setLoadingProductId(null), 150),
-                },
-            ]);
-            return;
-        } finally {
-            // If user has active subscription, we navigate away on OK.
-            // If not active / failed, we already unset loading in alert handler.
-            // So only clear here if still restoring (safety).
-            setTimeout(() => {
-                setLoadingProductId((prev) => (prev === "__restore__" ? null : prev));
-            }, 200);
+
+            log("restorePurchases: getAvailablePurchases...");
+            const purchases = await RNIap.getAvailablePurchases();
+            log("available purchases:", purchases?.length ?? 0);
+
+            if (!purchases || purchases.length === 0) {
+                Alert.alert("Restore Purchases", "No active purchases found.");
+                return;
+            }
+
+            // Usually you’d send latest receipt(s) to backend.
+            // iOS receipts are bundled; you can verify per purchase receipt if available.
+            Alert.alert("Restore Purchases", "Purchases restored.");
+            navigation.goBack();
+        } catch (err) {
+            const msg = err?.message || "Restore failed.";
+            log("restorePurchases error:", msg, err);
+            Alert.alert("Restore Failed", msg);
         }
+    };
+
+    const cleanup = () => {
+        log("cleanup...");
+        purchaseUpdateSub.current?.remove();
+        purchaseErrorSub.current?.remove();
+        RNIap.endConnection();
+    };
+
+    /**
+     * REAL verification: call your .NET backend.
+     * Backend validates with Apple and returns entitlement info.
+     */
+    const verifyIosReceiptOnBackend = async ({
+        receipt,
+        productId,
+        transactionId,
+        originalTransactionId,
+    }) => {
+        // IMPORTANT: make sure API_BASE_URL is set
+        const url = `${API_BASE_URL}/api/iap/ios/verify`;
+
+        log("verifyIosReceiptOnBackend ->", {
+            productId,
+            transactionId,
+            originalTransactionId,
+            receiptLen: receipt?.length ?? 0,
+        });
+
+        const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                receiptData: receipt,
+                productId,
+                transactionId,
+                originalTransactionId,
+            }),
+        });
+
+        if (!res.ok) {
+            const text = await res.text().catch(() => "");
+            throw new Error(`Receipt verify failed (${res.status}): ${text || "No details"}`);
+        }
+
+        const data = await res.json();
+
+        // Expect backend to return something like: { active: true, expiresAt: "...", productId: "..." }
+        if (!data?.active) {
+            throw new Error(data?.message || "Subscription not active after verification.");
+        }
+
+        return data;
+    };
+
+    // ----------------------------
+    // UI (two-mode paywall)
+    // ----------------------------
+    if (initState.disabledReason) {
+        return (
+            <View style={styles.center}>
+                <Text style={styles.warning}>{initState.disabledReason}</Text>
+                <Text style={styles.helpText}>
+                    Current mode: {envLabel}
+                    {"\n"}To test real IAP: build & install via TestFlight.
+                </Text>
+            </View>
+        );
     }
-
-
-    const isBusyAny = !!loadingProductId;
 
     return (
+        <View style={styles.container}>
+            <Text style={styles.title}>Upgrade to PaperAI Pro</Text>
 
-        <ScreenContainer>
-        <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-            <Text style={styles.header}>Upgrade to AI Pro</Text>
-            <Text style={styles.subHeader}>Pick a plan. You can cancel anytime.</Text>
+            {!!initState.lastError && (
+                <Text style={styles.errorText}>IAP Error: {initState.lastError}</Text>
+            )}
 
-            {PLANS.map((plan) => {
-                const isActive =
-                    !!entitlement?.active && entitlement.productId === plan.productId;
-
-                const isBusyThisPlan = loadingProductId === plan.productId;
-
-                const isSelected = selectedPlanId === plan.id;
-
-                const Wrapper = plan.highlight ? Animated.View : View;
-                const wrapperStyle = plan.highlight ? { transform: [{ scale: scaleAnim }] } : null;
-
-                return (
+            {subscriptions.length === 0 ? (
+                <Text style={styles.emptyText}>
+                    No plans loaded from App Store Connect yet.
+                    {"\n"}Make sure you’re running a TestFlight build and your subscriptions are “Ready to Submit”.
+                </Text>
+            ) : (
+                subscriptions.map((sub) => (
                     <TouchableOpacity
-                        key={plan.productId}
-                        activeOpacity={0.9}
-                        disabled={isActive || isBusyAny}
-                        onPress={() => {
-                            // UI selection (safe)
-                            setSelectedPlanId(plan.id);
-                            // preserve your original behavior: tap card subscribes
-                            subscribe(plan);
-                        }}
-                        style={{ marginBottom: 16 }}
+                        key={sub.productId}
+                        style={styles.card}
+                        onPress={() => subscribe(sub.productId)}
+                        disabled={loadingSku === sub.productId}
                     >
-                        <Wrapper style={wrapperStyle}>
-                            <SubscriptionPlanCard
-                                title={plan.title}
-                                price={plan.price}
-                                badge={plan.badge}
-                                highlight={plan.highlight}
-                                // show selected UI state (or ACTIVE plan state)
-                                selected={isActive || isSelected}
-                                onPress={() => {
-                                    setSelectedPlanId(plan.id);
-                                    subscribe(plan);
-                                }}
-                            />
-                        </Wrapper>
+                        <Text style={styles.plan}>{sub.title}</Text>
+                        <Text style={styles.price}>{sub.localizedPrice}</Text>
 
-                        {isActive && <Text style={styles.activeText}>ACTIVE PLAN</Text>}
-                        {isBusyThisPlan && (
-                            <View style={styles.spinnerRow}>
-                                <ActivityIndicator color="#fff" />
-                            </View>
+                        {loadingSku === sub.productId && (
+                            <ActivityIndicator style={{ marginTop: 10 }} />
                         )}
                     </TouchableOpacity>
-                );
-            })}
+                ))
+            )}
 
-            <TouchableOpacity onPress={restore} disabled={!!loadingProductId}>
-                <Text style={styles.restore}>
-                    {loadingProductId === "__restore__" ? "Restoring…" : "Restore Purchases"}
-                </Text>
+            <TouchableOpacity onPress={restorePurchases} style={{ marginTop: 12 }}>
+                <Text style={styles.restore}>Restore Purchases</Text>
             </TouchableOpacity>
-            </ScrollView>
-        </ScreenContainer>
-
+        </View>
     );
 }
 
+// ----------------------------
+// STYLES
+// ----------------------------
 const styles = StyleSheet.create({
-    container: { flexGrow: 1, padding: 24, backgroundColor: "#020617" },
-    header: { color: "#fff", fontSize: 28, fontWeight: "900", marginBottom: 6 },
-    subHeader: { color: "#94a3b8", fontSize: 14, marginBottom: 20 },
-
-    activeText: {
-        marginTop: 8,
-        color: "#22c55e",
-        fontWeight: "900",
+    container: {
+        flex: 1,
+        padding: 24,
+        backgroundColor: "#0B0B0B",
+    },
+    title: {
+        fontSize: 26,
+        fontWeight: "700",
+        color: "#fff",
+        marginBottom: 24,
         textAlign: "center",
     },
-
-    spinnerRow: {
-        marginTop: 10,
-        alignItems: "center",
+    card: {
+        backgroundColor: "#1C1C1E",
+        padding: 20,
+        borderRadius: 12,
+        marginBottom: 16,
     },
-
+    plan: {
+        fontSize: 18,
+        color: "#fff",
+        fontWeight: "600",
+    },
+    price: {
+        fontSize: 16,
+        color: "#aaa",
+        marginTop: 6,
+    },
     restore: {
-        marginTop: 24,
-        color: "#94a3b8",
+        color: "#4da3ff",
         textAlign: "center",
-        textDecorationLine: "underline",
+        fontSize: 15,
+    },
+    center: {
+        flex: 1,
+        justifyContent: "center",
+        padding: 20,
+        backgroundColor: "#0B0B0B",
+    },
+    warning: {
+        color: "#ffcc00",
+        fontSize: 16,
+        textAlign: "center",
+        marginBottom: 10,
+    },
+    helpText: {
+        color: "#aaa",
+        fontSize: 13,
+        textAlign: "center",
+        lineHeight: 18,
+    },
+    emptyText: {
+        color: "#aaa",
+        textAlign: "center",
+        marginTop: 40,
+        lineHeight: 20,
+    },
+    errorText: {
+        color: "#ff6b6b",
+        textAlign: "center",
+        marginBottom: 12,
     },
 });
