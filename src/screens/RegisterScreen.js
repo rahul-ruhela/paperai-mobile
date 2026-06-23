@@ -23,7 +23,6 @@ export default function RegisterScreen({ navigation }) {
     const logo = useMemo(() => require("../../assets/logo.png"), []);
 
     async function onRegister() {
-        debugger
         try {
             if (!name.trim())
                 return Alert.alert("Validation", "Name is required");
@@ -34,10 +33,8 @@ export default function RegisterScreen({ navigation }) {
 
             setBusy(true);
 
-            // ✅ STEP 1: SEND EMAIL OTP
             await sendEmailOtp(email.trim());
 
-            // ✅ STEP 2: GO TO OTP VERIFY SCREEN
             navigation.navigate("EmailOtpVerify", {
                 name: name.trim(),
                 email: email.trim(),
@@ -45,7 +42,7 @@ export default function RegisterScreen({ navigation }) {
                 phone: phone?.trim() || null,
             });
         } catch (e) {
-            Alert.alert("Register failed", e?.response?.data || e.message);
+            Alert.alert("Register failed", e?.userMessage ?? e?.message ?? "Something went wrong. Please try again.");
         } finally {
             setBusy(false);
         }
