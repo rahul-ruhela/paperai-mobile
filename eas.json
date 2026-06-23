@@ -63,8 +63,8 @@
     "production": {
       "ios": {
         "appleId": "info@bholeshankarenterprisesprivatelimited.com",
-        "ascAppId": "YOUR_APP_STORE_CONNECT_APP_ID",
-        "appleTeamId": "YOUR_APPLE_TEAM_ID",
+        "ascAppId": "6757206246",
+        "appleTeamId": "RA258N96VK",
         "ascApiKeyIssuerId": "26a0c1c8-cc00-4398-abb6-b9093adcda60",
         "ascApiKeyId": "LY4822XN6Q",
         "ascApiKeyPath": "./src/appstorekey/AuthKey_LY4822XN6Q.p8"
