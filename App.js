@@ -5,6 +5,7 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 
 import { getAccessToken } from "./src/storage/tokenStore";
+import ErrorBoundary from "./src/components/ErrorBoundary";
 
 /* =======================
    Auth Screens
@@ -139,6 +140,7 @@ export default function App() {
     }
 
     return (
+        <ErrorBoundary>
         <NavigationContainer>
             <Stack.Navigator
                 screenOptions={{
@@ -240,5 +242,6 @@ export default function App() {
                 )}
             </Stack.Navigator>
         </NavigationContainer>
+        </ErrorBoundary>
     );
 }

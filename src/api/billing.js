@@ -22,6 +22,14 @@ export async function syncIosReceipt(receiptDataBase64) {
 }
 
 
+// Preferred for StoreKit 2: auto-detects sandbox vs production by transactionId
+export async function verifyIosTransactionAuto(transactionId) {
+    const { data } = await api.post("/api/billing/ios/verify-transaction-auto", {
+        transactionId,
+    });
+    return data;
+}
+
 export async function mockSubscribe(productId) {
     const { data } = await api.post(
         "/api/billing/mock-subscribe", // ✅ correct route

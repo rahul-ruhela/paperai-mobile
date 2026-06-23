@@ -42,7 +42,7 @@ export default function LoginScreen({ navigation, onAuthed }) {
             await login(email.trim(), password);
             onAuthed();
         } catch (e) {
-            Alert.alert("Login failed", e?.response?.data || e.message);
+            Alert.alert("Login failed", e?.userMessage ?? e?.message ?? "Something went wrong.");
         } finally {
             setBusy(false);
         }

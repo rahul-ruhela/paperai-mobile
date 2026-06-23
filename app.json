@@ -6,41 +6,74 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "splash": {
+
+    "splsash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#020617"
     },
+
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.bholeshankar.paperai",
+      "buildNumber": "1",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSCameraUsageDescription": "PaperAI needs camera access to scan documents.",
-        "NSPhotoLibraryUsageDescription": "PaperAI needs photo access to upload images."
+        "NSCameraUsageDescription": "PaperAI needs camera access to scan and capture documents.",
+        "NSPhotoLibraryUsageDescription": "PaperAI needs photo library access to upload images for AI analysis.",
+        "NSPhotoLibraryAddUsageDescription": "PaperAI needs permission to save processed documents to your photo library.",
+        "NSMicrophoneUsageDescription": "PaperAI needs microphone access for voice-based document input.",
+        "UIBackgroundModes": ["fetch", "remote-notification"]
       }
     },
+
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#020617"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.bholeshankar.paperai"
+      "package": "com.bholeshankar.paperai",
+      "versionCode": 1,
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE"
+      ]
     },
+
     "web": {
       "favicon": "./assets/favicon.png"
     },
+
     "plugins": [
       "expo-secure-store",
-      "react-native-iap"
+      "expo-notifications",
+      [
+        "react-native-iap",
+        {
+          "paymentProvider": "both"
+        }
+      ]
     ],
+
     "extra": {
       "eas": {
         "projectId": "b0bec626-8107-4130-95be-749068adbcd7"
       }
     },
-    "owner": "rahulruhela"
+
+    "owner": "rahulruhela",
+
+    "notification": {
+      "icon": "./assets/icon.png",
+      "color": "#6366f1"
+    },
+
+    "assetBundlePatterns": [
+      "**/*"
+    ]
   }
 }

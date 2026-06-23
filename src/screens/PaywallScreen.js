@@ -1,4 +1,16 @@
-﻿import React, { useEffect, useRef, useState } from "react";
+/**
+ * PaywallScreen — Production-ready Apple IAP subscription flow.
+ *
+ * Flow:
+ *  1. On mount: initConnection + purchaseUpdatedListener + purchaseErrorListener
+ *  2. User taps plan → requestSubscription({ sku })
+ *  3. Apple shows payment sheet; user approves → purchaseUpdatedListener fires
+ *  4. Listener verifies with backend (verify-transaction-auto) → finishTransaction → refresh entitlement
+ *  5. Restore: getAvailablePurchases → verify most recent → refresh entitlement
+ *  6. Expo Go / no IAP: falls back to mockSubscribe (blocked by backend in production)
+ */
+
+import React, { useEffect, useRef, useState } from "react";
 import {
     View,
     Text,
@@ -8,39 +20,47 @@ import {
     ActivityIndicator,
     Animated,
     ScrollView,
+    Platform,
 } from "react-native";
 import Constants from "expo-constants";
-import { mockSubscribe, verifyIosReceipt, getEntitlement } from "../api/billing";
+import {
+    initConnection,
+    purchaseUpdatedListener,
+    purchaseErrorListener,
+    requestSubscription,
+    getAvailablePurchases,
+    finishTransaction,
+    endConnection,
+} from "react-native-iap";
+
+import { mockSubscribe, verifyIosTransactionAuto, getEntitlement } from "../api/billing";
+import { IAP_SKUS, API } from "../constants/api";
 import SubscriptionPlanCard from "../ui/SubscriptionPlanCard";
 import ScreenContainer from "../ui/ScreenContainer";
 
-const isExpoGo = Constants.appOwnership === "expo";
+// ─── Environment detection ────────────────────────────────────────────────
+// isExpoGo: running inside Expo Go app — IAP native module is unavailable
+const isExpoGo = Constants.executionEnvironment === "storeClient";
+const iapSupported = !isExpoGo && Platform.OS === "ios";
 
-/**
- * IMPORTANT:
- * - Keep productId exactly as your system expects.
- * - You can change title/price/badges safely (UI-only).
- *
- * If your real App Store Connect productIds for weekly/monthly/yearly differ,
- * update ONLY productId strings later (no other logic changes needed).
- */
+// ─── Plans ────────────────────────────────────────────────────────────────
 const PLANS = [
     {
         id: "weekly",
-        productId: "com.bholeshankar.paperai.pro_weekly", // keep your existing ID for now if that’s what backend expects
+        productId: IAP_SKUS.WEEKLY,
         title: "Weekly",
         price: "$8.99 / week",
     },
     {
         id: "monthly",
-        productId: "com.bholeshankar.paperai.pro_monthly", // keep existing
+        productId: IAP_SKUS.MONTHLY,
         title: "Monthly",
         price: "$29.90 / month",
         badge: "16.6% OFF",
     },
     {
         id: "yearly",
-        productId: "com.bholeshankar.paperai.pro_yearly", // keep existing
+        productId: IAP_SKUS.YEARLY,
         title: "Yearly",
         price: "$279 / year",
         badge: "40% OFF · Best Value",
@@ -48,15 +68,17 @@ const PLANS = [
     },
 ];
 
+// ─── Component ────────────────────────────────────────────────────────────
 export default function PaywallScreen({ navigation }) {
     const [loadingProductId, setLoadingProductId] = useState(null);
     const [entitlement, setEntitlement] = useState(null);
-
-    // purely UI selection (does NOT affect entitlement logic)
     const [selectedPlanId, setSelectedPlanId] = useState("yearly");
 
+    const purchaseUpdateSub = useRef(null);
+    const purchaseErrorSub = useRef(null);
     const scaleAnim = useRef(new Animated.Value(1)).current;
 
+    // ── Entitlement ───────────────────────────────────────────────────────
     async function loadEntitlement() {
         try {
             const e = await getEntitlement();
@@ -67,185 +89,271 @@ export default function PaywallScreen({ navigation }) {
         }
     }
 
-
+    // ── Lifecycle ─────────────────────────────────────────────────────────
     useEffect(() => {
         loadEntitlement();
+
+        // Highlight animation for the best-value card
+        const loop = Animated.loop(
+            Animated.sequence([
+                Animated.timing(scaleAnim, { toValue: 1.04, duration: 900, useNativeDriver: true }),
+                Animated.timing(scaleAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
+            ])
+        );
+        loop.start();
+
+        if (iapSupported) _setupIap();
+
+        return () => {
+            loop.stop();
+            purchaseUpdateSub.current?.remove();
+            purchaseErrorSub.current?.remove();
+            if (iapSupported) endConnection().catch(() => {});
+        };
     }, []);
 
-    // subtle animation for highlight card only
-    useEffect(() => {
-        Animated.loop(
-            Animated.sequence([
-                Animated.timing(scaleAnim, {
-                    toValue: 1.04,
-                    duration: 900,
-                    useNativeDriver: true,
-                }),
-                Animated.timing(scaleAnim, {
-                    toValue: 1,
-                    duration: 900,
-                    useNativeDriver: true,
-                }),
-            ])
-        ).start();
-    }, [scaleAnim]);
+    async function _setupIap() {
+        try {
+            await initConnection();
 
+            // Fires when Apple confirms a purchase (including unfinished from a previous session)
+            purchaseUpdateSub.current = purchaseUpdatedListener(async (purchase) => {
+                const transactionId = purchase?.transactionId;
+                if (!transactionId) return;
+
+                try {
+                    // Backend auto-detects sandbox vs production — works on TestFlight + App Store
+                    await verifyIosTransactionAuto(transactionId);
+
+                    // Acknowledge to Apple — prevents refund / re-delivery
+                    await finishTransaction({ purchase, isConsumable: false });
+
+                    await loadEntitlement();
+
+                    const planTitle =
+                        PLANS.find((p) => p.productId === purchase.productId)?.title ?? "Pro";
+
+                    Alert.alert(
+                        "Subscribed!",
+                        `${planTitle} plan is now active. Thank you!`,
+                        [{ text: "Continue", onPress: () => navigation.goBack() }]
+                    );
+                } catch {
+                    // Payment received by Apple, but backend verification failed.
+                    // Do NOT call finishTransaction here — let Apple re-deliver on next launch.
+                    Alert.alert(
+                        "Verification issue",
+                        "Your payment was received but we couldn't confirm it right now. " +
+                            "Please contact support — we'll activate your account immediately.",
+                        [{ text: "OK" }]
+                    );
+                } finally {
+                    setLoadingProductId(null);
+                }
+            });
+
+            // Fires on purchase error or user cancel
+            purchaseErrorSub.current = purchaseErrorListener((error) => {
+                setLoadingProductId(null);
+
+                if (error?.code === "E_USER_CANCELLED") return; // silent cancel
+
+                if (error?.code === "E_ALREADY_OWNED") {
+                    // User already has this subscription — restore it
+                    loadEntitlement().then((e) => {
+                        if (e?.active) {
+                            Alert.alert(
+                                "Already subscribed",
+                                "You already have an active subscription.",
+                                [{ text: "OK", onPress: () => navigation.goBack() }]
+                            );
+                        }
+                    });
+                    return;
+                }
+
+                Alert.alert(
+                    "Purchase failed",
+                    "We couldn't complete your purchase. Please try again.",
+                    [{ text: "OK" }]
+                );
+            });
+        } catch {
+            // IAP unavailable on this device — app still renders, buttons disabled gracefully
+        }
+    }
+
+    // ── Subscribe ─────────────────────────────────────────────────────────
     async function subscribe(plan) {
         if (loadingProductId) return;
+        setLoadingProductId(plan.productId);
 
-        try {
-            setLoadingProductId(plan.productId);
-
-            // EXPO GO → MOCK (unchanged)
-            if (isExpoGo) {
+        // Dev / Expo Go: use mock subscribe (backend blocks this in production)
+        if (!iapSupported) {
+            try {
                 await mockSubscribe(plan.productId);
                 await loadEntitlement();
-                Alert.alert("Subscribed", `${plan.title} activated`);
+                Alert.alert("Subscribed (dev)", `${plan.title} activated.`);
                 navigation.goBack();
+            } catch (e) {
+                Alert.alert("Error", e?.userMessage ?? "Could not activate subscription.");
+            } finally {
+                setLoadingProductId(null);
+            }
+            return;
+        }
+
+        // Real Apple IAP — requestSubscription returns void on iOS;
+        // the actual purchase arrives via purchaseUpdatedListener above.
+        try {
+            await requestSubscription({ sku: plan.productId });
+        } catch (e) {
+            if (e?.code !== "E_USER_CANCELLED") {
+                Alert.alert(
+                    "Purchase unavailable",
+                    "We couldn't start the purchase. Please check your App Store account and try again.",
+                    [{ text: "OK" }]
+                );
+            }
+            setLoadingProductId(null);
+        }
+    }
+
+    // ── Restore purchases ─────────────────────────────────────────────────
+    async function restore() {
+        if (loadingProductId) return;
+        setLoadingProductId("__restore__");
+
+        try {
+            if (!iapSupported) {
+                const e = await loadEntitlement();
+                if (e?.active) {
+                    Alert.alert("Restored", "Your subscription is active.", [
+                        { text: "OK", onPress: () => navigation.goBack() },
+                    ]);
+                } else {
+                    Alert.alert("Nothing to restore", "No active subscription found.");
+                }
                 return;
             }
 
-            // REAL APPLE IAP (unchanged)
-            const RNIap = require("react-native-iap");
-            await RNIap.initConnection();
+            const purchases = await getAvailablePurchases();
 
-            const purchase = await RNIap.requestSubscription(plan.productId);
+            const subPurchases = purchases
+                .filter((p) => PLANS.some((plan) => plan.productId === p.productId))
+                .sort((a, b) => (b.transactionDate ?? 0) - (a.transactionDate ?? 0));
 
-            if (!purchase?.transactionReceipt) {
-                throw new Error("No receipt returned");
+            if (subPurchases.length === 0) {
+                Alert.alert(
+                    "Nothing to restore",
+                    "No previous subscription found on this Apple ID."
+                );
+                return;
             }
 
-            await verifyIosReceipt(purchase.transactionReceipt);
-            await RNIap.finishTransaction(purchase);
+            const latest = subPurchases[0];
+            if (latest?.transactionId) {
+                await verifyIosTransactionAuto(latest.transactionId);
+                await finishTransaction({ purchase: latest, isConsumable: false }).catch(() => {});
+            }
 
-            await loadEntitlement();
-            Alert.alert("Subscribed", `${plan.title} activated`);
-            navigation.goBack();
+            const e = await loadEntitlement();
+            if (e?.active) {
+                Alert.alert("Restored!", "Your subscription has been restored.", [
+                    { text: "Continue", onPress: () => navigation.goBack() },
+                ]);
+            } else {
+                Alert.alert(
+                    "Subscription expired",
+                    "Your previous subscription has expired. Please subscribe to continue."
+                );
+            }
         } catch (e) {
-            Alert.alert("Subscription failed", e?.message || "Try again");
+            Alert.alert(
+                "Restore failed",
+                e?.userMessage ?? "We couldn't restore your purchase. Please try again.",
+                [{ text: "OK" }]
+            );
         } finally {
             setLoadingProductId(null);
         }
     }
 
-    async function restore() {
-        if (loadingProductId) return;
-
-        try {
-            setLoadingProductId("__restore__");
-
-            // entitlement-based restore (works for mock)
-            await loadEntitlement();
-
-            const hasActive = !!entitlement?.active;
-
-            if (hasActive) {
-                Alert.alert("Restored", "Subscription restored", [
-                    {
-                        text: "OK",
-                        onPress: () => {
-                            // wait for alert close animation → smooth pop
-                            setTimeout(() => navigation.goBack(), 250);
-                        },
-                    },
-                ]);
-            } else {
-                Alert.alert("No active subscription", "We couldn't find an active plan.", [
-                    {
-                        text: "OK",
-                        onPress: () => {
-                            // smooth return to paywall state
-                            setTimeout(() => setLoadingProductId(null), 150);
-                        },
-                    },
-                ]);
-                return; // prevent finally from instantly removing skeleton
-            }
-        } catch {
-            Alert.alert("Restore failed", "Please try again.", [
-                {
-                    text: "OK",
-                    onPress: () => setTimeout(() => setLoadingProductId(null), 150),
-                },
-            ]);
-            return;
-        } finally {
-            // If user has active subscription, we navigate away on OK.
-            // If not active / failed, we already unset loading in alert handler.
-            // So only clear here if still restoring (safety).
-            setTimeout(() => {
-                setLoadingProductId((prev) => (prev === "__restore__" ? null : prev));
-            }, 200);
-        }
-    }
-
-
+    // ── Render ────────────────────────────────────────────────────────────
     const isBusyAny = !!loadingProductId;
 
     return (
-
         <ScreenContainer>
-        <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-            <Text style={styles.header}>Upgrade to AI Pro</Text>
-            <Text style={styles.subHeader}>Pick a plan. You can cancel anytime.</Text>
-
-            {PLANS.map((plan) => {
-                const isActive =
-                    !!entitlement?.active && entitlement.productId === plan.productId;
-
-                const isBusyThisPlan = loadingProductId === plan.productId;
-
-                const isSelected = selectedPlanId === plan.id;
-
-                const Wrapper = plan.highlight ? Animated.View : View;
-                const wrapperStyle = plan.highlight ? { transform: [{ scale: scaleAnim }] } : null;
-
-                return (
-                    <TouchableOpacity
-                        key={plan.productId}
-                        activeOpacity={0.9}
-                        disabled={isActive || isBusyAny}
-                        onPress={() => {
-                            // UI selection (safe)
-                            setSelectedPlanId(plan.id);
-                            // preserve your original behavior: tap card subscribes
-                            subscribe(plan);
-                        }}
-                        style={{ marginBottom: 16 }}
-                    >
-                        <Wrapper style={wrapperStyle}>
-                            <SubscriptionPlanCard
-                                title={plan.title}
-                                price={plan.price}
-                                badge={plan.badge}
-                                highlight={plan.highlight}
-                                // show selected UI state (or ACTIVE plan state)
-                                selected={isActive || isSelected}
-                                onPress={() => {
-                                    setSelectedPlanId(plan.id);
-                                    subscribe(plan);
-                                }}
-                            />
-                        </Wrapper>
-
-                        {isActive && <Text style={styles.activeText}>ACTIVE PLAN</Text>}
-                        {isBusyThisPlan && (
-                            <View style={styles.spinnerRow}>
-                                <ActivityIndicator color="#fff" />
-                            </View>
-                        )}
-                    </TouchableOpacity>
-                );
-            })}
-
-            <TouchableOpacity onPress={restore} disabled={!!loadingProductId}>
-                <Text style={styles.restore}>
-                    {loadingProductId === "__restore__" ? "Restoring…" : "Restore Purchases"}
+            <ScrollView
+                contentContainerStyle={styles.container}
+                showsVerticalScrollIndicator={false}
+            >
+                <Text style={styles.header}>Upgrade to AI Pro</Text>
+                <Text style={styles.subHeader}>
+                    Pick a plan. Cancel anytime from App Store settings.
                 </Text>
-            </TouchableOpacity>
+
+                {PLANS.map((plan) => {
+                    const isActive =
+                        !!entitlement?.active && entitlement.productId === plan.productId;
+                    const isBusyThisPlan = loadingProductId === plan.productId;
+                    const isSelected = selectedPlanId === plan.id;
+                    const Wrapper = plan.highlight ? Animated.View : View;
+                    const wrapperStyle = plan.highlight
+                        ? { transform: [{ scale: scaleAnim }] }
+                        : null;
+
+                    return (
+                        <TouchableOpacity
+                            key={plan.productId}
+                            activeOpacity={0.9}
+                            disabled={isActive || isBusyAny}
+                            onPress={() => {
+                                setSelectedPlanId(plan.id);
+                                subscribe(plan);
+                            }}
+                            style={{ marginBottom: 16 }}
+                        >
+                            <Wrapper style={wrapperStyle}>
+                                <SubscriptionPlanCard
+                                    title={plan.title}
+                                    price={plan.price}
+                                    badge={plan.badge}
+                                    highlight={plan.highlight}
+                                    selected={isActive || isSelected}
+                                />
+                            </Wrapper>
+
+                            {isActive && (
+                                <Text style={styles.activeText}>ACTIVE PLAN</Text>
+                            )}
+                            {isBusyThisPlan && (
+                                <View style={styles.spinnerRow}>
+                                    <ActivityIndicator color="#fff" />
+                                </View>
+                            )}
+                        </TouchableOpacity>
+                    );
+                })}
+
+                <TouchableOpacity
+                    onPress={restore}
+                    disabled={isBusyAny}
+                    style={{ opacity: isBusyAny ? 0.5 : 1 }}
+                >
+                    <Text style={styles.restore}>
+                        {loadingProductId === "__restore__" ? "Restoring…" : "Restore Purchases"}
+                    </Text>
+                </TouchableOpacity>
+
+                {/* Apple-required legal text for subscription apps */}
+                <Text style={styles.legal}>
+                    Subscriptions auto-renew unless cancelled at least 24 hours before the end of
+                    the current period. Manage or cancel in App Store › Account › Subscriptions.
+                    Payment is charged to your Apple ID at confirmation of purchase.
+                </Text>
             </ScrollView>
         </ScreenContainer>
-
     );
 }
 
@@ -253,23 +361,26 @@ const styles = StyleSheet.create({
     container: { flexGrow: 1, padding: 24, backgroundColor: "#020617" },
     header: { color: "#fff", fontSize: 28, fontWeight: "900", marginBottom: 6 },
     subHeader: { color: "#94a3b8", fontSize: 14, marginBottom: 20 },
-
     activeText: {
         marginTop: 8,
         color: "#22c55e",
         fontWeight: "900",
         textAlign: "center",
     },
-
-    spinnerRow: {
-        marginTop: 10,
-        alignItems: "center",
-    },
-
+    spinnerRow: { marginTop: 10, alignItems: "center" },
     restore: {
         marginTop: 24,
         color: "#94a3b8",
         textAlign: "center",
         textDecorationLine: "underline",
+        fontSize: 14,
+    },
+    legal: {
+        marginTop: 20,
+        color: "#475569",
+        fontSize: 11,
+        textAlign: "center",
+        lineHeight: 16,
+        paddingBottom: 40,
     },
 });
