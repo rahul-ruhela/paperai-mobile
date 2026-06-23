@@ -13,7 +13,7 @@
       },
       "env": {
         "EXPO_PUBLIC_APP_ENV": "local",
-        "EXPO_PUBLIC_API_BASE_URL": "http://192.168.1.28:5263",
+        "EXPO_PUBLIC_API_BASE_URL": "http://192.168.29.223:5263",
         "EXPO_PUBLIC_APPLE_WEEKLY_PRODUCT_ID": "com.bholeshankar.paperai.pro_weekly",
         "EXPO_PUBLIC_APPLE_MONTHLY_PRODUCT_ID": "com.bholeshankar.paperai.pro_monthly",
         "EXPO_PUBLIC_APPLE_YEARLY_PRODUCT_ID": "com.bholeshankar.paperai.pro_yearly"

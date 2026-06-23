@@ -52,6 +52,12 @@
       "expo-secure-store",
       "expo-notifications",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "PaperAI needs photo library access to upload images for AI analysis."
+        }
+      ],
+      [
         "react-native-iap",
         {
           "paymentProvider": "both"

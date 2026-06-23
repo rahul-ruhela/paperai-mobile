@@ -22,7 +22,7 @@ export default function EmailOtpVerifyScreen({ route, onAuthed }) {
             });
             onAuthed();
         } catch (e) {
-            Alert.alert("Verification failed", e?.response?.data || e.message);
+            Alert.alert("Verification failed", e?.userMessage ?? e?.message ?? "Verification failed. Please try again.");
         } finally {
             setBusy(false);
         }

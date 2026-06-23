@@ -4,7 +4,7 @@ const envUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
 
 function resolveBaseUrl(): string {
     if (envUrl && envUrl.trim().length > 0) return envUrl.trim();
-    if (__DEV__) return "http://192.168.1.28:5263";
+    if (__DEV__) return "http://192.168.29.223:5263";
     return "https://apis.bseptechnologies.com";
 }
 
