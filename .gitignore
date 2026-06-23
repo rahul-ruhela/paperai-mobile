@@ -37,6 +37,9 @@ yarn-error.*
 .env.development
 .env.staging
 
+# App Store Connect API keys – never commit
+src/appstorekey/
+
 # typescript
 *.tsbuildinfo
 
