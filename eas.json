@@ -7,7 +7,6 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "platforms": ["ios"],
       "ios": {
         "simulator": false
       },
@@ -22,7 +21,6 @@
     "simulator": {
       "developmentClient": true,
       "distribution": "internal",
-      "platforms": ["ios"],
       "ios": {
         "simulator": true
       },
@@ -36,7 +34,6 @@
     },
     "preview": {
       "distribution": "internal",
-      "platforms": ["ios"],
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_APP_ENV": "staging",
@@ -49,7 +46,6 @@
     "production": {
       "autoIncrement": true,
       "distribution": "store",
-      "platforms": ["ios"],
       "env": {
         "EXPO_PUBLIC_APP_ENV": "production",
         "EXPO_PUBLIC_API_BASE_URL": "https://apis.bseptechnologies.com",
