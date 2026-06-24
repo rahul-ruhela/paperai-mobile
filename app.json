@@ -27,6 +27,7 @@
 
     "plugins": [
       "expo-secure-store",
+      "expo-apple-authentication",
       [
         "expo-splash-screen",
         {
