@@ -80,6 +80,8 @@
 
     "assetBundlePatterns": [
       "**/*"
-    ]
+    ],
+
+    "newArchEnabled": false
   }
 }
