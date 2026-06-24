@@ -1,153 +1,200 @@
-# iOS App Store Submission Checklist
+# iOS App Store Submission Checklist — PaperAI
 
-## App Store Connect Setup
+Use this checklist every time you submit a build for review. Go top to bottom — each section must be complete before moving to the next.
 
-- [ ] App created in App Store Connect with Bundle ID `com.bholeshankar.paperai`
-- [ ] App name set: **Paper Ai Assistant**
-- [ ] Primary language set
-- [ ] Bundle ID matches `app.json` exactly
-- [ ] App Store Connect App ID (numeric) noted — needed for `eas.json` submit config
+---
 
-## Subscription Setup (In-App Purchases)
+## Phase 1 — Before You Build
 
-- [ ] Subscription group created (e.g. "Pro Plans")
-- [ ] 3 subscription products created with exact IDs:
-  - `com.bholeshankar.paperai.pro_weekly` — $8.99/week
-  - `com.bholeshankar.paperai.pro_monthly` — $29.90/month
-  - `com.bholeshankar.paperai.pro_yearly` — $279/year
-- [ ] Each subscription has display name, description, and pricing set
-- [ ] Shared Secret generated and saved to backend `appsettings.json` → `AppleIap.SharedSecret`
-- [ ] Apple App Store Server API key created (for `verify-transaction-auto`)
-  - Saved in backend `appsettings.json` → `AppleAppStoreServerApi`
-- [ ] Server Notifications V2 URL registered:
-  `https://apis.bseptechnologies.com/api/billing/ios/notifications-v2`
+- [ ] `app.json` version and `buildNumber` are correct (bump buildNumber on each new binary)
+- [ ] `.env` for production has `EXPO_PUBLIC_APP_ENV=production` and `EXPO_PUBLIC_API_BASE_URL=https://apis.bseptechnologies.com`
+- [ ] All 3 IAP product IDs in `eas.json` production env block match App Store Connect exactly
+- [ ] Backend `appsettings.Production.json` has `IAP:Enabled:true`, `AllowSandbox:false`, `DevMode:BypassSubscription:false`
 
-## Apple Developer Account
+---
 
-- [ ] Paid Apple Developer Program membership active
-- [ ] Apple Team ID noted (used in `eas.json` submit config)
-- [ ] App Store Connect API key created (for EAS Submit / CI)
-  - Issuer ID, Key ID, .p8 file downloaded and stored in GitHub Secrets
-- [ ] Distribution certificate + provisioning profile (EAS handles this automatically)
+## Phase 2 — Build and Upload
 
-## App Binary / Build
+- [ ] `eas build --profile production --platform ios` completes without error
+- [ ] Build appears in App Store Connect → TestFlight (processing: ~15 min)
+- [ ] Build status changes from "Processing" to "Ready to Test" in TestFlight
 
-- [ ] `eas build --profile production --platform ios` completes successfully
-- [ ] Build appears in App Store Connect → TestFlight
-- [ ] TestFlight testing completed with sandbox Apple ID accounts
-  - [ ] Weekly subscription purchase works
-  - [ ] Monthly subscription purchase works
-  - [ ] Yearly subscription purchase works
-  - [ ] Restore purchases works
-  - [ ] Subscription cancellation reflected (entitlement shows expired)
-- [ ] No crashes in TestFlight
+---
 
-## App Store Listing
+## Phase 3 — Internal TestFlight Testing (Required)
 
-- [ ] Screenshots for all required device sizes:
-  - 6.9" (iPhone 16 Pro Max)
-  - 6.5" (iPhone 14 Plus / 15 Plus)
-  - 5.5" (iPhone 8 Plus)
-  - 12.9" iPad Pro (if tablet supported)
-- [ ] App description written (what the app does, key features)
-- [ ] Keywords (up to 100 characters)
-- [ ] Support URL (e.g. your website or email page)
-- [ ] Privacy Policy URL (required for subscription apps)
-- [ ] Terms of Use URL (required for subscription apps)
-- [ ] Demo account credentials (if reviewer needs login):
-  - Email: _______________
-  - Password: _______________
+Test on a real device using the TestFlight app. Use a **Sandbox Apple ID** for IAP.
 
-## Privacy & Compliance
+### Account flow
+- [ ] Register a new account with any email
+- [ ] Log in / log out works
+- [ ] OTP email verification works
 
-- [ ] App Privacy nutrition label completed in App Store Connect:
-  - Data collected: Email, Name, Phone (optional), Documents uploaded by user
-  - Purpose: App functionality, account management
-  - Data linked to user: Yes (auth-based)
-- [ ] `NSCameraUsageDescription` set in `app.json` ✅
-- [ ] `NSPhotoLibraryUsageDescription` set in `app.json` ✅
-- [ ] `ITSAppUsesNonExemptEncryption: false` set in `app.json` ✅ (uses HTTPS only)
-- [ ] Age rating set (likely 4+)
+### Document flow
+- [ ] Camera permission dialog appears correctly
+- [ ] Photo library permission dialog appears correctly
+- [ ] Upload a document → AI analysis result shows
+- [ ] AI results display correctly
 
-## App Review Notes (template)
+### Subscription / IAP flow (Critical — Apple will test this)
+- [ ] On device: Settings → App Store → scroll down → Sandbox Account → sign in with sandbox tester
+- [ ] Trigger the paywall / subscription screen
+- [ ] Purchase **Weekly** plan → IAP sheet appears → purchase completes → Pro access granted
+- [ ] Purchase **Monthly** plan (new sandbox account) → works correctly
+- [ ] Purchase **Yearly** plan (new sandbox account) → works correctly
+- [ ] **Restore Purchases** button works → restores active subscription
+- [ ] Cancel subscription in iOS Settings → verify app handles expiry gracefully
 
+### Stability
+- [ ] No crashes during normal use
+- [ ] App recovers gracefully when backend is unreachable
+- [ ] Push notifications received (if applicable)
+
+---
+
+## Phase 4 — App Store Connect Listing
+
+Go to: **App Store Connect → Apps → Paper Ai Assistant → App Store tab**
+
+### App Information
+- [ ] App Name: `Paper Ai Assistant`
+- [ ] Subtitle: `AI Document Scanner & Analyzer` (optional, 30 chars)
+- [ ] Bundle ID: `com.bholeshankar.paperai`
+- [ ] Primary Language: English (U.S.)
+- [ ] Content Rights answered
+- [ ] Category set (e.g. Productivity)
+
+### Localizations — English (U.S.)
+- [ ] **Description** written (4000 chars max) — see README Section 6 for copy
+- [ ] **Promotional Text** written (170 chars max)
+- [ ] **Keywords** set (100 chars max): `AI,document,scanner,PDF,analyzer,OCR,paper,assistant,extract,summarize,receipt,invoice`
+- [ ] **Support URL** set: `https://bseptechnologies.com/support`
+- [ ] **Privacy Policy URL** set: `https://bseptechnologies.com/privacy` ← required for subscription apps
+- [ ] **Marketing URL** set (optional): `https://bseptechnologies.com`
+
+### Screenshots (Required)
+- [ ] 6.9" iPhone 16 Pro Max screenshots uploaded (minimum 1, maximum 10) ← **REQUIRED**
+- [ ] 6.5" iPhone 15 Plus screenshots uploaded ← Recommended
+- [ ] Screenshots show real app UI (Home, Document Analysis, Paywall, Login)
+- [ ] Screenshots are at correct resolution (see README Section 7)
+
+### Build Selection
+- [ ] Build selected under the "Build" section (click + and pick your latest production build)
+- [ ] Build shows "Ready to Submit" status (not "Processing")
+
+### Age Rating
+- [ ] Age Rating questionnaire completed → result is **4+**
+
+### Pricing and Availability
+- [ ] Base price: **Free**
+- [ ] Available in desired territories
+
+---
+
+## Phase 5 — In-App Purchases (Critical)
+
+Go to: **App Store Connect → your app → Monetization → In-App Purchases → Subscriptions**
+
+- [ ] Subscription group **Pro Plans** exists
+- [ ] `com.bholeshankar.paperai.pro_weekly` → Status: **Ready to Submit**
+- [ ] `com.bholeshankar.paperai.pro_monthly` → Status: **Ready to Submit**
+- [ ] `com.bholeshankar.paperai.pro_yearly` → Status: **Ready to Submit**
+- [ ] Each product has English display name and description filled in
+- [ ] Each product has pricing set
+
+> If any product shows "Missing Metadata", click it → Localizations → Add English → fill in display name and description.
+
+---
+
+## Phase 6 — App Review Information
+
+Go to: **App Store Connect → App Review Information**
+
+- [ ] **Sign-in required:** Yes
+- [ ] Demo account email: your sandbox tester email
+- [ ] Demo account password: your sandbox tester password
+- [ ] **Review Notes** filled in explaining:
+  - What the app does
+  - How to trigger the subscription purchase flow
+  - That sandbox Apple ID should be used for IAP testing
+  - Backend API URL and health check URL
+
+**Review Notes template:**
 ```
-This app is an AI-powered document analysis tool. 
+This app is an AI-powered document analysis tool. Users can scan, upload, and analyze documents.
 
-For testing subscription purchases, please use the sandbox Apple ID:
-Email: [your sandbox tester email]
-Password: [your sandbox tester password]
+For testing In-App Purchases, please use the sandbox Apple ID provided above.
 
-The app requires an account. You can register with any email address.
-The subscription plans are real In-App Purchases — use sandbox mode.
+Subscription test flow:
+1. Register or log in (any email works)
+2. Upload any document to trigger AI analysis
+3. The paywall appears after free usage
+4. Use the sandbox Apple ID to complete a subscription purchase
 
 Backend API: https://apis.bseptechnologies.com
 Health check: https://apis.bseptechnologies.com/health
+
+All 3 subscription products (weekly, monthly, yearly) are in Ready to Submit status.
+Camera and photo permissions are requested only when the user tries to upload a document.
 ```
 
-## Post-Submission
+---
 
-- [ ] App submitted for review
-- [ ] Review notes filled in (see template above)
-- [ ] Phased release configured (recommended: 7-day phased rollout)
-- [ ] App Store Server Notifications confirmed working (check backend logs)
+## Phase 7 — Submit
+
+- [ ] Click **"Add for Review"** (top right of the App Store listing page)
+- [ ] Export Compliance: **No** (uses HTTPS only, `ITSAppUsesNonExemptEncryption: false`)
+- [ ] Click **"Submit to App Review"**
+- [ ] Confirmation email received from Apple
+
+Expected review time: **24–48 hours** for first submission.
+
+---
+
+## Phase 8 — Post-Approval
+
+- [ ] App Status changes to **"Pending Developer Release"** or **"Ready for Sale"**
+- [ ] If Pending Developer Release: click **Release This Version** in App Store Connect
+- [ ] App appears on the App Store (may take 1–2 hours to propagate)
+- [ ] Test a real purchase on a production device (can be refunded within 48h from Apple)
+- [ ] Verify App Store Server Notifications are firing correctly (check backend logs)
+- [ ] Verify subscriptions are activating and credits are being applied correctly
 
 ---
 
 ## Android Play Store Checklist (Future)
 
-- [ ] Google Play Console account created
+- [ ] Google Play Console account created ($25 one-time fee)
 - [ ] App created with package `com.bholeshankar.paperai`
 - [ ] Android App Bundle (AAB) built: `eas build --profile production --platform android`
 - [ ] Signing keystore created and backed up securely
-- [ ] Google Play Billing Library product IDs created (matching Apple IDs or new ones)
+- [ ] Google Play Billing product IDs created
 - [ ] Internal testing track set up
 - [ ] Data safety section completed
 - [ ] Target API level 34+ confirmed
-- [ ] 64-bit support confirmed (Expo handles this)
 
 ---
 
-## Subscription Testing Checklist
+## Subscription Testing Reference
 
-### TestFlight (sandbox)
-- [ ] Backend `IAP:AllowSandbox: true` in staging environment ✅
-- [ ] Sandbox Apple ID created at appleid.apple.com
-- [ ] Sign in to sandbox account on test device (Settings → App Store → Sandbox Account)
-- [ ] Purchase weekly plan → verify credits added in app
-- [ ] Purchase monthly plan → verify credits added
-- [ ] Purchase yearly plan → verify credits added
-- [ ] Restore purchases → verify active plan shown
-- [ ] Cancel subscription in iOS Settings → verify expiry handled gracefully
+### TestFlight / Sandbox environment
+- Backend config: `IAP:AllowSandbox: true` ✅
+- Use a Sandbox Apple ID (Settings → App Store → Sandbox Account)
+- Sandbox subscriptions renew much faster (1 week = 3 minutes, 1 month = 5 minutes)
 
-### Production
-- [ ] Backend `IAP:AllowSandbox: false` in production ✅
-- [ ] Backend `DevMode:BypassSubscription: false` in production ✅
-- [ ] Real purchase tested by developer (can be refunded within 48h from Apple)
+### Production environment
+- Backend config: `IAP:AllowSandbox: false` ✅
+- Backend config: `DevMode:BypassSubscription: false` ✅
+- Real money charged — test purchase can be refunded within 48h
 
 ---
 
 ## API Failure Testing Checklist
 
 - [ ] Kill backend → app opens, shows login screen, no crash
-- [ ] Login with wrong password → friendly error "Invalid request"
+- [ ] Login with wrong password → friendly error shown
 - [ ] Login with backend down → "No connection. Please check your internet"
-- [ ] Open home screen with backend down → empty state shows, no crash
-- [ ] Open paywall with backend down → paywall renders, subscribe fails gracefully
+- [ ] Home screen with backend down → empty state shown, no crash
+- [ ] Paywall with backend down → paywall renders, subscribe fails gracefully
 - [ ] Token expired → auto-refresh happens silently
-- [ ] Token expired and refresh fails → redirected to login gracefully
-
----
-
-## Production Release Checklist
-
-- [ ] Version bumped in `app.json` if needed
-- [ ] `eas build --profile production --platform ios` completed
-- [ ] TestFlight tested
-- [ ] App Store listing complete
-- [ ] `eas submit --platform ios --latest` submitted
-- [ ] App Review approved
-- [ ] Release published (manual or phased)
-- [ ] Backend `appsettings.Production.json` deployed with correct keys
-- [ ] Server Notifications endpoint live and tested
-- [ ] First real subscription tested (can refund)
+- [ ] Token expired and refresh fails → user redirected to login gracefully
