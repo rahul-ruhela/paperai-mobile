@@ -27,23 +27,6 @@
       }
     },
 
-    "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#020617"
-      },
-      "edgeToEdgeEnabled": true,
-      "package": "com.bholeshankar.paperai",
-      "versionCode": 1,
-      "permissions": [
-        "CAMERA",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE",
-        "RECEIVE_BOOT_COMPLETED",
-        "VIBRATE"
-      ]
-    },
-
     "web": {
       "favicon": "./assets/favicon.png"
     },
@@ -55,12 +38,6 @@
         "expo-image-picker",
         {
           "photosPermission": "PaperAI needs photo library access to upload images for AI analysis."
-        }
-      ],
-      [
-        "react-native-iap",
-        {
-          "paymentProvider": "both"
         }
       ]
     ],
@@ -80,8 +57,6 @@
 
     "assetBundlePatterns": [
       "**/*"
-    ],
-
-    "newArchEnabled": false
+    ]
   }
 }

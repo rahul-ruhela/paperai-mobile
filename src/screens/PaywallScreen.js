@@ -1,13 +1,7 @@
 /**
- * PaywallScreen — Production-ready Apple IAP subscription flow.
- *
- * Flow:
- *  1. On mount: initConnection + purchaseUpdatedListener + purchaseErrorListener
- *  2. User taps plan → requestSubscription({ sku })
- *  3. Apple shows payment sheet; user approves → purchaseUpdatedListener fires
- *  4. Listener verifies with backend (verify-transaction-auto) → finishTransaction → refresh entitlement
- *  5. Restore: getAvailablePurchases → verify most recent → refresh entitlement
- *  6. Expo Go / no IAP: falls back to mockSubscribe (blocked by backend in production)
+ * PaywallScreen — subscription flow via backend mock.
+ * Native IAP (react-native-iap) is temporarily removed to unblock the iOS build.
+ * Re-add once a new-arch-compatible IAP package is available for RN 0.81.
  */
 
 import React, { useEffect, useRef, useState } from "react";
@@ -20,30 +14,13 @@ import {
     ActivityIndicator,
     Animated,
     ScrollView,
-    Platform,
 } from "react-native";
-import Constants from "expo-constants";
-import {
-    initConnection,
-    purchaseUpdatedListener,
-    purchaseErrorListener,
-    requestSubscription,
-    getAvailablePurchases,
-    finishTransaction,
-    endConnection,
-} from "react-native-iap";
 
-import { mockSubscribe, verifyIosTransactionAuto, getEntitlement } from "../api/billing";
-import { IAP_SKUS, API } from "../constants/api";
+import { mockSubscribe, getEntitlement } from "../api/billing";
+import { IAP_SKUS } from "../constants/api";
 import SubscriptionPlanCard from "../ui/SubscriptionPlanCard";
 import ScreenContainer from "../ui/ScreenContainer";
 
-// ─── Environment detection ────────────────────────────────────────────────
-// isExpoGo: running inside Expo Go app — IAP native module is unavailable
-const isExpoGo = Constants.executionEnvironment === "storeClient";
-const iapSupported = !isExpoGo && Platform.OS === "ios";
-
-// ─── Plans ────────────────────────────────────────────────────────────────
 const PLANS = [
     {
         id: "weekly",
@@ -68,17 +45,13 @@ const PLANS = [
     },
 ];
 
-// ─── Component ────────────────────────────────────────────────────────────
 export default function PaywallScreen({ navigation }) {
     const [loadingProductId, setLoadingProductId] = useState(null);
     const [entitlement, setEntitlement] = useState(null);
     const [selectedPlanId, setSelectedPlanId] = useState("yearly");
 
-    const purchaseUpdateSub = useRef(null);
-    const purchaseErrorSub = useRef(null);
     const scaleAnim = useRef(new Animated.Value(1)).current;
 
-    // ── Entitlement ───────────────────────────────────────────────────────
     async function loadEntitlement() {
         try {
             const e = await getEntitlement();
@@ -89,11 +62,9 @@ export default function PaywallScreen({ navigation }) {
         }
     }
 
-    // ── Lifecycle ─────────────────────────────────────────────────────────
     useEffect(() => {
         loadEntitlement();
 
-        // Highlight animation for the best-value card
         const loop = Animated.loop(
             Animated.sequence([
                 Animated.timing(scaleAnim, { toValue: 1.04, duration: 900, useNativeDriver: true }),
@@ -101,185 +72,46 @@ export default function PaywallScreen({ navigation }) {
             ])
         );
         loop.start();
-
-        if (iapSupported) _setupIap();
-
-        return () => {
-            loop.stop();
-            purchaseUpdateSub.current?.remove();
-            purchaseErrorSub.current?.remove();
-            if (iapSupported) endConnection().catch(() => {});
-        };
+        return () => loop.stop();
     }, []);
 
-    async function _setupIap() {
-        try {
-            await initConnection();
-
-            // Fires when Apple confirms a purchase (including unfinished from a previous session)
-            purchaseUpdateSub.current = purchaseUpdatedListener(async (purchase) => {
-                const transactionId = purchase?.transactionId;
-                if (!transactionId) return;
-
-                try {
-                    // Backend auto-detects sandbox vs production — works on TestFlight + App Store
-                    await verifyIosTransactionAuto(transactionId);
-
-                    // Acknowledge to Apple — prevents refund / re-delivery
-                    await finishTransaction({ purchase, isConsumable: false });
-
-                    await loadEntitlement();
-
-                    const planTitle =
-                        PLANS.find((p) => p.productId === purchase.productId)?.title ?? "Pro";
-
-                    Alert.alert(
-                        "Subscribed!",
-                        `${planTitle} plan is now active. Thank you!`,
-                        [{ text: "Continue", onPress: () => navigation.goBack() }]
-                    );
-                } catch {
-                    // Payment received by Apple, but backend verification failed.
-                    // Do NOT call finishTransaction here — let Apple re-deliver on next launch.
-                    Alert.alert(
-                        "Verification issue",
-                        "Your payment was received but we couldn't confirm it right now. " +
-                            "Please contact support — we'll activate your account immediately.",
-                        [{ text: "OK" }]
-                    );
-                } finally {
-                    setLoadingProductId(null);
-                }
-            });
-
-            // Fires on purchase error or user cancel
-            purchaseErrorSub.current = purchaseErrorListener((error) => {
-                setLoadingProductId(null);
-
-                if (error?.code === "E_USER_CANCELLED") return; // silent cancel
-
-                if (error?.code === "E_ALREADY_OWNED") {
-                    // User already has this subscription — restore it
-                    loadEntitlement().then((e) => {
-                        if (e?.active) {
-                            Alert.alert(
-                                "Already subscribed",
-                                "You already have an active subscription.",
-                                [{ text: "OK", onPress: () => navigation.goBack() }]
-                            );
-                        }
-                    });
-                    return;
-                }
-
-                Alert.alert(
-                    "Purchase failed",
-                    "We couldn't complete your purchase. Please try again.",
-                    [{ text: "OK" }]
-                );
-            });
-        } catch {
-            // IAP unavailable on this device — app still renders, buttons disabled gracefully
-        }
-    }
-
-    // ── Subscribe ─────────────────────────────────────────────────────────
     async function subscribe(plan) {
         if (loadingProductId) return;
         setLoadingProductId(plan.productId);
 
-        // Dev / Expo Go: use mock subscribe (backend blocks this in production)
-        if (!iapSupported) {
-            try {
-                await mockSubscribe(plan.productId);
-                await loadEntitlement();
-                Alert.alert("Subscribed (dev)", `${plan.title} activated.`);
-                navigation.goBack();
-            } catch (e) {
-                Alert.alert("Error", e?.userMessage ?? "Could not activate subscription.");
-            } finally {
-                setLoadingProductId(null);
-            }
-            return;
-        }
-
-        // Real Apple IAP — requestSubscription returns void on iOS;
-        // the actual purchase arrives via purchaseUpdatedListener above.
         try {
-            await requestSubscription({ sku: plan.productId });
+            await mockSubscribe(plan.productId);
+            await loadEntitlement();
+            Alert.alert("Subscribed!", `${plan.title} plan is now active. Thank you!`, [
+                { text: "Continue", onPress: () => navigation.goBack() },
+            ]);
         } catch (e) {
-            if (e?.code !== "E_USER_CANCELLED") {
-                Alert.alert(
-                    "Purchase unavailable",
-                    "We couldn't start the purchase. Please check your App Store account and try again.",
-                    [{ text: "OK" }]
-                );
-            }
-            setLoadingProductId(null);
-        }
-    }
-
-    // ── Restore purchases ─────────────────────────────────────────────────
-    async function restore() {
-        if (loadingProductId) return;
-        setLoadingProductId("__restore__");
-
-        try {
-            if (!iapSupported) {
-                const e = await loadEntitlement();
-                if (e?.active) {
-                    Alert.alert("Restored", "Your subscription is active.", [
-                        { text: "OK", onPress: () => navigation.goBack() },
-                    ]);
-                } else {
-                    Alert.alert("Nothing to restore", "No active subscription found.");
-                }
-                return;
-            }
-
-            const purchases = await getAvailablePurchases();
-
-            const subPurchases = purchases
-                .filter((p) => PLANS.some((plan) => plan.productId === p.productId))
-                .sort((a, b) => (b.transactionDate ?? 0) - (a.transactionDate ?? 0));
-
-            if (subPurchases.length === 0) {
-                Alert.alert(
-                    "Nothing to restore",
-                    "No previous subscription found on this Apple ID."
-                );
-                return;
-            }
-
-            const latest = subPurchases[0];
-            if (latest?.transactionId) {
-                await verifyIosTransactionAuto(latest.transactionId);
-                await finishTransaction({ purchase: latest, isConsumable: false }).catch(() => {});
-            }
-
-            const e = await loadEntitlement();
-            if (e?.active) {
-                Alert.alert("Restored!", "Your subscription has been restored.", [
-                    { text: "Continue", onPress: () => navigation.goBack() },
-                ]);
-            } else {
-                Alert.alert(
-                    "Subscription expired",
-                    "Your previous subscription has expired. Please subscribe to continue."
-                );
-            }
-        } catch (e) {
-            Alert.alert(
-                "Restore failed",
-                e?.userMessage ?? "We couldn't restore your purchase. Please try again.",
-                [{ text: "OK" }]
-            );
+            Alert.alert("Error", e?.userMessage ?? "Could not activate subscription. Please try again.");
         } finally {
             setLoadingProductId(null);
         }
     }
 
-    // ── Render ────────────────────────────────────────────────────────────
+    async function restore() {
+        if (loadingProductId) return;
+        setLoadingProductId("__restore__");
+
+        try {
+            const e = await loadEntitlement();
+            if (e?.active) {
+                Alert.alert("Restored", "Your subscription is active.", [
+                    { text: "OK", onPress: () => navigation.goBack() },
+                ]);
+            } else {
+                Alert.alert("Nothing to restore", "No active subscription found.");
+            }
+        } catch (e) {
+            Alert.alert("Restore failed", e?.userMessage ?? "Please try again.");
+        } finally {
+            setLoadingProductId(null);
+        }
+    }
+
     const isBusyAny = !!loadingProductId;
 
     return (
@@ -346,7 +178,6 @@ export default function PaywallScreen({ navigation }) {
                     </Text>
                 </TouchableOpacity>
 
-                {/* Apple-required legal text for subscription apps */}
                 <Text style={styles.legal}>
                     Subscriptions auto-renew unless cancelled at least 24 hours before the end of
                     the current period. Manage or cancel in App Store › Account › Subscriptions.
