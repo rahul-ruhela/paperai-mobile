@@ -63,9 +63,11 @@ jobs:
 
       - name: Write App Store Connect API key
         if: github.event.inputs.submit == 'true' || github.ref == 'refs/heads/production'
+        env:
+          ASC_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
         run: |
           mkdir -p src/appstorekey
-          echo "${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}" > src/appstorekey/AuthKey_LY4822XN6Q.p8
+          printf '%s' "$ASC_PRIVATE_KEY" > src/appstorekey/AuthKey_LY4822XN6Q.p8
 
       - name: EAS Submit — App Store Connect
         if: github.event.inputs.submit == 'true' || github.ref == 'refs/heads/production'
