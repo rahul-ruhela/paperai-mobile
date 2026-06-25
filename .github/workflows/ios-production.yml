@@ -1,13 +1,13 @@
 name: iOS Production (App Store)
 
+# !! MANUAL ONLY — production builds never trigger automatically on push.
+# To build: GitHub → Actions → iOS Production → Run workflow
+# To also submit to App Store: set "submit" to "true"
 on:
-  push:
-    branches:
-      - production
   workflow_dispatch:
     inputs:
       submit:
-        description: "Submit to App Store after build?"
+        description: "Submit to App Store Connect after build?"
         required: true
         default: "false"
         type: choice
@@ -62,7 +62,7 @@ jobs:
           EXPO_PUBLIC_APPLE_YEARLY_PRODUCT_ID: ${{ secrets.APPLE_YEARLY_PRODUCT_ID }}
 
       - name: Write App Store Connect API key
-        if: github.event.inputs.submit == 'true' || github.ref == 'refs/heads/production'
+        if: github.event.inputs.submit == 'true'
         env:
           ASC_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
         run: |
@@ -70,7 +70,7 @@ jobs:
           printf '%s' "$ASC_PRIVATE_KEY" > src/appstorekey/AuthKey_LY4822XN6Q.p8
 
       - name: EAS Submit — App Store Connect
-        if: github.event.inputs.submit == 'true' || github.ref == 'refs/heads/production'
+        if: github.event.inputs.submit == 'true'
         run: eas submit --platform ios --latest --non-interactive
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
