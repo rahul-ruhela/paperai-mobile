@@ -23,10 +23,12 @@ try {
     AppleAuthentication = require("expo-apple-authentication");
 } catch (_) {}
 
-// Expo Go uses bundle ID "host.exp.Exponent" — Apple Sign In works but
-// the identity token audience will be "host.exp.Exponent", not our bundle ID.
-// The dev backend accepts this via Apple:ClientIdAlt. In a production standalone
-// build both checks are false and the real bundle ID is used.
+// Detects Expo Go at runtime.
+// In Expo Go, Apple issues the identity token with aud = "host.exp.Exponent".
+// The dev backend accepts this via Apple:ClientIdAlt = "host.exp.Exponent".
+// In a production standalone build (App Store / TestFlight / EAS),
+// appOwnership is "standalone" and executionEnvironment is "standalone",
+// so isExpoGo is false and Apple sends aud = "com.bholeshankar.paperai".
 const isExpoGo =
     Constants.appOwnership === "expo" ||
     Constants.executionEnvironment === "storeClient";
