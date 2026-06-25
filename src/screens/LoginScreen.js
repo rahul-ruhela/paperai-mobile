@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import Constants from "expo-constants";
 import GradientScreen from "../ui/GradientScreen";
 import AppButton from "../ui/AppButton";
 import { login, appleLogin } from "../api/auth";
@@ -21,6 +22,14 @@ let AppleAuthentication = null;
 try {
     AppleAuthentication = require("expo-apple-authentication");
 } catch (_) {}
+
+// Expo Go uses bundle ID "host.exp.Exponent" — Apple Sign In works but
+// the identity token audience will be "host.exp.Exponent", not our bundle ID.
+// The dev backend accepts this via Apple:ClientIdAlt. In a production standalone
+// build both checks are false and the real bundle ID is used.
+const isExpoGo =
+    Constants.appOwnership === "expo" ||
+    Constants.executionEnvironment === "storeClient";
 
 export default function LoginScreen({ navigation, onAuthed }) {
     const [email, setEmail] = useState("");
@@ -64,6 +73,13 @@ export default function LoginScreen({ navigation, onAuthed }) {
 
     async function onAppleSignIn() {
         if (!AppleAuthentication) return;
+
+        if (isExpoGo) {
+            // In Expo Go the token's audience is "host.exp.Exponent".
+            // The dev backend accepts this. Production builds use the real bundle ID.
+            console.warn("[AppleSignIn] Running in Expo Go — token audience is host.exp.Exponent (dev only)");
+        }
+
         try {
             setBusy(true);
             const credential = await AppleAuthentication.signInAsync({
@@ -72,6 +88,11 @@ export default function LoginScreen({ navigation, onAuthed }) {
                     AppleAuthentication.AppleAuthenticationScope.EMAIL,
                 ],
             });
+
+            if (!credential.identityToken) {
+                Alert.alert("Apple Sign In failed", "Apple did not return a token. Please try again.");
+                return;
+            }
 
             const fullName = credential.fullName
                 ? [credential.fullName.givenName, credential.fullName.familyName]
@@ -82,7 +103,7 @@ export default function LoginScreen({ navigation, onAuthed }) {
             await appleLogin(credential.identityToken, credential.email, fullName);
             onAuthed();
         } catch (e) {
-            if (e?.code === "ERR_REQUEST_CANCELED") return; // user cancelled
+            if (e?.code === "ERR_REQUEST_CANCELED") return; // user dismissed the sheet
             Alert.alert("Apple Sign In failed", e?.userMessage ?? e?.message ?? "Something went wrong.");
         } finally {
             setBusy(false);

@@ -20,6 +20,17 @@ api.interceptors.request.use(async (config) => {
 });
 
 // ---------------------------------------------------------------------------
+// Auth-endpoint detection — 401 on these paths means bad credentials,
+// not an expired session, so the refresh interceptor must skip them.
+// ---------------------------------------------------------------------------
+const AUTH_PATHS = ["/api/auth/login", "/api/auth/apple", "/api/auth/register",
+    "/api/auth/otp/verify", "/api/auth/email-otp/verify", "/api/auth/refresh"];
+
+function isAuthEndpoint(url = "") {
+    return AUTH_PATHS.some((p) => url.includes(p));
+}
+
+// ---------------------------------------------------------------------------
 // Friendly user messages per HTTP status
 // ---------------------------------------------------------------------------
 function friendlyMessage(err) {
@@ -27,12 +38,17 @@ function friendlyMessage(err) {
     const serverMsg =
         typeof err?.response?.data === "string"
             ? err.response.data
-            : err?.response?.data?.message ?? err?.response?.data?.error ?? null;
+            : err?.response?.data?.message ?? err?.response?.data?.reason ?? err?.response?.data?.error ?? null;
 
     if (!status) return "No connection. Please check your internet and try again.";
 
     if (status === 400) return serverMsg || "Invalid request. Please check your input.";
-    if (status === 401) return "Session expired. Please log in again.";
+    if (status === 401) {
+        // On auth endpoints a 401 means bad credentials, not an expired session.
+        const url = err?.config?.url ?? "";
+        if (isAuthEndpoint(url)) return serverMsg || "Sign in failed. Please try again.";
+        return "Session expired. Please log in again.";
+    }
     if (status === 403) return "You don't have permission to do this.";
     if (status === 404) return "The requested resource was not found.";
     if (status === 409) return serverMsg || "A conflict occurred. Please refresh and try again.";
@@ -59,8 +75,14 @@ api.interceptors.response.use(
     async (err) => {
         const original = err.config;
 
-        // Token refresh on first 401
-        if (err.response?.status === 401 && !original._retry) {
+        // Token refresh on first 401, but only for protected API calls —
+        // never for auth endpoints (login/apple/register etc.) because those
+        // don't use session tokens and a 401 there means bad credentials.
+        if (
+            err.response?.status === 401 &&
+            !original._retry &&
+            !isAuthEndpoint(original.url)
+        ) {
             original._retry = true;
 
             if (isRefreshing) {
