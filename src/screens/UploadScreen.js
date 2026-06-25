@@ -3,6 +3,7 @@ import {
     ActivityIndicator,
     Alert,
     Animated,
+    Clipboard,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -206,15 +207,14 @@ export default function UploadScreen({ navigation }) {
         }
     }
 
-    function requestAiAction(featureKey, label) {
+    function requestAiAction(label) {
+        Alert.alert(label, "This AI action is coming soon. Stay tuned!");
+    }
+
+    function copyOcrText() {
         if (!ocrText) return;
-        showCreditModal({
-            featureKey,
-            onConfirm: () => {
-                closeModal();
-                Alert.alert(label, "AI action coming soon.");
-            },
-        });
+        Clipboard.setString(ocrText);
+        Alert.alert("Copied", "Extracted text copied to clipboard.");
     }
 
     function openJunkWiper() {
@@ -303,19 +303,31 @@ export default function UploadScreen({ navigation }) {
 
                         {ocrText && (
                             <View style={styles.ocrResultBox}>
-                                <Text style={styles.ocrResultLabel}>Extracted Text</Text>
-                                <Text style={styles.ocrResultText} numberOfLines={6}>{ocrText}</Text>
+                                <View style={styles.ocrResultHeader}>
+                                    <Text style={styles.ocrResultLabel}>Extracted Text</Text>
+                                    <Pressable
+                                        onPress={copyOcrText}
+                                        hitSlop={10}
+                                        style={({ pressed }) => [styles.copyBtn, pressed && { opacity: 0.65 }]}
+                                    >
+                                        <Ionicons name="copy-outline" size={16} color="#A5B4FC" />
+                                        <Text style={styles.copyBtnText}>Copy</Text>
+                                    </Pressable>
+                                </View>
+                                <ScrollView
+                                    style={styles.ocrScrollArea}
+                                    nestedScrollEnabled
+                                    showsVerticalScrollIndicator
+                                >
+                                    <Text style={styles.ocrResultText}>{ocrText}</Text>
+                                </ScrollView>
                                 <View style={styles.aiActionsRow}>
                                     <AiActionBtn icon="sparkles-outline" label="Summarize"
-                                        onPress={() => requestAiAction(FK.SUMMARIZE, "Summarize")}
-                                        cost={configFor(FK.SUMMARIZE).creditCost} />
+                                        onPress={() => requestAiAction("Summarize")} />
                                     <AiActionBtn icon="bulb-outline" label="Explain"
-                                        onPress={() => requestAiAction(FK.EXPLAIN, "Explain in Detail")}
-                                        cost={configFor(FK.EXPLAIN).creditCost} />
+                                        onPress={() => requestAiAction("Explain in Detail")} />
                                     <AiActionBtn icon="chatbubble-ellipses-outline" label="Ask AI"
-                                        onPress={() => Alert.alert("Ask AI", "Coming soon.")} cost={0} />
-                                    <AiActionBtn icon="book-outline" label="Study Notes"
-                                        onPress={() => Alert.alert("Study Notes", "Coming soon.")} cost={0} />
+                                        onPress={() => requestAiAction("Ask AI")} />
                                 </View>
                             </View>
                         )}
@@ -422,13 +434,13 @@ function ActionBtn({ icon, label, onPress, disabled, color = "#A5B4FC", full }) 
     );
 }
 
-function AiActionBtn({ icon, label, onPress, cost }) {
+function AiActionBtn({ icon, label, onPress }) {
     return (
         <Pressable onPress={onPress}
             style={({ pressed }) => [styles.aiBtn, pressed && { opacity: 0.75 }]}>
             <Ionicons name={icon} size={15} color="#A5B4FC" />
             <Text style={styles.aiBtnLabel}>{label}</Text>
-            {cost > 0 && <Text style={styles.aiBtnCost}>{cost}cr</Text>}
+            <Text style={styles.aiBtnSoon}>soon</Text>
         </Pressable>
     );
 }
@@ -479,8 +491,14 @@ const styles = StyleSheet.create({
     ocrLoading: { flexDirection: "row", alignItems: "center", gap: 8 },
     ocrLoadingText: { color: "#FBBF24", fontWeight: "700", fontSize: 13 },
     ocrResultBox: { backgroundColor: "rgba(0,0,0,0.22)", borderRadius: 14, padding: 12, gap: 10 },
+    ocrResultHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
     ocrResultLabel: { color: "#A5B4FC", fontWeight: "900", fontSize: 13 },
-    ocrResultText: { color: "rgba(255,255,255,0.80)", fontWeight: "700", fontSize: 13, lineHeight: 19 },
+    copyBtn: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 5,
+        backgroundColor: "rgba(165,180,252,0.10)", borderRadius: 8,
+        borderWidth: 1, borderColor: "rgba(165,180,252,0.20)" },
+    copyBtnText: { color: "#A5B4FC", fontWeight: "800", fontSize: 12 },
+    ocrScrollArea: { maxHeight: 240, backgroundColor: "rgba(255,255,255,0.04)", borderRadius: 10, padding: 10 },
+    ocrResultText: { color: "rgba(255,255,255,0.85)", fontWeight: "500", fontSize: 13, lineHeight: 20 },
     aiActionsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
     aiBtn: {
         flexDirection: "row", alignItems: "center", gap: 5,
@@ -489,7 +507,7 @@ const styles = StyleSheet.create({
         borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7,
     },
     aiBtnLabel: { color: "#A5B4FC", fontWeight: "800", fontSize: 12 },
-    aiBtnCost: { color: "#FBBF24", fontWeight: "800", fontSize: 11 },
+    aiBtnSoon: { color: "rgba(165,180,252,0.45)", fontWeight: "700", fontSize: 10, fontStyle: "italic" },
     safetyNote: {
         flexDirection: "row", alignItems: "center", gap: 6,
         backgroundColor: "rgba(52,211,153,0.07)", borderRadius: 10, padding: 8,
