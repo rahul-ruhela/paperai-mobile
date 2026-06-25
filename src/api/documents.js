@@ -33,6 +33,17 @@ export async function processDocument(id) {
   return data;
 }
 
+// Same as processDocument but signals to the backend that credits were
+// already reserved via /api/credits/reserve — backend skips its own deduction.
+export async function processDocumentWithTransaction(id, transactionId) {
+  const { data } = await api.post(
+    `/api/documents/${id}/process`,
+    {},
+    { headers: { "X-Transaction-Id": transactionId } }
+  );
+  return data;
+}
+
 
 export async function deleteDocument(docId) {
     const { data } = await api.delete(`/api/documents/${docId}`);

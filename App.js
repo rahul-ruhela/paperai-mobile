@@ -37,6 +37,8 @@ import PrivacyScreen from "./src/screens/PrivacyScreen";
 import TermsScreen from "./src/screens/TermsScreen";
 import HelpCenterScreen from "./src/screens/HelpCenterScreen";
 import ContactSupportScreen from "./src/screens/ContactSupportScreen";
+import JunkWiperScanScreen from "./src/screens/JunkWiperScanScreen";
+import CameraDocumentScanScreen from "./src/screens/CameraDocumentScanScreen";
 import BootScreen from "./src/screens/BootScreen";
 
 const Stack = createNativeStackNavigator();
@@ -237,6 +239,16 @@ export default function App() {
                         <Stack.Screen
                             name="ContactSupport"
                             component={ContactSupportScreen}
+                        />
+                        <Stack.Screen
+                            name="JunkWiper"
+                            component={JunkWiperScanScreen}
+                            options={{ headerShown: false }}
+                        />
+                        <Stack.Screen
+                            name="CameraScanner"
+                            component={CameraDocumentScanScreen}
+                            options={{ headerShown: false }}
                         />
                     </>
                 )}

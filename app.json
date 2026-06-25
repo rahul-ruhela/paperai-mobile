@@ -13,10 +13,6 @@
       "buildNumber": "1",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSCameraUsageDescription": "PaperAI needs camera access to scan and capture documents.",
-        "NSPhotoLibraryUsageDescription": "PaperAI needs photo library access to upload images for AI analysis.",
-        "NSPhotoLibraryAddUsageDescription": "PaperAI needs permission to save processed documents to your photo library.",
-        "NSMicrophoneUsageDescription": "PaperAI needs microphone access for voice-based document input.",
         "UIBackgroundModes": ["fetch", "remote-notification"]
       }
     },
@@ -46,7 +42,22 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "PaperAI needs photo library access to upload images for AI analysis."
+          "photosPermission": "Paper AI Assistant needs photo access so you can upload images for text extraction."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Paper AI Assistant needs camera access to scan documents and extract text.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Paper AI Assistant needs photo access to scan for duplicate photos.",
+          "savePhotosPermission": "Paper AI Assistant needs permission to save scanned documents to your library.",
+          "isAccessMediaLocationEnabled": true
         }
       ]
     ],
