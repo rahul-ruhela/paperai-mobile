@@ -42,7 +42,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Paper AI Assistant needs photo access so you can upload images for text extraction."
+          "photosPermission": "Paper AI Assistant needs access to your photo library to let you select images for text extraction and document scanning."
         }
       ],
       [
@@ -55,8 +55,8 @@
       [
         "expo-media-library",
         {
-          "photosPermission": "Paper AI Assistant needs photo access to scan for duplicate photos.",
-          "savePhotosPermission": "Paper AI Assistant needs permission to save scanned documents to your library.",
+          "photosPermission": "Paper AI Assistant needs access to your full photo library to scan for duplicate photos and free up storage. Select \"All Photos\" so Junk Wiper can find all duplicates.",
+          "savePhotosPermission": "Paper AI Assistant needs permission to save scanned documents to your photo library.",
           "isAccessMediaLocationEnabled": true
         }
       ]
