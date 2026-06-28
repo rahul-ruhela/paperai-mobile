@@ -22,12 +22,13 @@ export default function SubscriptionGate({ navigation, children }) {
         return (
             <View style={styles.center}>
                 <ActivityIndicator size="large" />
-                <Text style={styles.text}>Checking subscription�</Text>
+                <Text style={styles.text}>Checking subscription…</Text>
             </View>
         );
     }
 
-    if (!entitlement?.isActive) {
+    // Backend may return either `active` or `isActive` — accept both.
+    if (!(entitlement?.active ?? entitlement?.isActive)) {
         return (
             <View style={styles.card}>
                 <Text style={styles.title}>Pro Required</Text>

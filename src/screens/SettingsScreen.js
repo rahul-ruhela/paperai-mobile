@@ -85,10 +85,10 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
                         />
 
                         <Row
-                            icon="logo-apple"
-                            title="Apple IAP Setup"
-                            subtitle="TestFlight readiness checklist"
-                            onPress={() => navigation.navigate("IAPSetup")}
+                            icon="star-outline"
+                            title="Upgrade to AI Pro"
+                            subtitle="Unlock unlimited AI features"
+                            onPress={() => navigation.navigate("Paywall")}
                         />
 
                         <Row

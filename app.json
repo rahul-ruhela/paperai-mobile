@@ -13,7 +13,7 @@
       "buildNumber": "1",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "UIBackgroundModes": ["fetch", "remote-notification"]
+        "UIBackgroundModes": ["remote-notification"]
       }
     },
 
@@ -24,6 +24,7 @@
     "plugins": [
       "expo-secure-store",
       "expo-apple-authentication",
+      "expo-iap",
       [
         "expo-splash-screen",
         {
