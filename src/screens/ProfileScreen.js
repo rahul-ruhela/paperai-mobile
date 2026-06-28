@@ -1,8 +1,9 @@
 ﻿import React, { useEffect, useState } from "react";
 import {
-    View, Text, TextInput, StyleSheet, ScrollView, Alert ,  KeyboardAvoidingView,
+    View, Text, TextInput, StyleSheet, ScrollView, Alert, KeyboardAvoidingView,
     Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 import GradientScreen from "../ui/GradientScreen";
 import AppButton from "../ui/AppButton";
 import { api } from "../api/client";
@@ -45,7 +46,16 @@ export default function ProfileScreen() {
                     <Text style={styles.subtitle}>Your personal information</Text>
 
                     <Card title="Account">
-                        <ReadOnly label="Email" value={data.email} />
+                        {data.isAppleUser && (
+                            <View style={styles.appleBadge}>
+                                <Ionicons name="logo-apple" size={16} color="#fff" />
+                                <Text style={styles.appleBadgeText}>Signed in with Apple</Text>
+                            </View>
+                        )}
+                        <ReadOnly
+                            label="Email"
+                            value={data.email || (data.isAppleUser ? "Private (Apple)" : "—")}
+                        />
                         <ReadOnly label="Phone" value={data.phone || "—"} />
                     </Card>
 
@@ -140,5 +150,20 @@ const styles = StyleSheet.create({
     readOnlyText: {
         color: "rgba(255,255,255,0.8)",
         fontWeight: "700",
+    },
+    appleBadge: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        backgroundColor: "rgba(0,0,0,0.35)",
+        borderRadius: 10,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        alignSelf: "flex-start",
+    },
+    appleBadgeText: {
+        color: "#fff",
+        fontWeight: "700",
+        fontSize: 13,
     },
 });

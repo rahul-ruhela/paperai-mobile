@@ -2,7 +2,7 @@ import { api } from "./client";
 import { setTokens, clearTokens, getRefreshToken } from "../storage/tokenStore";
 
 // =========================
-// EMAIL/PASSWORD (EXISTING)
+// EMAIL/PASSWORD
 // =========================
 export async function login(email, password) {
     const res = await api.post("/api/auth/login", { email, password });
@@ -12,13 +12,7 @@ export async function login(email, password) {
 }
 
 export async function register(name, email, password, phone) {
-    const res = await api.post("/api/auth/register", {
-        name,
-        email,
-        password,
-        phone,
-    });
-
+    const res = await api.post("/api/auth/register", { name, email, password, phone });
     const { accessToken, refreshToken } = res.data;
     await setTokens(accessToken, refreshToken);
     return res.data;
@@ -27,33 +21,29 @@ export async function register(name, email, password, phone) {
 export async function logout() {
     try {
         const refreshToken = await getRefreshToken();
-        if (refreshToken) {
-            await api.post("/api/auth/logout", { refreshToken });
-        }
+        if (refreshToken) await api.post("/api/auth/logout", { refreshToken });
     } finally {
         await clearTokens();
     }
 }
 
 // =========================
-// EMAIL OTP (NEW)
+// EMAIL OTP
 // =========================
 export async function sendEmailOtp(email) {
-    // Your backend routes are under /api/auth/... (consistent with login/register)
     const res = await api.post("/api/auth/email-otp/send", { email });
     return res.data;
 }
+
 export async function verifyEmailOtp(payload) {
     const res = await api.post("/api/auth/email-otp/verify", payload);
-
     const { accessToken, refreshToken } = res.data;
     await setTokens(accessToken, refreshToken);
-
     return res.data;
 }
 
 // =========================
-// PHONE OTP (NEW)
+// PHONE OTP (Twilio)
 // =========================
 export async function sendPhoneOtp(phone) {
     const res = await api.post("/api/auth/otp/send", { phone });
@@ -62,15 +52,26 @@ export async function sendPhoneOtp(phone) {
 
 export async function verifyPhoneOtp(phone, otp) {
     const res = await api.post("/api/auth/otp/verify", { phone, otp });
-
-    // Backend returns tokens on verify
     const { accessToken, refreshToken } = res.data;
     await setTokens(accessToken, refreshToken);
-
     return res.data;
 }
 
-// Optional compatibility aliases (in case any screen uses PascalCase)
+// =========================
+// APPLE SIGN IN
+// =========================
+export async function appleLogin(identityToken, email, name) {
+    const res = await api.post("/api/auth/apple", {
+        identityToken,
+        email: email ?? null,
+        name: name ?? null,
+    });
+    const { accessToken, refreshToken } = res.data;
+    await setTokens(accessToken, refreshToken);
+    return res.data;
+}
+
+// Aliases
 export const SendEmailOtp = sendEmailOtp;
 export const VerifyEmailOtp = verifyEmailOtp;
 export const SendPhoneOtp = sendPhoneOtp;

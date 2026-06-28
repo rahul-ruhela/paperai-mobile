@@ -3,8 +3,7 @@ name: iOS Build & Submit
 on:
   push:
     branches:
-      - main
-      - production
+      - main          # preview/TestFlight builds only — never production
   workflow_dispatch:
     inputs:
       profile:
@@ -14,15 +13,8 @@ on:
         type: choice
         options:
           - preview
-          - production
-      submit:
-        description: "Submit to App Store after build?"
-        required: true
-        default: "false"
-        type: choice
-        options:
-          - "false"
-          - "true"
+          # NOTE: production is intentionally excluded here.
+          # Use the "iOS Production (App Store)" workflow for production builds.
 
 jobs:
   # ──────────────────────────────────────────────────────────────────────
@@ -52,7 +44,6 @@ jobs:
     name: iOS TestFlight Build
     runs-on: ubuntu-latest
     needs: validate
-    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.profile == 'preview')
     steps:
       - uses: actions/checkout@v4
 
@@ -76,47 +67,6 @@ jobs:
           EXPO_PUBLIC_APPLE_WEEKLY_PRODUCT_ID: ${{ secrets.APPLE_WEEKLY_PRODUCT_ID }}
           EXPO_PUBLIC_APPLE_MONTHLY_PRODUCT_ID: ${{ secrets.APPLE_MONTHLY_PRODUCT_ID }}
           EXPO_PUBLIC_APPLE_YEARLY_PRODUCT_ID: ${{ secrets.APPLE_YEARLY_PRODUCT_ID }}
-
-  # ──────────────────────────────────────────────────────────────────────
-  # 3. EAS Build — iOS App Store (production profile)
-  # ──────────────────────────────────────────────────────────────────────
-  build-production:
-    name: iOS App Store Build
-    runs-on: ubuntu-latest
-    needs: validate
-    if: github.ref == 'refs/heads/production' || (github.event_name == 'workflow_dispatch' && github.event.inputs.profile == 'production')
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Install EAS CLI
-        run: npm install -g eas-cli
-
-      - name: EAS Build — production (App Store)
-        run: eas build --platform ios --profile production --non-interactive
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          EXPO_PUBLIC_API_BASE_URL: ${{ secrets.API_BASE_URL_PRODUCTION }}
-          EXPO_PUBLIC_APP_ENV: production
-          EXPO_PUBLIC_APPLE_WEEKLY_PRODUCT_ID: ${{ secrets.APPLE_WEEKLY_PRODUCT_ID }}
-          EXPO_PUBLIC_APPLE_MONTHLY_PRODUCT_ID: ${{ secrets.APPLE_MONTHLY_PRODUCT_ID }}
-          EXPO_PUBLIC_APPLE_YEARLY_PRODUCT_ID: ${{ secrets.APPLE_YEARLY_PRODUCT_ID }}
-
-      - name: EAS Submit — App Store Connect
-        if: github.event.inputs.submit == 'true' || github.ref == 'refs/heads/production'
-        run: eas submit --platform ios --latest --non-interactive
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
 
   # Android build will be added here when Play Store submission is needed.
   # Use: eas build --platform android --profile production --non-interactive

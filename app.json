@@ -7,41 +7,14 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
 
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#020617"
-    },
-
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.bholeshankar.paperai",
       "buildNumber": "1",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSCameraUsageDescription": "PaperAI needs camera access to scan and capture documents.",
-        "NSPhotoLibraryUsageDescription": "PaperAI needs photo library access to upload images for AI analysis.",
-        "NSPhotoLibraryAddUsageDescription": "PaperAI needs permission to save processed documents to your photo library.",
-        "NSMicrophoneUsageDescription": "PaperAI needs microphone access for voice-based document input.",
         "UIBackgroundModes": ["fetch", "remote-notification"]
       }
-    },
-
-    "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#020617"
-      },
-      "edgeToEdgeEnabled": true,
-      "package": "com.bholeshankar.paperai",
-      "versionCode": 1,
-      "permissions": [
-        "CAMERA",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE",
-        "RECEIVE_BOOT_COMPLETED",
-        "VIBRATE"
-      ]
     },
 
     "web": {
@@ -50,17 +23,41 @@
 
     "plugins": [
       "expo-secure-store",
-      "expo-notifications",
+      "expo-apple-authentication",
       [
-        "expo-image-picker",
+        "expo-splash-screen",
         {
-          "photosPermission": "PaperAI needs photo library access to upload images for AI analysis."
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#020617"
         }
       ],
       [
-        "react-native-iap",
+        "expo-notifications",
         {
-          "paymentProvider": "both"
+          "icon": "./assets/icon.png",
+          "color": "#6366f1"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Paper AI Assistant needs access to your photo library to let you select images for text extraction and document scanning."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Paper AI Assistant needs camera access to scan documents and extract text.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Paper AI Assistant needs access to your full photo library to scan for duplicate photos and free up storage. Select \"All Photos\" so Junk Wiper can find all duplicates.",
+          "savePhotosPermission": "Paper AI Assistant needs permission to save scanned documents to your photo library.",
+          "isAccessMediaLocationEnabled": true
         }
       ]
     ],
@@ -72,12 +69,6 @@
     },
 
     "owner": "rahulruhela",
-
-    "notification": {
-      "icon": "./assets/icon.png",
-      "color": "#6366f1"
-    },
-
     "assetBundlePatterns": [
       "**/*"
     ]
