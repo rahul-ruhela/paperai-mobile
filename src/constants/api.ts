@@ -4,7 +4,9 @@ const envUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
 
 function resolveBaseUrl(): string {
     if (envUrl && envUrl.trim().length > 0) return envUrl.trim();
-    if (__DEV__) return "http://192.168.29.223:5263";
+    // Default to the LIVE API in every environment so the app never silently
+    // hits a stale LAN IP. To use a local backend, set EXPO_PUBLIC_API_BASE_URL
+    // (e.g. in .env.local) to your machine's LAN IP.
     return "https://apis.bseptechnologies.com";
 }
 
