@@ -27,7 +27,9 @@ export default function IAPSetupScreen() {
                     <View style={styles.card}>
                         <Text style={styles.cardTitle}>Notes</Text>
                         <Text style={styles.text}>
-                            Your backend code exists but UI is disabled. This screen is only for UX and navigation.
+                            Live in-app purchases are enabled on the Paywall screen via StoreKit 2
+                            (real builds: Dev Client / TestFlight / App Store). In Expo Go, purchasing
+                            is disabled and the Paywall renders read-only. This screen is a setup checklist only.
                         </Text>
                     </View>
                 </View>

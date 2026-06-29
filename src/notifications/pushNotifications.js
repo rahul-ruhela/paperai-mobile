@@ -1,6 +1,6 @@
 ﻿import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
-import api from "../api/client";
+import { api } from "../api/client";
 
 Notifications.setNotificationHandler({
     handleNotification: async () => ({

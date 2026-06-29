@@ -10,10 +10,10 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.bholeshankar.paperai",
-      "buildNumber": "1",
+      "buildNumber": "2",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "UIBackgroundModes": ["fetch", "remote-notification"]
+        "UIBackgroundModes": ["remote-notification"]
       }
     },
 
@@ -24,6 +24,7 @@
     "plugins": [
       "expo-secure-store",
       "expo-apple-authentication",
+      "expo-iap",
       [
         "expo-splash-screen",
         {
