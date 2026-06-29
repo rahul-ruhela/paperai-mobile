@@ -48,7 +48,7 @@
       "ios": {
         "ascApiKeyPath": "./src/appstorekey/AuthKey_LY4822XN6Q.p8",
         "ascApiKeyId": "LY4822XN6Q",
-        "ascApiKeyIssuerId": "REPLACE_WITH_ASC_API_ISSUER_ID",
+        "ascApiKeyIssuerId": "26a0c1c8-cc00-4398-abb6-b9093adcda60",
         "ascAppId": "6757206246",
         "appleTeamId": "RA258N96VK"
       }
