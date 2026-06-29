@@ -12,10 +12,7 @@
       },
       "env": {
         "EXPO_PUBLIC_APP_ENV": "local",
-        "EXPO_PUBLIC_API_BASE_URL": "http://192.168.29.223:5263",
-        "EXPO_PUBLIC_APPLE_WEEKLY_PRODUCT_ID": "com.bholeshankar.paperai.pro_weekly",
-        "EXPO_PUBLIC_APPLE_MONTHLY_PRODUCT_ID": "com.bholeshankar.paperai.pro_monthly",
-        "EXPO_PUBLIC_APPLE_YEARLY_PRODUCT_ID": "com.bholeshankar.paperai.pro_yearly"
+        "EXPO_PUBLIC_API_BASE_URL": "http://192.168.29.223:5263"
       }
     },
     "simulator": {
@@ -26,10 +23,7 @@
       },
       "env": {
         "EXPO_PUBLIC_APP_ENV": "local",
-        "EXPO_PUBLIC_API_BASE_URL": "http://localhost:5263",
-        "EXPO_PUBLIC_APPLE_WEEKLY_PRODUCT_ID": "com.bholeshankar.paperai.pro_weekly",
-        "EXPO_PUBLIC_APPLE_MONTHLY_PRODUCT_ID": "com.bholeshankar.paperai.pro_monthly",
-        "EXPO_PUBLIC_APPLE_YEARLY_PRODUCT_ID": "com.bholeshankar.paperai.pro_yearly"
+        "EXPO_PUBLIC_API_BASE_URL": "http://localhost:5263"
       }
     },
     "preview": {
@@ -37,10 +31,7 @@
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_APP_ENV": "staging",
-        "EXPO_PUBLIC_API_BASE_URL": "https://apis.bseptechnologies.com",
-        "EXPO_PUBLIC_APPLE_WEEKLY_PRODUCT_ID": "com.bholeshankar.paperai.pro_weekly",
-        "EXPO_PUBLIC_APPLE_MONTHLY_PRODUCT_ID": "com.bholeshankar.paperai.pro_monthly",
-        "EXPO_PUBLIC_APPLE_YEARLY_PRODUCT_ID": "com.bholeshankar.paperai.pro_yearly"
+        "EXPO_PUBLIC_API_BASE_URL": "https://apis.bseptechnologies.com"
       }
     },
     "production": {
@@ -48,17 +39,16 @@
       "distribution": "store",
       "env": {
         "EXPO_PUBLIC_APP_ENV": "production",
-        "EXPO_PUBLIC_API_BASE_URL": "https://apis.bseptechnologies.com",
-        "EXPO_PUBLIC_APPLE_WEEKLY_PRODUCT_ID": "com.bholeshankar.paperai.pro_weekly",
-        "EXPO_PUBLIC_APPLE_MONTHLY_PRODUCT_ID": "com.bholeshankar.paperai.pro_monthly",
-        "EXPO_PUBLIC_APPLE_YEARLY_PRODUCT_ID": "com.bholeshankar.paperai.pro_yearly"
+        "EXPO_PUBLIC_API_BASE_URL": "https://apis.bseptechnologies.com"
       }
     }
   },
   "submit": {
     "production": {
       "ios": {
-        "appleId": "info@bholeshankarenterprisesprivatelimited.com",
+        "ascApiKeyPath": "./src/appstorekey/AuthKey_LY4822XN6Q.p8",
+        "ascApiKeyId": "LY4822XN6Q",
+        "ascApiKeyIssuerId": "REPLACE_WITH_ASC_API_ISSUER_ID",
         "ascAppId": "6757206246",
         "appleTeamId": "RA258N96VK"
       }
