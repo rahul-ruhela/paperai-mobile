@@ -1,42 +1,170 @@
-import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import GradientScreen from "../ui/GradientScreen";
+import { getCreditsBalance, getFeatureConfigs } from "../api/credits";
+
+// Friendly display name for a feature config.
+function featureLabel(f) {
+    return f.userNoticeTitle || prettify(f.featureKey);
+}
+function prettify(key = "") {
+    return String(key)
+        .replace(/[_\-.]/g, " ")
+        .replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 export default function CreditAnalyticsScreen() {
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+    const [error, setError] = useState(false);
+    const [balance, setBalance] = useState(null);
+    const [features, setFeatures] = useState([]);
+
+    async function load() {
+        setError(false);
+        try {
+            const [bal, configs] = await Promise.all([
+                getCreditsBalance().catch(() => null),
+                getFeatureConfigs().catch(() => []),
+            ]);
+            setBalance(typeof bal?.credits === "number" ? bal.credits : bal?.credits ?? null);
+            const list = Array.isArray(configs) ? configs : [];
+            // Only paid, enabled features with a positive cost.
+            setFeatures(
+                list
+                    .filter((f) => (f?.creditCost ?? 0) > 0 && f?.isEnabled !== false)
+                    .sort((a, b) => (b.creditCost ?? 0) - (a.creditCost ?? 0))
+            );
+        } catch {
+            setError(true);
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    }
+
+    useEffect(() => {
+        load();
+    }, []);
+
+    function onRefresh() {
+        setRefreshing(true);
+        load();
+    }
+
+    // Derived insights.
+    const costs = features.map((f) => f.creditCost);
+    const maxCost = costs.length ? Math.max(...costs) : 0;
+    const minCost = costs.length ? Math.min(...costs) : 0;
+    const avgCost = costs.length ? Math.round((costs.reduce((s, c) => s + c, 0) / costs.length) * 10) / 10 : 0;
+    const cheapest = features.length ? features[features.length - 1] : null;
+    const dearest = features.length ? features[0] : null;
+    const runsWithBalance =
+        balance != null && cheapest && cheapest.creditCost > 0
+            ? Math.floor(balance / cheapest.creditCost)
+            : null;
+
     return (
         <GradientScreen>
             <SafeAreaView style={{ flex: 1 }}>
-                <View style={styles.container}>
+                <ScrollView
+                    contentContainerStyle={styles.container}
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A5B4FC" />}
+                >
                     <Text style={styles.title}>Credit Analytics</Text>
-                    <Text style={styles.subtitle}>Track how credits are used over time.</Text>
+                    <Text style={styles.subtitle}>Your balance and how features consume credits.</Text>
 
-                    <View style={styles.grid}>
-                        <StatCard title="This week" value="�" hint="Credits used" />
-                        <StatCard title="This month" value="�" hint="Credits used" />
-                        <StatCard title="Avg / doc" value="�" hint="Estimated" />
-                        <StatCard title="Top category" value="�" hint="Most processed" />
-                    </View>
+                    {loading ? (
+                        <View style={styles.center}><ActivityIndicator color="#A5B4FC" /></View>
+                    ) : (
+                        <>
+                            {/* Balance hero */}
+                            <View style={styles.hero}>
+                                <Text style={styles.heroLabel}>Current balance</Text>
+                                <Text style={styles.heroValue}>{balance != null ? balance : "—"}</Text>
+                                <Text style={styles.heroHint}>credits available</Text>
+                            </View>
 
-                    <View style={styles.card}>
-                        <Text style={styles.cardTitle}>Usage timeline</Text>
-                        <Text style={styles.cardText}>
-                            UI placeholder. Later you can map real ledger data to a chart.
-                        </Text>
+                            {/* Stat grid */}
+                            <View style={styles.grid}>
+                                <StatCard title="Paid features" value={String(features.length || "—")} hint="Enabled" />
+                                <StatCard title="Avg cost" value={features.length ? String(avgCost) : "—"} hint="Credits / feature" />
+                                <StatCard title="Lowest cost" value={features.length ? String(minCost) : "—"} hint={cheapest ? featureLabel(cheapest) : "—"} />
+                                <StatCard title="Highest cost" value={features.length ? String(maxCost) : "—"} hint={dearest ? featureLabel(dearest) : "—"} />
+                            </View>
 
-                        <View style={styles.fakeBars}>
-                            <View style={[styles.bar, { width: "45%" }]} />
-                            <View style={[styles.bar, { width: "70%" }]} />
-                            <View style={[styles.bar, { width: "35%" }]} />
-                            <View style={[styles.bar, { width: "85%" }]} />
-                            <View style={[styles.bar, { width: "55%" }]} />
-                        </View>
-                    </View>
+                            {/* Insight banner */}
+                            {runsWithBalance != null && cheapest && (
+                                <View style={styles.insight}>
+                                    <Text style={styles.insightText}>
+                                        With {balance} credits you can run{" "}
+                                        <Text style={styles.insightStrong}>{featureLabel(cheapest)}</Text> about{" "}
+                                        <Text style={styles.insightStrong}>{runsWithBalance}</Text> time{runsWithBalance === 1 ? "" : "s"}.
+                                    </Text>
+                                </View>
+                            )}
 
-                    <Text style={styles.note}>
-                        This screen is UI-only and safe. Wire real metrics when backend is ready.
-                    </Text>
-                </View>
+                            {/* Cost-per-feature bar chart */}
+                            <View style={styles.card}>
+                                <Text style={styles.cardTitle}>Credit cost by feature</Text>
+                                {features.length === 0 ? (
+                                    <Text style={styles.cardText}>
+                                        {error
+                                            ? "Couldn't load analytics right now. Pull down to retry."
+                                            : "No paid features are configured yet."}
+                                    </Text>
+                                ) : (
+                                    features.map((f) => {
+                                        const pct = maxCost > 0 ? Math.max(8, Math.round((f.creditCost / maxCost) * 100)) : 0;
+                                        return (
+                                            <View key={f.featureKey} style={styles.barRow}>
+                                                <View style={styles.barHeader}>
+                                                    <Text style={styles.barLabel} numberOfLines={1}>{featureLabel(f)}</Text>
+                                                    <Text style={styles.barValue}>{f.creditCost}</Text>
+                                                </View>
+                                                <View style={styles.barTrack}>
+                                                    <View style={[styles.barFill, { width: `${pct}%` }]} />
+                                                </View>
+                                            </View>
+                                        );
+                                    })
+                                )}
+                            </View>
+
+                            {/* Affordability chart: how many runs your balance buys per feature */}
+                            {balance != null && features.length > 0 && (
+                                <View style={styles.card}>
+                                    <Text style={styles.cardTitle}>Runs you can afford</Text>
+                                    {(() => {
+                                        const runs = features.map((f) => ({
+                                            key: f.featureKey,
+                                            label: featureLabel(f),
+                                            n: f.creditCost > 0 ? Math.floor(balance / f.creditCost) : 0,
+                                        }));
+                                        const maxRuns = Math.max(1, ...runs.map((r) => r.n));
+                                        return runs.map((r) => {
+                                            const pct = Math.max(6, Math.round((r.n / maxRuns) * 100));
+                                            return (
+                                                <View key={r.key} style={styles.barRow}>
+                                                    <View style={styles.barHeader}>
+                                                        <Text style={styles.barLabel} numberOfLines={1}>{r.label}</Text>
+                                                        <Text style={styles.barValue}>{r.n}×</Text>
+                                                    </View>
+                                                    <View style={styles.barTrack}>
+                                                        <View style={[styles.barFill, styles.barFillAlt, { width: `${pct}%` }]} />
+                                                    </View>
+                                                </View>
+                                            );
+                                        });
+                                    })()}
+                                </View>
+                            )}
+
+                            <Text style={styles.note}>Pull down to refresh. Costs are read live from your account.</Text>
+                        </>
+                    )}
+                </ScrollView>
             </SafeAreaView>
         </GradientScreen>
     );
@@ -47,15 +175,28 @@ function StatCard({ title, value, hint }) {
         <View style={styles.stat}>
             <Text style={styles.statTitle}>{title}</Text>
             <Text style={styles.statValue}>{value}</Text>
-            <Text style={styles.statHint}>{hint}</Text>
+            <Text style={styles.statHint} numberOfLines={1}>{hint}</Text>
         </View>
     );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, padding: 18, gap: 14 },
+    container: { padding: 18, gap: 14, paddingBottom: 40 },
     title: { color: "#fff", fontSize: 26, fontWeight: "900" },
     subtitle: { color: "rgba(255,255,255,0.7)", fontWeight: "700" },
+    center: { paddingVertical: 40, alignItems: "center" },
+
+    hero: {
+        backgroundColor: "rgba(99,102,241,0.14)",
+        borderWidth: 1,
+        borderColor: "rgba(165,180,252,0.35)",
+        borderRadius: 22,
+        padding: 18,
+        alignItems: "center",
+    },
+    heroLabel: { color: "rgba(255,255,255,0.7)", fontWeight: "900", fontSize: 13 },
+    heroValue: { color: "#fff", fontSize: 44, fontWeight: "900", marginVertical: 2 },
+    heroHint: { color: "#A5B4FC", fontWeight: "800", fontSize: 12 },
 
     grid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
     stat: {
@@ -65,11 +206,21 @@ const styles = StyleSheet.create({
         borderColor: "rgba(255,255,255,0.10)",
         borderRadius: 18,
         padding: 14,
-        gap: 6,
+        gap: 4,
     },
-    statTitle: { color: "rgba(255,255,255,0.65)", fontWeight: "900" },
-    statValue: { color: "#E0E7FF", fontSize: 18, fontWeight: "900" },
-    statHint: { color: "rgba(255,255,255,0.55)", fontWeight: "700", fontSize: 12 },
+    statTitle: { color: "rgba(255,255,255,0.65)", fontWeight: "900", fontSize: 12 },
+    statValue: { color: "#E0E7FF", fontSize: 22, fontWeight: "900" },
+    statHint: { color: "rgba(255,255,255,0.55)", fontWeight: "700", fontSize: 11 },
+
+    insight: {
+        backgroundColor: "rgba(34,197,94,0.12)",
+        borderWidth: 1,
+        borderColor: "rgba(34,197,94,0.35)",
+        borderRadius: 16,
+        padding: 14,
+    },
+    insightText: { color: "rgba(255,255,255,0.85)", fontWeight: "700", lineHeight: 20 },
+    insightStrong: { color: "#86efac", fontWeight: "900" },
 
     card: {
         backgroundColor: "rgba(255,255,255,0.06)",
@@ -77,22 +228,18 @@ const styles = StyleSheet.create({
         borderColor: "rgba(255,255,255,0.10)",
         borderRadius: 22,
         padding: 16,
-        gap: 10,
+        gap: 12,
     },
     cardTitle: { color: "#A5B4FC", fontWeight: "900" },
     cardText: { color: "rgba(255,255,255,0.72)", fontWeight: "700" },
 
-    fakeBars: { gap: 10, marginTop: 6 },
-    bar: {
-        height: 10,
-        borderRadius: 999,
-        backgroundColor: "rgba(165,180,252,0.55)",
-    },
+    barRow: { gap: 6 },
+    barHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
+    barLabel: { color: "rgba(255,255,255,0.85)", fontWeight: "800", flex: 1, fontSize: 13 },
+    barValue: { color: "#E0E7FF", fontWeight: "900", fontSize: 13 },
+    barTrack: { height: 10, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.10)", overflow: "hidden" },
+    barFill: { height: 10, borderRadius: 999, backgroundColor: "rgba(165,180,252,0.85)" },
+    barFillAlt: { backgroundColor: "rgba(34,197,94,0.75)" },
 
-    note: {
-        textAlign: "center",
-        color: "rgba(255,255,255,0.55)",
-        fontSize: 12,
-        fontWeight: "700",
-    },
+    note: { textAlign: "center", color: "rgba(255,255,255,0.5)", fontSize: 12, fontWeight: "700" },
 });
