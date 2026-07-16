@@ -13,8 +13,9 @@
  */
 const crypto = require("crypto");
 const fs = require("fs");
+const path = require("path");
 
-const KEY_PATH = "C:\\work\\apps\\AuthKey_LY4822XN6Q.p8";
+const KEY_PATH = path.join(__dirname, "..", "..", "src", "appstorekey", "AuthKey_LY4822XN6Q.p8");
 const KEY_ID = "LY4822XN6Q";
 const ISSUER_ID = "26a0c1c8-cc00-4398-abb6-b9093adcda60";
 const APP_ID = "6757206246";
