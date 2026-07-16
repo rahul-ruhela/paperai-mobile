@@ -27,6 +27,16 @@ export async function logout() {
     }
 }
 
+// Permanently deletes the signed-in account and all personal data
+// (App Store requirement). Local tokens are cleared afterwards.
+export async function deleteAccount() {
+    try {
+        await api.delete("/api/account");
+    } finally {
+        await clearTokens();
+    }
+}
+
 // =========================
 // EMAIL OTP
 // =========================

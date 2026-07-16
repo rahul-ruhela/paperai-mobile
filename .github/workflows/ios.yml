@@ -64,9 +64,6 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           EXPO_PUBLIC_API_BASE_URL: ${{ secrets.API_BASE_URL_STAGING }}
           EXPO_PUBLIC_APP_ENV: staging
-          EXPO_PUBLIC_APPLE_WEEKLY_PRODUCT_ID: ${{ secrets.APPLE_WEEKLY_PRODUCT_ID }}
-          EXPO_PUBLIC_APPLE_MONTHLY_PRODUCT_ID: ${{ secrets.APPLE_MONTHLY_PRODUCT_ID }}
-          EXPO_PUBLIC_APPLE_YEARLY_PRODUCT_ID: ${{ secrets.APPLE_YEARLY_PRODUCT_ID }}
 
   # Android build will be added here when Play Store submission is needed.
   # Use: eas build --platform android --profile production --non-interactive

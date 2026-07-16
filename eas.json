@@ -11,8 +11,7 @@
         "simulator": false
       },
       "env": {
-        "EXPO_PUBLIC_APP_ENV": "local",
-        "EXPO_PUBLIC_API_BASE_URL": "http://192.168.29.223:5263"
+        "EXPO_PUBLIC_APP_ENV": "local"
       }
     },
     "simulator": {

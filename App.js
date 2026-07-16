@@ -32,7 +32,6 @@ import AnalysisScreen from "./src/screens/AnalysisScreen";
 import PaywallScreen from "./src/screens/PaywallScreen";
 import ProfileScreen from "./src/screens/ProfileScreen";
 import CreditAnalyticsScreen from "./src/screens/CreditAnalyticsScreen";
-import IAPSetupScreen from "./src/screens/IAPSetupScreen";
 import PrivacyScreen from "./src/screens/PrivacyScreen";
 import TermsScreen from "./src/screens/TermsScreen";
 import HelpCenterScreen from "./src/screens/HelpCenterScreen";
@@ -232,7 +231,6 @@ export default function App() {
                         <Stack.Screen name="Paywall" component={PaywallScreen} />
                         <Stack.Screen name="Profile" component={ProfileScreen} />
                         <Stack.Screen name="Analytics" component={CreditAnalyticsScreen} />
-                        <Stack.Screen name="IAPSetup" component={IAPSetupScreen} />
                         <Stack.Screen name="Privacy" component={PrivacyScreen} />
                         <Stack.Screen name="Terms" component={TermsScreen} />
                         <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />

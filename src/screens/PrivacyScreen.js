@@ -101,7 +101,7 @@ export default function PrivacyScreen() {
                     <Section heading="11. Contact Us">
                         Questions or requests? Email
                         info@bholeshankarenterprisesprivatelimited.com or visit
-                        https://bseptechnologies.com/privacy.
+                        https://bseptechnologies.com/paper-ai/privacy.
                     </Section>
                 </ScrollView>
             </SafeAreaView>

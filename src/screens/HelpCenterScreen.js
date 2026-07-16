@@ -59,15 +59,15 @@ const FAQS = [
     },
     {
         q: "How do I delete my account or data?",
-        a: "Email info@bholeshankarenterprisesprivatelimited.com from your account email and we'll process your deletion request.",
+        a: "Go to Settings › Delete Account to permanently delete your account and personal data directly in the app. You can also email info@bholeshankarenterprisesprivatelimited.com if you need help.",
     },
 ];
 
 const LINKS = [
     { icon: "card-outline", label: "Manage subscription", url: "https://apps.apple.com/account/subscriptions" },
     { icon: "refresh-outline", label: "Request an Apple refund", url: "https://reportaproblem.apple.com" },
-    { icon: "shield-checkmark-outline", label: "Privacy Policy", url: "https://bseptechnologies.com/privacy" },
-    { icon: "globe-outline", label: "Support website", url: "https://bseptechnologies.com/support" },
+    { icon: "shield-checkmark-outline", label: "Privacy Policy", url: "https://bseptechnologies.com/paper-ai/privacy" },
+    { icon: "globe-outline", label: "Support website", url: "https://bseptechnologies.com/paper-ai/support" },
     { icon: "mail-outline", label: "Email support", url: "mailto:info@bholeshankarenterprisesprivatelimited.com" },
 ];
 

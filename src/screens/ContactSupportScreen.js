@@ -8,7 +8,7 @@ import AppButton from "../ui/AppButton";
 // Central support contact details.
 const SUPPORT_PHONE = "+1 833 374-3700";
 const SUPPORT_EMAIL = "info@bholeshankarenterprisesprivatelimited.com";
-const SUPPORT_URL = "https://bseptechnologies.com/support";
+const SUPPORT_URL = "https://bseptechnologies.com/paper-ai/support";
 const MANAGE_SUBSCRIPTION_URL = "https://apps.apple.com/account/subscriptions";
 
 async function openLink(url) {
