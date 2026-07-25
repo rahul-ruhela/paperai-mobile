@@ -24,6 +24,7 @@ import {
     ScrollView,
 } from "react-native";
 import Constants from "expo-constants";
+import { LinearGradient } from "expo-linear-gradient";
 
 import { verifyIosTransactionAuto, getEntitlement } from "../api/billing";
 import {
@@ -363,28 +364,18 @@ function PaywallView({
                                 )}
                                 <Text style={styles.credits}>{product.credits} credits / cycle</Text>
 
-                                <TouchableOpacity
+                                <GradientCTA
                                     onPress={() => onSubscribe(product.sku)}
+                                    busy={isBusyThis}
                                     disabled={isActive || isBusyAny || priceUnavailable}
-                                    activeOpacity={0.9}
-                                    style={[
-                                        styles.cta,
-                                        tier.highlight && styles.ctaHighlight,
-                                        (isActive || isBusyAny || priceUnavailable) && styles.ctaDisabled,
-                                    ]}
-                                >
-                                    {isBusyThis ? (
-                                        <ActivityIndicator color="#374151" />
-                                    ) : (
-                                        <Text style={styles.ctaText}>
-                                            {isActive
-                                                ? "ACTIVE PLAN"
-                                                : priceUnavailable
-                                                ? "UNAVAILABLE"
-                                                : "Subscribe"}
-                                        </Text>
-                                    )}
-                                </TouchableOpacity>
+                                    label={
+                                        isActive
+                                            ? "ACTIVE PLAN"
+                                            : priceUnavailable
+                                            ? "UNAVAILABLE"
+                                            : "Subscribe"
+                                    }
+                                />
                             </View>
                         </Wrapper>
                     );
@@ -417,6 +408,57 @@ function PaywallView({
                 </View>
             </ScrollView>
         </ScreenContainer>
+    );
+}
+
+// ── Subscription CTA — PaperAI blue gradient with gentle press animation ──────
+function GradientCTA({ onPress, busy, disabled, label }) {
+    const scale = useRef(new Animated.Value(1)).current;
+
+    const pressIn = () =>
+        Animated.spring(scale, { toValue: 0.96, useNativeDriver: true, speed: 45, bounciness: 0 }).start();
+    const pressOut = () =>
+        Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 45, bounciness: 6 }).start();
+
+    // Disabled (active plan / unavailable) → flat muted button, no glow.
+    if (disabled && !busy) {
+        return (
+            <View
+                style={[styles.cta, styles.ctaDisabled]}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: true }}
+                accessibilityLabel={label}
+            >
+                <Text style={styles.ctaText}>{label}</Text>
+            </View>
+        );
+    }
+
+    return (
+        <Animated.View style={[styles.ctaGlow, { transform: [{ scale }] }]}>
+            <TouchableOpacity
+                onPress={onPress}
+                onPressIn={pressIn}
+                onPressOut={pressOut}
+                disabled={busy}
+                activeOpacity={0.92}
+                accessibilityRole="button"
+                accessibilityLabel={label}
+            >
+                <LinearGradient
+                    colors={["#1D4ED8", "#2563EB", "#38BDF8"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.cta}
+                >
+                    {busy ? (
+                        <ActivityIndicator color="#FFFFFF" />
+                    ) : (
+                        <Text style={styles.ctaText}>{label}</Text>
+                    )}
+                </LinearGradient>
+            </TouchableOpacity>
+        </Animated.View>
     );
 }
 
@@ -480,16 +522,23 @@ const styles = StyleSheet.create({
     credits: { color: "#2563EB", fontSize: 14, fontWeight: "700", marginTop: 4, marginBottom: 14 },
 
     cta: {
-        backgroundColor: "#4F8CFF",
         borderRadius: 14,
         paddingVertical: 16,
         minHeight: 52,
         alignItems: "center",
         justifyContent: "center",
     },
-    ctaHighlight: { backgroundColor: "#2563EB" },
+    // Wrapper carries the rounded corners + subtle blue glow around the gradient.
+    ctaGlow: {
+        borderRadius: 14,
+        shadowColor: "#2563EB",
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.45,
+        shadowRadius: 14,
+        elevation: 6,
+    },
     ctaDisabled: { backgroundColor: "#D1D5DB" },
-    ctaText: { color: "#FFFFFF", fontWeight: "700", fontSize: 15 },
+    ctaText: { color: "#FFFFFF", fontWeight: "800", fontSize: 15, letterSpacing: 0.3 },
 
     restore: {
         marginTop: 10,

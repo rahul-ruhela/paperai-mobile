@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
+    ActivityIndicator,
     Alert,
     Animated,
+    Dimensions,
     Easing,
     Linking,
     Pressable,
@@ -11,6 +13,7 @@ import {
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import * as MediaLibrary from "expo-media-library";
 
@@ -45,6 +48,8 @@ const SCAN_MESSAGES = [
 
 const PAGE_SIZE = 500;
 
+const { height: SCREEN_H } = Dimensions.get("window");
+
 // ── Dummy junk file generator ─────────────────────────────────────────────────
 // Cycles through counts [4,5,6,3,5,4,6] so each scan gives a different number.
 // Generates unique names each time using a random hex suffix.
@@ -57,6 +62,15 @@ function randHex(n = 4) {
 
 function randInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+// Human-readable size from raw bytes (used for the live junk-size readout).
+function formatSize(bytes) {
+    if (!bytes || bytes <= 0) return "0 MB";
+    const mb = bytes / 1024 / 1024;
+    if (mb >= 1024) return `${(mb / 1024).toFixed(2)} GB`;
+    if (mb >= 10) return `${mb.toFixed(0)} MB`;
+    return `${mb.toFixed(1)} MB`;
 }
 
 function generateDummyJunk() {
@@ -129,11 +143,24 @@ export default function JunkWiperScanScreen({ navigation }) {
     const [progress, setProgress] = useState(0);
     const [liveCount, setLiveCount] = useState(0);
     const [liveFound, setLiveFound] = useState(0);
+    const [liveBytes, setLiveBytes] = useState(0);
     const [stats, setStats] = useState({ photos: 0, groups: 0, savedMB: 0 });
     const [duplicates, setDuplicates] = useState([]);
     const [selected, setSelected] = useState(new Set());
     const [deleteConfirm, setDeleteConfirm] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    // Rocket cleanup animation shown while junk is being wiped
+    const [cleaning, setCleaning] = useState(false);
+    const [cleanDone, setCleanDone] = useState(false);
+    const rocketY = useRef(new Animated.Value(0)).current;
+    const rocketShake = useRef(new Animated.Value(0)).current;
+    const rocketOpacity = useRef(new Animated.Value(0)).current;
+    const smokeScale = useRef(new Animated.Value(0)).current;
+    const flameFlicker = useRef(new Animated.Value(0)).current;
+    const flameLoop = useRef(null);
+    // True while we check photo permission before the confirm modal appears —
+    // keeps the Start button showing a spinner instead of feeling frozen.
+    const [preparing, setPreparing] = useState(false);
     const txnIdRef = useRef(null);
 
     const [accessLevel, setAccessLevel] = useState(null); // null | 'all' | 'limited'
@@ -234,8 +261,15 @@ export default function JunkWiperScanScreen({ navigation }) {
     // accessPrivileges 'all'     → user gave full access → safe to scan everything
     // accessPrivileges 'limited' → user only selected specific photos → warn them
     async function requestScan() {
-        // requestPermissionsAsync(writeOnly=false) asks for full read+write access
-        const perm = await MediaLibrary.requestPermissionsAsync(false);
+        if (preparing) return;
+        setPreparing(true);
+        let perm;
+        try {
+            // requestPermissionsAsync(writeOnly=false) asks for full read+write access
+            perm = await MediaLibrary.requestPermissionsAsync(false);
+        } finally {
+            setPreparing(false);
+        }
 
         if (perm.status === "denied") {
             Alert.alert(
@@ -292,15 +326,36 @@ export default function JunkWiperScanScreen({ navigation }) {
         setConfirmModal({ visible: true, loading: false });
     }
 
-    // ── Step 2: User confirmed → reserve credits → run scan ───────────────────
+    // ── Step 2: User confirmed → run scan ─────────────────────────────────────
+    // We flip straight into the scanning UI so it feels instant, then reserve
+    // credits in parallel with the animation instead of blocking on the network
+    // (which was causing the 3–4s "frozen" gap after tapping Start Scan).
     async function startScan() {
-        setConfirmModal(m => ({ ...m, loading: true }));
+        // Show the scanning screen immediately — don't wait on the network.
+        setConfirmModal({ visible: false, loading: false });
+        setPhase("scanning");
+        setProgress(0);
+        setLiveCount(0);
+        setLiveFound(0);
+        setLiveBytes(0);
+        setMessageIdx(0);
+        startAnimations();
+
+        // Cycle scan messages
+        let msgI = 0;
+        msgInterval.current = setInterval(() => {
+            msgI = (msgI + 1) % SCAN_MESSAGES.length;
+            setMessageIdx(msgI);
+        }, 900);
+
+        // Reserve credits in the background while the animation is already running.
         try {
             const reservation = await reserveCredits("junk_wiper_scan_report", null, 0);
             txnIdRef.current = reservation.transactionId;
-            setConfirmModal({ visible: false, loading: false });
         } catch (e) {
-            setConfirmModal({ visible: false, loading: false });
+            stopAnimations();
+            setPhase("idle");
+            setProgress(0);
             if (e?.response?.status === 402) {
                 const p = e.response?.data;
                 Alert.alert("Not Enough Credits",
@@ -312,25 +367,12 @@ export default function JunkWiperScanScreen({ navigation }) {
             return;
         }
 
-        setPhase("scanning");
-        setProgress(0);
-        setLiveCount(0);
-        setLiveFound(0);
-        setMessageIdx(0);
-        startAnimations();
-
-        // Cycle scan messages
-        let msgI = 0;
-        msgInterval.current = setInterval(() => {
-            msgI = (msgI + 1) % SCAN_MESSAGES.length;
-            setMessageIdx(msgI);
-        }, 900);
-
         try {
             const groups = await findDuplicates(
                 (scanned) => setLiveCount(scanned),
                 (found) => setLiveFound(found),
                 (pct) => setProgress(pct),
+                (bytes) => setLiveBytes(bytes),
             );
 
             stopAnimations();
@@ -375,7 +417,7 @@ export default function JunkWiperScanScreen({ navigation }) {
     }
 
     // ── Duplicate detection — three strategies ─────────────────────────────────
-    async function findDuplicates(onScanned, onFound, onProgress) {
+    async function findDuplicates(onScanned, onFound, onProgress, onBytes) {
         // Phase 1: load all assets (0–60% of progress bar)
         let assets = [];
         let after = undefined;
@@ -482,6 +524,10 @@ export default function JunkWiperScanScreen({ navigation }) {
                 // For display — show all copies including the one we keep
                 allCount: unique.length,
             });
+
+            // Live feedback — real detected count + reclaimable bytes so far
+            onFound?.(groups.length);
+            onBytes?.(groups.reduce((acc, g) => acc + g.totalBytes, 0));
         }
 
         // Strategy 1 — exact fileSize matches (most reliable — do first)
@@ -519,9 +565,59 @@ export default function JunkWiperScanScreen({ navigation }) {
     function selectAll() { setSelected(new Set(duplicates.map(d => d.id))); }
     function deselectAll() { setSelected(new Set()); }
 
-    async function deleteSelected() {
-        setDeleting(true);
+    // Fire the rocket launch animation, then run the actual deletion.
+    function deleteSelected() {
         setDeleteConfirm(false);
+        setDeleting(true);
+        setCleaning(true);
+        setCleanDone(false);
+
+        // Reset animation values — rocket sits on the launch pad at the bottom.
+        rocketY.setValue(0);
+        rocketShake.setValue(0);
+        rocketOpacity.setValue(1);
+        smokeScale.setValue(0);
+
+        // Continuous flame flicker for the whole launch
+        flameFlicker.setValue(0);
+        flameLoop.current = Animated.loop(
+            Animated.sequence([
+                Animated.timing(flameFlicker, { toValue: 1, duration: 80, useNativeDriver: true }),
+                Animated.timing(flameFlicker, { toValue: 0, duration: 80, useNativeDriver: true }),
+            ])
+        );
+        flameLoop.current.start();
+
+        Animated.sequence([
+            // 1. Pre-launch rumble at the bottom
+            Animated.loop(
+                Animated.sequence([
+                    Animated.timing(rocketShake, { toValue: 1, duration: 60, useNativeDriver: true }),
+                    Animated.timing(rocketShake, { toValue: -1, duration: 60, useNativeDriver: true }),
+                ]),
+                { iterations: 6 }
+            ),
+            // 2. Blast off — fly to the top of the screen
+            Animated.parallel([
+                Animated.timing(rocketY, {
+                    toValue: -SCREEN_H,
+                    duration: 1400,
+                    easing: Easing.in(Easing.cubic),
+                    useNativeDriver: true,
+                }),
+                Animated.timing(smokeScale, {
+                    toValue: 1,
+                    duration: 700,
+                    useNativeDriver: true,
+                }),
+            ]),
+        ]).start(() => {
+            performDelete();
+        });
+    }
+
+    async function performDelete() {
+        if (flameLoop.current) { flameLoop.current.stop(); flameLoop.current = null; }
         try {
             const selectedItems = duplicates.filter(d => selected.has(d.id));
 
@@ -537,16 +633,24 @@ export default function JunkWiperScanScreen({ navigation }) {
             // that doesn't map to a real asset ID; the UI removal IS the cleanup action.
 
             const remaining = duplicates.filter(d => !selected.has(d.id));
-            setDuplicates(remaining);
-            setSelected(new Set());
 
-            if (remaining.length === 0) {
-                Alert.alert("✓ All Done!", "Junk files cleaned successfully. Your device storage has been freed up.");
-            }
+            // Show the "cleaned up!" confirmation for a beat before tearing down.
+            setCleanDone(true);
+            setTimeout(() => {
+                setDuplicates(remaining);
+                setSelected(new Set());
+                setCleaning(false);
+                setCleanDone(false);
+                setDeleting(false);
+                if (remaining.length === 0) {
+                    Alert.alert("✓ All Done!", "Junk files cleaned successfully. Your device storage has been freed up.");
+                }
+            }, 900);
         } catch (err) {
-            Alert.alert("Delete Failed", err.message || "Could not delete some items. Please try again.");
-        } finally {
+            setCleaning(false);
+            setCleanDone(false);
             setDeleting(false);
+            Alert.alert("Delete Failed", err.message || "Could not delete some items. Please try again.");
         }
     }
 
@@ -558,31 +662,15 @@ export default function JunkWiperScanScreen({ navigation }) {
     const scanY = scanLine.interpolate({ inputRange: [0, 1], outputRange: [-80, 80] });
     const hexScale = hexPulse.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 1.08, 1] });
 
-    // 5 particles orbiting at different radii and angles
-    const particles = [p1, p2, p3, p4, p5].map((p, i) => {
-        const radius = 90 + i * 8;
-        const startAngle = (i * 72) * (Math.PI / 180);
-        return {
-            x: p.interpolate({
-                inputRange: [0, 1],
-                outputRange: [
-                    radius * Math.cos(startAngle),
-                    radius * Math.cos(startAngle + Math.PI * 2),
-                ],
-            }),
-            y: p.interpolate({
-                inputRange: [0, 1],
-                outputRange: [
-                    radius * Math.sin(startAngle),
-                    radius * Math.sin(startAngle + Math.PI * 2),
-                ],
-            }),
-            opacity: p.interpolate({
-                inputRange: [0, 0.5, 1],
-                outputRange: [0.9, 0.4, 0.9],
-            }),
-        };
-    });
+    // Expanding radar pulse (scale up + fade out) driven by the hex pulse value
+    const pulseScale = hexPulse.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1.35] });
+    const pulseFade = hexPulse.interpolate({ inputRange: [0, 0.15, 1], outputRange: [0, 0.5, 0] });
+
+    // Category chips (file / photo / cache / duplicate / trash) fade in and out
+    // as the sweep passes — each on its own particle timer for a staggered feel.
+    const categoryFades = [p1, p2, p3, p4, p5].map(p =>
+        p.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.25, 1, 0.25] })
+    );
 
     function strategyBadge(strategy) {
         if (strategy === "exact") return { label: "Exact copy", color: "#FF5A5F" };
@@ -655,97 +743,131 @@ export default function JunkWiperScanScreen({ navigation }) {
                                 </View>
                             )}
 
-                            <Pressable style={styles.startBtn} onPress={requestScan}>
-                                <Ionicons name="play-circle" size={22} color="#fff" />
-                                <Text style={styles.startBtnText}>Start Scan · {featureCfg.creditCost} credits</Text>
+                            <Pressable
+                                style={[styles.startBtn, preparing && { opacity: 0.85 }]}
+                                onPress={requestScan}
+                                disabled={preparing}
+                            >
+                                {preparing ? (
+                                    <>
+                                        <ActivityIndicator size="small" color="#fff" />
+                                        <Text style={styles.startBtnText}>Starting…</Text>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Ionicons name="play-circle" size={22} color="#fff" />
+                                        <Text style={styles.startBtnText}>Start Scan · {featureCfg.creditCost} credits</Text>
+                                    </>
+                                )}
                             </Pressable>
                         </View>
                     )}
 
-                    {/* ──────────── SCANNING — JARVIS ANIMATION ──────────── */}
+                    {/* ──────────── SCANNING — PREMIUM RADAR ──────────── */}
                     {phase === "scanning" && (
-                        <View style={styles.scannerWrap}>
+                        <LinearGradient
+                            colors={["#0A1230", "#0B1B44", "#08122E"]}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={styles.radarScreen}
+                        >
+                            {/* Radar dish */}
+                            <View
+                                style={styles.radarStage}
+                                accessible
+                                accessibilityRole="progressbar"
+                                accessibilityLabel={`Scanning for junk files. ${progress} percent complete. ${liveCount} photos scanned, ${liveFound} duplicates found, ${formatSize(liveBytes)} reclaimable.`}
+                                accessibilityValue={{ min: 0, max: 100, now: progress }}
+                            >
+                                {/* Expanding soft pulse */}
+                                <Animated.View
+                                    style={[
+                                        styles.radarPulse,
+                                        { opacity: pulseFade, transform: [{ scale: pulseScale }] },
+                                    ]}
+                                />
 
-                            {/* Outer hex pulse ring */}
-                            <Animated.View style={[styles.hexRing, { transform: [{ scale: hexScale }], opacity: glowPulse }]} />
+                                {/* Thin concentric rings */}
+                                <View style={[styles.radarRing, styles.radarRingOuter]} />
+                                <View style={[styles.radarRing, styles.radarRingMid]} />
+                                <View style={[styles.radarRing, styles.radarRingInner]} />
 
-                            {/* Main ring stack */}
-                            <View style={styles.ringContainer}>
-                                {/* Ring 3 — outermost slow */}
-                                <Animated.View style={[styles.ring, styles.ring3, { transform: [{ rotate: r3Rot }] }]} />
-                                {/* Ring 2 — counter-rotate */}
-                                <Animated.View style={[styles.ring, styles.ring2, { transform: [{ rotate: r2Rot }] }]} />
-                                {/* Ring 1 — inner fast */}
-                                <Animated.View style={[styles.ring, styles.ring1, { transform: [{ rotate: r1Rot }] }]} />
+                                {/* Cross-hair grid */}
+                                <View style={styles.radarCrossH} />
+                                <View style={styles.radarCrossV} />
 
-                                {/* Radar sweep wedge */}
-                                <Animated.View style={[styles.radarWedge, { transform: [{ rotate: radarRot }] }]} />
+                                {/* Rotating glowing sweep (clipped to the dish) */}
+                                <View style={styles.radarClip}>
+                                    <Animated.View style={[styles.sweepRotor, { transform: [{ rotate: radarRot }] }]}>
+                                        <LinearGradient
+                                            colors={["rgba(56,189,248,0)", "rgba(56,189,248,0.55)"]}
+                                            start={{ x: 0, y: 1 }}
+                                            end={{ x: 1, y: 0 }}
+                                            style={styles.sweepBeam}
+                                        />
+                                        <View style={styles.sweepEdge} />
+                                    </Animated.View>
+                                </View>
 
-                                {/* Central glow */}
-                                <Animated.View style={[styles.glow, { opacity: glowPulse }]} />
-
-                                {/* Horizontal scan line */}
-                                <Animated.View style={[styles.scanLine, { transform: [{ translateY: scanY }] }]} />
-
-                                {/* Orbiting particles */}
-                                {particles.map((p, i) => (
-                                    <Animated.View
-                                        key={i}
-                                        style={[
-                                            styles.particle,
-                                            {
-                                                opacity: p.opacity,
-                                                transform: [
-                                                    { translateX: p.x },
-                                                    { translateY: p.y },
-                                                ],
-                                            },
-                                        ]}
-                                    />
-                                ))}
-
-                                {/* Center icon */}
-                                <Animated.View style={[styles.centerIcon, { transform: [{ scale: iconScale }] }]}>
-                                    <Ionicons name="search" size={30} color="#2563EB" />
-                                </Animated.View>
+                                {/* Center readout */}
+                                <View style={styles.radarCenter}>
+                                    <Text style={styles.radarPct}>{progress}%</Text>
+                                    <Text style={styles.radarCenterLabel}>SCANNING</Text>
+                                </View>
                             </View>
 
-                            {/* Progress percentage */}
-                            <Text style={styles.progressPct}>{progress}%</Text>
-
                             {/* Scan message */}
-                            <Text style={styles.scanMsg}>{SCAN_MESSAGES[messageIdx]}</Text>
+                            <Text style={styles.radarMsg}>{SCAN_MESSAGES[messageIdx]}</Text>
 
-                            {/* Live counters */}
-                            <View style={styles.liveCountRow}>
-                                <View style={styles.liveCounter}>
-                                    <Text style={styles.liveCountVal}>{liveCount.toLocaleString()}</Text>
-                                    <Text style={styles.liveCountLabel}>Photos scanned</Text>
+                            {/* Category chips that fade as files are scanned */}
+                            <View style={styles.categoryRow}>
+                                {[
+                                    { icon: "document-text-outline", label: "Files" },
+                                    { icon: "image-outline", label: "Photos" },
+                                    { icon: "server-outline", label: "Cache" },
+                                    { icon: "copy-outline", label: "Duplicates" },
+                                    { icon: "trash-outline", label: "Trash" },
+                                ].map((c, i) => (
+                                    <Animated.View key={c.label} style={[styles.categoryChip, { opacity: categoryFades[i] }]}>
+                                        <Ionicons name={c.icon} size={16} color="#7DD3FC" />
+                                        <Text style={styles.categoryLabel}>{c.label}</Text>
+                                    </Animated.View>
+                                ))}
+                            </View>
+
+                            {/* Live stats — real values from the scan */}
+                            <View style={styles.radarStatsRow}>
+                                <View style={styles.radarStat}>
+                                    <Text style={styles.radarStatVal}>{liveCount.toLocaleString()}</Text>
+                                    <Text style={styles.radarStatLabel}>Detected</Text>
                                 </View>
-                                <View style={styles.liveCountDivider} />
-                                <View style={styles.liveCounter}>
-                                    <Text style={[styles.liveCountVal, liveFound > 0 && { color: "#FF5A5F" }]}>
-                                        {liveFound}
-                                    </Text>
-                                    <Text style={styles.liveCountLabel}>Duplicates found</Text>
+                                <View style={styles.radarStatDivider} />
+                                <View style={styles.radarStat}>
+                                    <Text style={[styles.radarStatVal, liveFound > 0 && { color: "#FCA5A5" }]}>{liveFound}</Text>
+                                    <Text style={styles.radarStatLabel}>Duplicates</Text>
+                                </View>
+                                <View style={styles.radarStatDivider} />
+                                <View style={styles.radarStat}>
+                                    <Text style={[styles.radarStatVal, { color: "#7DD3FC" }]}>{formatSize(liveBytes)}</Text>
+                                    <Text style={styles.radarStatLabel}>Junk size</Text>
                                 </View>
                             </View>
 
                             {/* Progress bar */}
-                            <View style={styles.progressBarTrack}>
-                                <Animated.View style={[styles.progressBarFill, { width: `${progress}%` }]} />
+                            <View style={styles.radarBarTrack}>
+                                <View style={[styles.radarBarFill, { width: `${progress}%` }]} />
                             </View>
 
                             {/* Safety note */}
-                            <View style={styles.safetyRow}>
-                                <Ionicons name="shield-checkmark-outline" size={14} color="#2563EB" />
-                                <Text style={styles.safetyText}>Nothing will be deleted without your confirmation.</Text>
+                            <View style={styles.radarSafety}>
+                                <Ionicons name="shield-checkmark-outline" size={14} color="#7DD3FC" />
+                                <Text style={styles.radarSafetyText}>Nothing will be deleted without your confirmation.</Text>
                             </View>
 
-                            <Pressable style={styles.cancelBtn} onPress={cancelScan}>
-                                <Text style={styles.cancelBtnText}>Cancel Scan</Text>
+                            <Pressable style={styles.radarCancel} onPress={cancelScan} accessibilityRole="button">
+                                <Text style={styles.radarCancelText}>Cancel Scan</Text>
                             </Pressable>
-                        </View>
+                        </LinearGradient>
                     )}
 
                     {/* ──────────── DONE / REPORT ──────────── */}
@@ -875,6 +997,77 @@ export default function JunkWiperScanScreen({ navigation }) {
                 onConfirm={deleteSelected}
                 onCancel={() => setDeleteConfirm(false)}
             />
+
+            {/* ──────────── ROCKET CLEANUP OVERLAY ──────────── */}
+            {cleaning && (
+                <View style={styles.cleanOverlay} pointerEvents="auto">
+                    {!cleanDone ? (
+                        <>
+                            <Animated.View
+                                style={[
+                                    styles.rocketWrap,
+                                    {
+                                        opacity: rocketOpacity,
+                                        transform: [
+                                            { translateY: rocketY },
+                                            {
+                                                translateX: rocketShake.interpolate({
+                                                    inputRange: [-1, 1],
+                                                    outputRange: [-3, 3],
+                                                }),
+                                            },
+                                        ],
+                                    },
+                                ]}
+                            >
+                                {/* Rocket body — rotate the diagonal glyph so the nose points straight up */}
+                                <View style={styles.rocketIcon}>
+                                    <Ionicons name="rocket" size={78} color="#E8EEFF" />
+                                </View>
+
+                                {/* Exhaust flame — layered cones that flicker */}
+                                <Animated.View
+                                    style={[
+                                        styles.flameStack,
+                                        {
+                                            opacity: smokeScale,
+                                            transform: [
+                                                {
+                                                    scaleY: flameFlicker.interpolate({
+                                                        inputRange: [0, 1],
+                                                        outputRange: [1, 1.45],
+                                                    }),
+                                                },
+                                                {
+                                                    scaleX: flameFlicker.interpolate({
+                                                        inputRange: [0, 1],
+                                                        outputRange: [1, 0.82],
+                                                    }),
+                                                },
+                                            ],
+                                        },
+                                    ]}
+                                >
+                                    <View style={styles.flameOuter} />
+                                    <View style={styles.flameMid} />
+                                    <View style={styles.flameCore} />
+                                </Animated.View>
+
+                                {/* Rising sparks under the flame */}
+                                <Animated.View style={[styles.spark, styles.sparkA, { opacity: smokeScale }]} />
+                                <Animated.View style={[styles.spark, styles.sparkB, { opacity: smokeScale }]} />
+                                <Animated.View style={[styles.spark, styles.sparkC, { opacity: smokeScale }]} />
+                            </Animated.View>
+                            <Text style={styles.cleanText}>Cleaning up junk files…</Text>
+                        </>
+                    ) : (
+                        <View style={styles.cleanDoneBox}>
+                            <Ionicons name="checkmark-circle" size={64} color="#22C55E" />
+                            <Text style={styles.cleanDoneText}>All cleaned up!</Text>
+                        </View>
+                    )}
+                </View>
+            )}
 
             <CreditConfirmModal
                 visible={confirmModal.visible}
@@ -1065,6 +1258,128 @@ const styles = StyleSheet.create({
     },
     cancelBtnText: { color: "#6B7280", fontWeight: "800" },
 
+    // ── Premium radar scanner ──
+    radarScreen: {
+        borderRadius: 28,
+        paddingVertical: 28,
+        paddingHorizontal: 20,
+        alignItems: "center",
+        gap: 18,
+        borderWidth: 1,
+        borderColor: "rgba(56,189,248,0.18)",
+        shadowColor: "#0A1230",
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.4,
+        shadowRadius: 20,
+        elevation: 8,
+    },
+    radarStage: {
+        width: 230, height: 230,
+        alignItems: "center", justifyContent: "center",
+    },
+    radarPulse: {
+        position: "absolute",
+        width: 230, height: 230, borderRadius: 115,
+        backgroundColor: "rgba(56,189,248,0.18)",
+    },
+    radarRing: {
+        position: "absolute",
+        borderRadius: 999,
+        borderWidth: 1,
+        borderColor: "rgba(56,189,248,0.22)",
+    },
+    radarRingOuter: { width: 220, height: 220 },
+    radarRingMid: { width: 152, height: 152, borderColor: "rgba(56,189,248,0.28)" },
+    radarRingInner: { width: 84, height: 84, borderColor: "rgba(56,189,248,0.34)" },
+    radarCrossH: {
+        position: "absolute", width: 220, height: 1,
+        backgroundColor: "rgba(56,189,248,0.14)",
+    },
+    radarCrossV: {
+        position: "absolute", width: 1, height: 220,
+        backgroundColor: "rgba(56,189,248,0.14)",
+    },
+    // Clip container keeps the rotating sweep inside the circular dish
+    radarClip: {
+        position: "absolute",
+        width: 220, height: 220, borderRadius: 110,
+        overflow: "hidden",
+        alignItems: "center", justifyContent: "center",
+    },
+    sweepRotor: {
+        width: 220, height: 220,
+        alignItems: "center", justifyContent: "center",
+    },
+    // A quarter-circle beam that trails off — one half of the rotor
+    sweepBeam: {
+        position: "absolute",
+        top: 0, right: 0,
+        width: 110, height: 110,
+    },
+    sweepEdge: {
+        position: "absolute",
+        top: 0, left: 110,
+        width: 2, height: 110,
+        backgroundColor: "rgba(125,211,252,0.95)",
+        shadowColor: "#38BDF8",
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 1,
+        shadowRadius: 6,
+    },
+    radarCenter: {
+        width: 84, height: 84, borderRadius: 42,
+        alignItems: "center", justifyContent: "center",
+        backgroundColor: "rgba(9,18,46,0.65)",
+        borderWidth: 1, borderColor: "rgba(56,189,248,0.4)",
+    },
+    radarPct: { color: "#FFFFFF", fontSize: 28, fontWeight: "900", letterSpacing: -1 },
+    radarCenterLabel: { color: "#7DD3FC", fontSize: 10, fontWeight: "800", letterSpacing: 2 },
+
+    radarMsg: { color: "#BAE6FD", fontWeight: "700", fontSize: 14, textAlign: "center" },
+
+    categoryRow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 8 },
+    categoryChip: {
+        flexDirection: "row", alignItems: "center", gap: 5,
+        backgroundColor: "rgba(56,189,248,0.10)",
+        borderWidth: 1, borderColor: "rgba(56,189,248,0.25)",
+        borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6,
+    },
+    categoryLabel: { color: "#E0F2FE", fontWeight: "700", fontSize: 11 },
+
+    radarStatsRow: {
+        flexDirection: "row", alignItems: "center",
+        backgroundColor: "rgba(255,255,255,0.05)",
+        borderWidth: 1, borderColor: "rgba(56,189,248,0.18)",
+        borderRadius: 16, paddingVertical: 12, paddingHorizontal: 12,
+        alignSelf: "stretch",
+    },
+    radarStat: { flex: 1, alignItems: "center", gap: 2 },
+    radarStatVal: { color: "#FFFFFF", fontWeight: "900", fontSize: 18 },
+    radarStatLabel: { color: "#94A3B8", fontWeight: "700", fontSize: 10, letterSpacing: 0.4 },
+    radarStatDivider: { width: 1, height: 34, backgroundColor: "rgba(148,163,184,0.25)" },
+
+    radarBarTrack: {
+        alignSelf: "stretch", height: 5, borderRadius: 3,
+        backgroundColor: "rgba(255,255,255,0.10)",
+        overflow: "hidden",
+    },
+    radarBarFill: { height: 5, borderRadius: 3, backgroundColor: "#38BDF8" },
+
+    radarSafety: {
+        flexDirection: "row", alignItems: "center", gap: 7,
+        backgroundColor: "rgba(56,189,248,0.08)",
+        borderWidth: 1, borderColor: "rgba(56,189,248,0.20)",
+        borderRadius: 12, padding: 10, alignSelf: "stretch",
+    },
+    radarSafetyText: { flex: 1, color: "#CBD5E1", fontSize: 12, fontWeight: "700", lineHeight: 17 },
+
+    radarCancel: {
+        paddingVertical: 12, paddingHorizontal: 28, borderRadius: 16,
+        backgroundColor: "rgba(255,255,255,0.06)",
+        borderWidth: 1, borderColor: "rgba(148,163,184,0.3)",
+    },
+    radarCancelText: { color: "#CBD5E1", fontWeight: "800" },
+
     // ── Report ──
     reportWrap: { gap: 14 },
     reportHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
@@ -1131,4 +1446,64 @@ const styles = StyleSheet.create({
         borderWidth: 1, borderColor: "rgba(255,255,255,0.90)",
     },
     rescanText: { color: "#6B7280", fontWeight: "800" },
+
+    // ── Rocket cleanup overlay ──
+    cleanOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: "rgba(8,15,35,0.82)",
+        alignItems: "center",
+        justifyContent: "flex-end",
+        paddingBottom: 120,
+    },
+    rocketWrap: { alignItems: "center", justifyContent: "center" },
+    // Ionicons "rocket" points to the top-right (~45°); rotate -45° so it points up.
+    rocketIcon: { transform: [{ rotate: "-45deg" }], zIndex: 2 },
+
+    // Flame cones stacked below the rocket, anchored at the top so they grow downward.
+    flameStack: {
+        marginTop: -10,
+        alignItems: "center",
+        zIndex: 1,
+    },
+    flameOuter: {
+        width: 26, height: 56,
+        borderTopLeftRadius: 13, borderTopRightRadius: 13,
+        borderBottomLeftRadius: 13, borderBottomRightRadius: 13,
+        backgroundColor: "#FF7A00",
+        shadowColor: "#FF5A00",
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.95,
+        shadowRadius: 16,
+    },
+    flameMid: {
+        position: "absolute", top: 4,
+        width: 16, height: 40,
+        borderRadius: 9,
+        backgroundColor: "#FFB020",
+    },
+    flameCore: {
+        position: "absolute", top: 8,
+        width: 8, height: 24,
+        borderRadius: 5,
+        backgroundColor: "#FFF3C4",
+    },
+    spark: {
+        position: "absolute",
+        width: 4, height: 4, borderRadius: 2,
+        backgroundColor: "#FFC46B",
+    },
+    sparkA: { bottom: -14, left: -8 },
+    sparkB: { bottom: -22, right: -6 },
+    sparkC: { bottom: -30, left: 4 },
+    cleanText: {
+        position: "absolute",
+        bottom: 60,
+        color: "#fff", fontWeight: "900", fontSize: 16, textAlign: "center",
+    },
+    cleanDoneBox: {
+        alignItems: "center", gap: 14,
+        alignSelf: "center",
+        marginBottom: SCREEN_H * 0.35,
+    },
+    cleanDoneText: { color: "#fff", fontWeight: "900", fontSize: 22 },
 });
