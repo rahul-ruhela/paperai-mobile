@@ -53,11 +53,12 @@ function Tabs({ onLoggedOut }) {
         <Tab.Navigator
             screenOptions={({ route }) => ({
                 headerShown: false,
-                tabBarActiveTintColor: "#A5B4FC",
-                tabBarInactiveTintColor: "rgba(255,255,255,0.55)",
+                tabBarActiveTintColor: "#2563EB",
+                tabBarInactiveTintColor: "#6B7280",
+                tabBarLabelStyle: { fontWeight: "600", fontSize: 11 },
                 tabBarStyle: {
-                    backgroundColor: "rgba(13,20,38,0.92)",
-                    borderTopColor: "rgba(255,255,255,0.08)",
+                    backgroundColor: "rgba(255,255,255,0.96)",
+                    borderTopColor: "#E5E7EB",
                     height: 90,
                     paddingBottom: 12,
                     paddingTop: 4,
@@ -157,18 +158,18 @@ export default function App() {
             <Stack.Navigator
                 screenOptions={{
                     headerStyle: {
-                        backgroundColor: "#020617", // dark app background
+                        backgroundColor: "#F5F7FB", // light app background
                     },
                     headerTitleAlign: "center",
 
-                    headerTintColor: "#FFFFFF", // back arrow + title
+                    headerTintColor: "#111111", // back arrow + title
                     headerTitleStyle: {
                         fontWeight: "700",
                         fontSize: 16,
                     },
-                    headerShadowVisible: false, // removes white bottom border
+                    headerShadowVisible: false, // removes bottom border
                     contentStyle: {
-                        backgroundColor: "#020617", // PREVENTS white flash
+                        backgroundColor: "#F5F7FB", // PREVENTS dark flash
                     },
                 }}
             >

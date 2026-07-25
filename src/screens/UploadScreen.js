@@ -241,7 +241,7 @@ export default function UploadScreen({ navigation }) {
                     <View style={styles.header}>
                         <Text style={styles.hTitle}>Upload</Text>
                         <Pressable style={styles.creditBadge} onPress={() => navigation.navigate("Paywall")}>
-                            <Ionicons name="flash" size={14} color="#FBBF24" />
+                            <Ionicons name="flash" size={14} color="#F59E0B" />
                             <Text style={styles.creditText}>{credits === null ? "…" : `${credits} credits`}</Text>
                         </Pressable>
                     </View>
@@ -261,7 +261,7 @@ export default function UploadScreen({ navigation }) {
                     <View style={styles.card}>
                         <View style={styles.cardHeader}>
                             <View style={[styles.cardIcon, { backgroundColor: "rgba(251,191,36,0.12)" }]}>
-                                <Ionicons name="scan-outline" size={20} color="#FBBF24" />
+                                <Ionicons name="scan-outline" size={20} color="#F59E0B" />
                             </View>
                             <View style={{ flex: 1 }}>
                                 <Text style={styles.cardTitle}>Extract Text from Image</Text>
@@ -272,10 +272,10 @@ export default function UploadScreen({ navigation }) {
 
                         {ocrImage && (
                             <View style={styles.ocrPreviewRow}>
-                                <Ionicons name="image" size={16} color="#A5B4FC" />
+                                <Ionicons name="image" size={16} color="#2563EB" />
                                 <Text style={styles.ocrFileName} numberOfLines={1}>{ocrImage.name}</Text>
                                 <Pressable onPress={() => { setOcrImage(null); setOcrText(null); }} hitSlop={10}>
-                                    <Ionicons name="close-circle" size={18} color="rgba(255,255,255,0.4)" />
+                                    <Ionicons name="close-circle" size={18} color="#9CA3AF" />
                                 </Pressable>
                             </View>
                         )}
@@ -285,14 +285,14 @@ export default function UploadScreen({ navigation }) {
                                 icon="images-outline"
                                 label={ocrImage ? "Change Image" : "Select Image"}
                                 onPress={pickImageForOCR}
-                                color="#A5B4FC"
+                                color="#2563EB"
                             />
                             {ocrImage && !ocrText && (
                                 <ActionBtn
                                     icon="text-outline"
                                     label={ocrRunning ? "Extracting…" : "Extract Text"}
                                     onPress={requestOCR}
-                                    color="#FBBF24"
+                                    color="#F59E0B"
                                     disabled={ocrRunning}
                                 />
                             )}
@@ -300,7 +300,7 @@ export default function UploadScreen({ navigation }) {
 
                         {ocrRunning && (
                             <View style={styles.ocrLoading}>
-                                <ActivityIndicator size="small" color="#FBBF24" />
+                                <ActivityIndicator size="small" color="#F59E0B" />
                                 <Text style={styles.ocrLoadingText}>Extracting text…</Text>
                             </View>
                         )}
@@ -314,7 +314,7 @@ export default function UploadScreen({ navigation }) {
                                         hitSlop={10}
                                         style={({ pressed }) => [styles.copyBtn, pressed && { opacity: 0.65 }]}
                                     >
-                                        <Ionicons name="copy-outline" size={16} color="#A5B4FC" />
+                                        <Ionicons name="copy-outline" size={16} color="#2563EB" />
                                         <Text style={styles.copyBtnText}>Copy</Text>
                                     </Pressable>
                                 </View>
@@ -340,8 +340,8 @@ export default function UploadScreen({ navigation }) {
                     {/* 3. Scan Document — FREE (scan + save/PDF; AI optional) */}
                     <View style={styles.card}>
                         <View style={styles.cardHeader}>
-                            <View style={[styles.cardIcon, { backgroundColor: "rgba(52,211,153,0.12)" }]}>
-                                <Ionicons name="camera-outline" size={20} color="#34D399" />
+                            <View style={[styles.cardIcon, { backgroundColor: "rgba(79,140,255,0.12)" }]}>
+                                <Ionicons name="camera-outline" size={20} color="#4F8CFF" />
                             </View>
                             <View style={{ flex: 1 }}>
                                 <Text style={styles.cardTitle}>Scan Document</Text>
@@ -352,14 +352,14 @@ export default function UploadScreen({ navigation }) {
                             <FreeBadge />
                         </View>
                         <ActionBtn icon="camera-outline" label="Open Document Scanner"
-                            onPress={openCameraScanner} color="#34D399" full />
+                            onPress={openCameraScanner} color="#4F8CFF" full />
                     </View>
 
                     {/* 4. Scan QR & Codes — FREE general utility */}
                     <View style={styles.card}>
                         <View style={styles.cardHeader}>
-                            <View style={[styles.cardIcon, { backgroundColor: "rgba(165,180,252,0.14)" }]}>
-                                <Ionicons name="qr-code-outline" size={20} color="#A5B4FC" />
+                            <View style={[styles.cardIcon, { backgroundColor: "rgba(79,140,255,0.14)" }]}>
+                                <Ionicons name="qr-code-outline" size={20} color="#2563EB" />
                             </View>
                             <View style={{ flex: 1 }}>
                                 <Text style={styles.cardTitle}>Scan QR &amp; Codes</Text>
@@ -370,7 +370,7 @@ export default function UploadScreen({ navigation }) {
                             <FreeBadge />
                         </View>
                         <ActionBtn icon="scan-outline" label="Open Code Scanner"
-                            onPress={openCodeScanner} color="#A5B4FC" full />
+                            onPress={openCodeScanner} color="#2563EB" full />
                     </View>
 
                     {/* ── Advanced ── */}
@@ -383,8 +383,8 @@ export default function UploadScreen({ navigation }) {
                     {/* 5. Junk Wiper — advanced, credit-based */}
                     <View style={styles.card}>
                         <View style={styles.cardHeader}>
-                            <View style={[styles.cardIcon, { backgroundColor: "rgba(239,68,68,0.12)" }]}>
-                                <Ionicons name="trash-bin-outline" size={20} color="#F87171" />
+                            <View style={[styles.cardIcon, { backgroundColor: "rgba(255,90,95,0.12)" }]}>
+                                <Ionicons name="trash-bin-outline" size={20} color="#FF5A5F" />
                             </View>
                             <View style={{ flex: 1 }}>
                                 <Text style={styles.cardTitle}>Junk Wiper</Text>
@@ -393,18 +393,18 @@ export default function UploadScreen({ navigation }) {
                             <CreditBadge cost={configFor("junk_wiper_scan_report").creditCost} />
                         </View>
                         <View style={styles.safetyNote}>
-                            <Ionicons name="shield-checkmark-outline" size={13} color="#34D399" />
+                            <Ionicons name="shield-checkmark-outline" size={13} color="#4F8CFF" />
                             <Text style={styles.safetyText}>Nothing is deleted without your review and confirmation.</Text>
                         </View>
                         <ActionBtn icon="search-outline" label="Start Duplicate Scan"
-                            onPress={openJunkWiper} color="#F87171" full />
+                            onPress={openJunkWiper} color="#FF5A5F" full />
                     </View>
 
                     <Pressable
                         style={({ pressed }) => [styles.upgradeBanner, pressed && { opacity: 0.8 }]}
                         onPress={() => navigation.navigate("Paywall")}
                     >
-                        <Ionicons name="sparkles-outline" size={16} color="#FBCFE8" />
+                        <Ionicons name="sparkles-outline" size={16} color="#2563EB" />
                         <Text style={styles.upgradeText}>Need more credits? Upgrade your plan →</Text>
                     </Pressable>
                 </ScrollView>
@@ -424,7 +424,7 @@ export default function UploadScreen({ navigation }) {
     );
 }
 
-function SectionCard({ icon, title, subtitle, onPress, disabled, actionLabel, actionIcon, accentColor = "#A5B4FC" }) {
+function SectionCard({ icon, title, subtitle, onPress, disabled, actionLabel, actionIcon, accentColor = "#2563EB" }) {
     return (
         <View style={styles.card}>
             <View style={styles.cardHeader}>
@@ -442,7 +442,7 @@ function SectionCard({ icon, title, subtitle, onPress, disabled, actionLabel, ac
     );
 }
 
-function ActionBtn({ icon, label, onPress, disabled, color = "#A5B4FC", full }) {
+function ActionBtn({ icon, label, onPress, disabled, color = "#2563EB", full }) {
     return (
         <Pressable
             onPress={onPress}
@@ -465,7 +465,7 @@ function AiActionBtn({ icon, label, onPress }) {
     return (
         <Pressable onPress={onPress}
             style={({ pressed }) => [styles.aiBtn, pressed && { opacity: 0.75 }]}>
-            <Ionicons name={icon} size={15} color="#A5B4FC" />
+            <Ionicons name={icon} size={15} color="#2563EB" />
             <Text style={styles.aiBtnLabel}>{label}</Text>
             <Text style={styles.aiBtnSoon}>soon</Text>
         </Pressable>
@@ -476,7 +476,7 @@ function CreditBadge({ cost }) {
     if (!cost) return null;
     return (
         <View style={styles.creditBadgeSmall}>
-            <Ionicons name="flash" size={11} color="#FBBF24" />
+            <Ionicons name="flash" size={11} color="#F59E0B" />
             <Text style={styles.creditBadgeSmallText}>{cost}</Text>
         </View>
     );
@@ -493,79 +493,82 @@ function FreeBadge() {
 const styles = StyleSheet.create({
     container: { padding: 16, gap: 14, paddingBottom: 40 },
     header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 2 },
-    hTitle: { color: "#fff", fontSize: 26, fontWeight: "900" },
+    hTitle: { color: "#111111", fontSize: 26, fontWeight: "800" },
     creditBadge: {
         flexDirection: "row", alignItems: "center", gap: 5,
-        backgroundColor: "rgba(251,191,36,0.12)",
-        borderWidth: 1, borderColor: "rgba(251,191,36,0.25)",
+        backgroundColor: "rgba(255,213,74,0.20)",
+        borderWidth: 1, borderColor: "rgba(245,158,11,0.4)",
         paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999,
     },
-    creditText: { color: "#FBBF24", fontWeight: "800", fontSize: 13 },
+    creditText: { color: "#B45309", fontWeight: "700", fontSize: 13 },
     card: {
-        backgroundColor: "rgba(255,255,255,0.05)",
-        borderWidth: 1, borderColor: "rgba(255,255,255,0.10)",
+        backgroundColor: "rgba(255,255,255,0.74)",
+        borderWidth: 1, borderColor: "rgba(255,255,255,0.90)",
         borderRadius: 20, padding: 14, gap: 12,
+        shadowColor: "#4F8CFF", shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.1, shadowRadius: 18, elevation: 4,
     },
     cardHeader: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
     cardIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-    cardTitle: { color: "#fff", fontWeight: "900", fontSize: 15 },
-    cardSubtitle: { color: "rgba(255,255,255,0.60)", fontWeight: "700", fontSize: 12, marginTop: 3, lineHeight: 16 },
+    cardTitle: { color: "#111111", fontWeight: "700", fontSize: 15 },
+    cardSubtitle: { color: "#6B7280", fontWeight: "500", fontSize: 12, marginTop: 3, lineHeight: 16 },
     cardActions: { flexDirection: "row", gap: 10, flexWrap: "wrap" },
     actionBtn: {
         flexDirection: "row", alignItems: "center", gap: 7,
-        backgroundColor: "rgba(255,255,255,0.06)",
-        borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10,
+        backgroundColor: "rgba(255,255,255,0.72)",
+        borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12,
+        minHeight: 44,
         alignSelf: "flex-start",
     },
-    actionBtnText: { fontWeight: "800", fontSize: 13 },
+    actionBtnText: { fontWeight: "700", fontSize: 13 },
     ocrPreviewRow: {
         flexDirection: "row", alignItems: "center", gap: 8,
-        backgroundColor: "rgba(165,180,252,0.08)", borderRadius: 10, padding: 8,
+        backgroundColor: "rgba(79,140,255,0.10)", borderRadius: 10, padding: 8,
     },
-    ocrFileName: { flex: 1, color: "#A5B4FC", fontWeight: "700", fontSize: 13 },
+    ocrFileName: { flex: 1, color: "#2563EB", fontWeight: "700", fontSize: 13 },
     ocrLoading: { flexDirection: "row", alignItems: "center", gap: 8 },
-    ocrLoadingText: { color: "#FBBF24", fontWeight: "700", fontSize: 13 },
-    ocrResultBox: { backgroundColor: "rgba(0,0,0,0.22)", borderRadius: 14, padding: 12, gap: 10 },
+    ocrLoadingText: { color: "#B45309", fontWeight: "700", fontSize: 13 },
+    ocrResultBox: { backgroundColor: "rgba(255,255,255,0.7)", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 14, padding: 12, gap: 10 },
     ocrResultHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-    ocrResultLabel: { color: "#A5B4FC", fontWeight: "900", fontSize: 13 },
+    ocrResultLabel: { color: "#2563EB", fontWeight: "800", fontSize: 13 },
     copyBtn: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 5,
-        backgroundColor: "rgba(165,180,252,0.10)", borderRadius: 8,
-        borderWidth: 1, borderColor: "rgba(165,180,252,0.20)" },
-    copyBtnText: { color: "#A5B4FC", fontWeight: "800", fontSize: 12 },
-    ocrScrollArea: { maxHeight: 240, backgroundColor: "rgba(255,255,255,0.04)", borderRadius: 10, padding: 10 },
-    ocrResultText: { color: "rgba(255,255,255,0.85)", fontWeight: "500", fontSize: 13, lineHeight: 20 },
+        backgroundColor: "rgba(79,140,255,0.10)", borderRadius: 8,
+        borderWidth: 1, borderColor: "rgba(79,140,255,0.30)" },
+    copyBtnText: { color: "#2563EB", fontWeight: "700", fontSize: 12 },
+    ocrScrollArea: { maxHeight: 240, backgroundColor: "rgba(255,255,255,0.6)", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10, padding: 10 },
+    ocrResultText: { color: "#374151", fontWeight: "500", fontSize: 13, lineHeight: 20 },
     aiActionsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
     aiBtn: {
         flexDirection: "row", alignItems: "center", gap: 5,
-        backgroundColor: "rgba(99,102,241,0.15)",
-        borderWidth: 1, borderColor: "rgba(165,180,252,0.25)",
+        backgroundColor: "rgba(79,140,255,0.12)",
+        borderWidth: 1, borderColor: "rgba(79,140,255,0.30)",
         borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7,
     },
-    aiBtnLabel: { color: "#A5B4FC", fontWeight: "800", fontSize: 12 },
-    aiBtnSoon: { color: "rgba(165,180,252,0.45)", fontWeight: "700", fontSize: 10, fontStyle: "italic" },
+    aiBtnLabel: { color: "#2563EB", fontWeight: "700", fontSize: 12 },
+    aiBtnSoon: { color: "#6B7280", fontWeight: "600", fontSize: 10, fontStyle: "italic" },
     safetyNote: {
         flexDirection: "row", alignItems: "center", gap: 6,
-        backgroundColor: "rgba(52,211,153,0.07)", borderRadius: 10, padding: 8,
+        backgroundColor: "rgba(79,140,255,0.08)", borderRadius: 10, padding: 8,
     },
-    safetyText: { flex: 1, color: "rgba(255,255,255,0.60)", fontWeight: "700", fontSize: 12 },
+    safetyText: { flex: 1, color: "#6B7280", fontWeight: "600", fontSize: 12 },
     creditBadgeSmall: {
         flexDirection: "row", alignItems: "center", gap: 2,
-        backgroundColor: "rgba(251,191,36,0.12)", borderRadius: 8, paddingHorizontal: 7, paddingVertical: 3,
+        backgroundColor: "rgba(255,213,74,0.20)", borderRadius: 8, paddingHorizontal: 7, paddingVertical: 3,
     },
-    creditBadgeSmallText: { color: "#FBBF24", fontWeight: "900", fontSize: 11 },
+    creditBadgeSmallText: { color: "#B45309", fontWeight: "800", fontSize: 11 },
     freeBadge: {
-        backgroundColor: "rgba(52,211,153,0.14)", borderWidth: 1, borderColor: "rgba(52,211,153,0.30)",
+        backgroundColor: "rgba(79,140,255,0.12)", borderWidth: 1, borderColor: "rgba(79,140,255,0.30)",
         borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3,
     },
-    freeBadgeText: { color: "#34D399", fontWeight: "900", fontSize: 11, letterSpacing: 0.5 },
+    freeBadgeText: { color: "#2563EB", fontWeight: "800", fontSize: 11, letterSpacing: 0.5 },
     sectionDivider: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 6, marginBottom: 2 },
-    dividerLine: { flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.10)" },
-    sectionLabel: { color: "rgba(255,255,255,0.45)", fontWeight: "900", fontSize: 11, letterSpacing: 1.5 },
+    dividerLine: { flex: 1, height: 1, backgroundColor: "#E5E7EB" },
+    sectionLabel: { color: "#6B7280", fontWeight: "700", fontSize: 11, letterSpacing: 1.5 },
     upgradeBanner: {
         flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-        backgroundColor: "rgba(251,207,232,0.06)",
-        borderWidth: 1, borderColor: "rgba(251,207,232,0.15)",
-        borderRadius: 16, paddingVertical: 13,
+        backgroundColor: "rgba(79,140,255,0.10)",
+        borderWidth: 1, borderColor: "rgba(79,140,255,0.25)",
+        borderRadius: 16, paddingVertical: 14,
     },
-    upgradeText: { color: "#FBCFE8", fontWeight: "900" },
+    upgradeText: { color: "#2563EB", fontWeight: "700" },
 });

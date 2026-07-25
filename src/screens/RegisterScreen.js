@@ -107,9 +107,9 @@ export default function RegisterScreen({ navigation }) {
 function Field({ icon, ...props }) {
     return (
         <View style={styles.inputWrap}>
-            <Ionicons name={icon} size={18} color="rgba(255,255,255,0.7)" />
+            <Ionicons name={icon} size={18} color="#6B7280" />
             <TextInput
-                placeholderTextColor="rgba(255,255,255,0.45)"
+                placeholderTextColor="#6B7280"
                 style={styles.input}
                 {...props}
             />
@@ -124,44 +124,48 @@ const styles = StyleSheet.create({
         width: 74,
         height: 74,
         borderRadius: 22,
-        backgroundColor: "rgba(255,255,255,0.06)",
+        backgroundColor: "rgba(255,255,255,0.74)",
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.10)",
+        borderColor: "rgba(255,255,255,0.90)",
         alignItems: "center",
         justifyContent: "center",
         marginBottom: 12,
+        shadowColor: "#4F8CFF", shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.1, shadowRadius: 18, elevation: 4,
     },
     logo: { width: 50, height: 50 },
-    title: { fontSize: 22, fontWeight: "900", color: "#fff" },
+    title: { fontSize: 22, fontWeight: "800", color: "#111111" },
     subtitle: {
         marginTop: 6,
-        color: "rgba(255,255,255,0.72)",
+        color: "#6B7280",
         textAlign: "center",
     },
     card: {
-        backgroundColor: "rgba(255,255,255,0.06)",
+        backgroundColor: "rgba(255,255,255,0.74)",
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.10)",
+        borderColor: "rgba(255,255,255,0.90)",
         borderRadius: 22,
         padding: 16,
+        shadowColor: "#4F8CFF", shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.1, shadowRadius: 18, elevation: 4,
     },
     inputWrap: {
         flexDirection: "row",
         alignItems: "center",
         gap: 10,
-        backgroundColor: "rgba(0,0,0,0.18)",
+        backgroundColor: "rgba(255,255,255,0.82)",
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.10)",
-        borderRadius: 16,
+        borderColor: "#D1D5DB",
+        borderRadius: 14,
         paddingHorizontal: 12,
-        paddingVertical: 12,
+        paddingVertical: 14,
         marginBottom: 10,
     },
-    input: { flex: 1, color: "#fff", fontSize: 15 },
+    input: { flex: 1, color: "#111111", fontSize: 15 },
     link: {
         marginTop: 14,
-        color: "#A5B4FC",
-        fontWeight: "900",
+        color: "#2563EB",
+        fontWeight: "800",
         textAlign: "center",
     },
 });

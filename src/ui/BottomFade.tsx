@@ -16,9 +16,9 @@ export default function BottomFade() {
         >
             <LinearGradient
                 colors={[
-                    "rgba(2,6,23,0)",
-                    "rgba(2,6,23,0.6)",
-                    "rgba(2,6,23,1)",
+                    "rgba(245,247,251,0)",
+                    "rgba(245,247,251,0.65)",
+                    "rgba(245,247,251,1)",
                 ]}
                 style={StyleSheet.absoluteFill}
             />

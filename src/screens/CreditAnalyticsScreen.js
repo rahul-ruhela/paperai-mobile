@@ -70,13 +70,13 @@ export default function CreditAnalyticsScreen() {
             <SafeAreaView style={{ flex: 1 }}>
                 <ScrollView
                     contentContainerStyle={styles.container}
-                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A5B4FC" />}
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#4F8CFF" />}
                 >
                     <Text style={styles.title}>Credit Analytics</Text>
                     <Text style={styles.subtitle}>Your balance and how features consume credits.</Text>
 
                     {loading ? (
-                        <View style={styles.center}><ActivityIndicator color="#A5B4FC" /></View>
+                        <View style={styles.center}><ActivityIndicator color="#4F8CFF" /></View>
                     ) : (
                         <>
                             {/* Balance hero */}
@@ -182,64 +182,68 @@ function StatCard({ title, value, hint }) {
 
 const styles = StyleSheet.create({
     container: { padding: 18, gap: 14, paddingBottom: 40 },
-    title: { color: "#fff", fontSize: 26, fontWeight: "900" },
-    subtitle: { color: "rgba(255,255,255,0.7)", fontWeight: "700" },
+    title: { color: "#111111", fontSize: 26, fontWeight: "800" },
+    subtitle: { color: "#6B7280", fontWeight: "500" },
     center: { paddingVertical: 40, alignItems: "center" },
 
     hero: {
-        backgroundColor: "rgba(99,102,241,0.14)",
+        backgroundColor: "rgba(79,140,255,0.10)",
         borderWidth: 1,
-        borderColor: "rgba(165,180,252,0.35)",
+        borderColor: "rgba(79,140,255,0.30)",
         borderRadius: 22,
         padding: 18,
         alignItems: "center",
     },
-    heroLabel: { color: "rgba(255,255,255,0.7)", fontWeight: "900", fontSize: 13 },
-    heroValue: { color: "#fff", fontSize: 44, fontWeight: "900", marginVertical: 2 },
-    heroHint: { color: "#A5B4FC", fontWeight: "800", fontSize: 12 },
+    heroLabel: { color: "#6B7280", fontWeight: "700", fontSize: 13 },
+    heroValue: { color: "#111111", fontSize: 44, fontWeight: "800", marginVertical: 2 },
+    heroHint: { color: "#2563EB", fontWeight: "700", fontSize: 12 },
 
     grid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
     stat: {
         width: "47%",
-        backgroundColor: "rgba(255,255,255,0.06)",
+        backgroundColor: "rgba(255,255,255,0.74)",
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.10)",
+        borderColor: "rgba(255,255,255,0.90)",
         borderRadius: 18,
         padding: 14,
         gap: 4,
+        shadowColor: "#4F8CFF", shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.1, shadowRadius: 18, elevation: 4,
     },
-    statTitle: { color: "rgba(255,255,255,0.65)", fontWeight: "900", fontSize: 12 },
-    statValue: { color: "#E0E7FF", fontSize: 22, fontWeight: "900" },
-    statHint: { color: "rgba(255,255,255,0.55)", fontWeight: "700", fontSize: 11 },
+    statTitle: { color: "#6B7280", fontWeight: "700", fontSize: 12 },
+    statValue: { color: "#111111", fontSize: 22, fontWeight: "800" },
+    statHint: { color: "#6B7280", fontWeight: "500", fontSize: 11 },
 
     insight: {
-        backgroundColor: "rgba(34,197,94,0.12)",
+        backgroundColor: "rgba(79,140,255,0.10)",
         borderWidth: 1,
-        borderColor: "rgba(34,197,94,0.35)",
+        borderColor: "rgba(79,140,255,0.30)",
         borderRadius: 16,
         padding: 14,
     },
-    insightText: { color: "rgba(255,255,255,0.85)", fontWeight: "700", lineHeight: 20 },
-    insightStrong: { color: "#86efac", fontWeight: "900" },
+    insightText: { color: "#374151", fontWeight: "500", lineHeight: 20 },
+    insightStrong: { color: "#2563EB", fontWeight: "800" },
 
     card: {
-        backgroundColor: "rgba(255,255,255,0.06)",
+        backgroundColor: "rgba(255,255,255,0.74)",
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.10)",
+        borderColor: "rgba(255,255,255,0.90)",
         borderRadius: 22,
         padding: 16,
         gap: 12,
+        shadowColor: "#4F8CFF", shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.1, shadowRadius: 18, elevation: 4,
     },
-    cardTitle: { color: "#A5B4FC", fontWeight: "900" },
-    cardText: { color: "rgba(255,255,255,0.72)", fontWeight: "700" },
+    cardTitle: { color: "#2563EB", fontWeight: "800" },
+    cardText: { color: "#6B7280", fontWeight: "500" },
 
     barRow: { gap: 6 },
     barHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
-    barLabel: { color: "rgba(255,255,255,0.85)", fontWeight: "800", flex: 1, fontSize: 13 },
-    barValue: { color: "#E0E7FF", fontWeight: "900", fontSize: 13 },
-    barTrack: { height: 10, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.10)", overflow: "hidden" },
-    barFill: { height: 10, borderRadius: 999, backgroundColor: "rgba(165,180,252,0.85)" },
-    barFillAlt: { backgroundColor: "rgba(34,197,94,0.75)" },
+    barLabel: { color: "#374151", fontWeight: "700", flex: 1, fontSize: 13 },
+    barValue: { color: "#111111", fontWeight: "800", fontSize: 13 },
+    barTrack: { height: 10, borderRadius: 999, backgroundColor: "#E5E7EB", overflow: "hidden" },
+    barFill: { height: 10, borderRadius: 999, backgroundColor: "#4F8CFF" },
+    barFillAlt: { backgroundColor: "#FFD54A" },
 
-    note: { textAlign: "center", color: "rgba(255,255,255,0.5)", fontSize: 12, fontWeight: "700" },
+    note: { textAlign: "center", color: "#6B7280", fontSize: 12, fontWeight: "500" },
 });

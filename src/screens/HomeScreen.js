@@ -336,7 +336,7 @@ export default function HomeScreen({ navigation }) {
 
             {/* Apply Intelligence (RESTORED) */}
             <Pressable onPress={() => navigation.navigate("Upload")} style={S.fab}>
-                <Ionicons name="add" size={22} color="#0B1220" />
+                <Ionicons name="add" size={22} color="#FFFFFF" />
                 <Text style={S.fabText}>Apply Intelligence</Text>
             </Pressable>
 
@@ -349,7 +349,7 @@ export default function HomeScreen({ navigation }) {
                             {selectedDoc?.title || "Document"}
                         </Text>
                         <Pressable onPress={closeMenu} hitSlop={10}>
-                            <Ionicons name="close" size={22} color="#0B1220" />
+                            <Ionicons name="close" size={22} color="#111111" />
                         </Pressable>
                     </View>
 
@@ -389,7 +389,7 @@ function TabPill({ text, active, onPress }) {
 function SheetAction({ icon, text, onPress, danger }) {
     return (
         <Pressable onPress={onPress} style={S.sheetAction}>
-            <Ionicons name={icon} size={20} color={danger ? Theme.colors.danger : "#0B1220"} />
+            <Ionicons name={icon} size={20} color={danger ? Theme.colors.danger : "#111111"} />
             <Text style={[S.sheetText, danger && { color: Theme.colors.danger }]}>{text}</Text>
         </Pressable>
     );
@@ -405,7 +405,7 @@ function EmptyState({ title, subtitle, icon, onUpload }) {
             <Text style={S.emptySub}>{subtitle}</Text>
 
             <Pressable onPress={onUpload} style={S.emptyBtn}>
-                <Ionicons name="cloud-upload-outline" size={18} color="#0B1220" />
+                <Ionicons name="cloud-upload-outline" size={18} color="#FFFFFF" />
                 <Text style={S.emptyBtnText}>Upload & Analyze</Text>
             </Pressable>
         </View>

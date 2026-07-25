@@ -585,10 +585,10 @@ export default function JunkWiperScanScreen({ navigation }) {
     });
 
     function strategyBadge(strategy) {
-        if (strategy === "exact") return { label: "Exact copy", color: "#F87171" };
-        if (strategy === "name") return { label: "Same name", color: "#FBBF24" };
-        if (strategy === "cache") return { label: "System junk", color: "#34D399" };
-        return { label: "Burst shot", color: "#A5B4FC" };
+        if (strategy === "exact") return { label: "Exact copy", color: "#FF5A5F" };
+        if (strategy === "name") return { label: "Same name", color: "#B45309" };
+        if (strategy === "cache") return { label: "System junk", color: "#6B7280" };
+        return { label: "Burst shot", color: "#2563EB" };
     }
 
     return (
@@ -599,7 +599,7 @@ export default function JunkWiperScanScreen({ navigation }) {
                     {/* Header */}
                     <View style={styles.header}>
                         <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.backBtn}>
-                            <Ionicons name="chevron-back" size={20} color="#A5B4FC" />
+                            <Ionicons name="chevron-back" size={20} color="#2563EB" />
                         </Pressable>
                         <Text style={styles.headerTitle}>Junk Wiper</Text>
                         <View style={{ width: 36 }} />
@@ -616,7 +616,7 @@ export default function JunkWiperScanScreen({ navigation }) {
                                 <View style={styles.idleRingOuter} />
                                 <View style={styles.idleRingInner} />
                                 <View style={styles.idleIconBox}>
-                                    <Ionicons name="search" size={36} color="#A5B4FC" />
+                                    <Ionicons name="search" size={36} color="#2563EB" />
                                 </View>
                             </View>
                             <Text style={styles.idleTitle}>Ready to Scan</Text>
@@ -625,9 +625,9 @@ export default function JunkWiperScanScreen({ navigation }) {
                             </Text>
                             <View style={styles.strategyRow}>
                                 {[
-                                    { icon: "copy-outline", color: "#F87171", label: "Exact copies" },
-                                    { icon: "document-text-outline", color: "#FBBF24", label: "Same filename" },
-                                    { icon: "images-outline", color: "#A5B4FC", label: "Burst shots" },
+                                    { icon: "copy-outline", color: "#FF5A5F", label: "Exact copies" },
+                                    { icon: "document-text-outline", color: "#B45309", label: "Same filename" },
+                                    { icon: "images-outline", color: "#2563EB", label: "Burst shots" },
                                 ].map(s => (
                                     <View key={s.label} style={styles.strategyChip}>
                                         <Ionicons name={s.icon} size={14} color={s.color} />
@@ -641,7 +641,7 @@ export default function JunkWiperScanScreen({ navigation }) {
                                     style={styles.limitedBanner}
                                     onPress={() => Linking.openSettings()}
                                 >
-                                    <Ionicons name="warning-outline" size={15} color="#FBBF24" />
+                                    <Ionicons name="warning-outline" size={15} color="#B45309" />
                                     <Text style={styles.limitedBannerText}>
                                         Limited access — only selected photos will be scanned.{" "}
                                         <Text style={{ textDecorationLine: "underline" }}>Enable full access →</Text>
@@ -650,7 +650,7 @@ export default function JunkWiperScanScreen({ navigation }) {
                             )}
                             {accessLevel === "all" && (
                                 <View style={styles.fullAccessBanner}>
-                                    <Ionicons name="checkmark-circle-outline" size={15} color="#34D399" />
+                                    <Ionicons name="checkmark-circle-outline" size={15} color="#2563EB" />
                                     <Text style={styles.fullAccessText}>Full photo library access granted</Text>
                                 </View>
                             )}
@@ -706,7 +706,7 @@ export default function JunkWiperScanScreen({ navigation }) {
 
                                 {/* Center icon */}
                                 <Animated.View style={[styles.centerIcon, { transform: [{ scale: iconScale }] }]}>
-                                    <Ionicons name="search" size={30} color="#A5B4FC" />
+                                    <Ionicons name="search" size={30} color="#2563EB" />
                                 </Animated.View>
                             </View>
 
@@ -724,7 +724,7 @@ export default function JunkWiperScanScreen({ navigation }) {
                                 </View>
                                 <View style={styles.liveCountDivider} />
                                 <View style={styles.liveCounter}>
-                                    <Text style={[styles.liveCountVal, liveFound > 0 && { color: "#F87171" }]}>
+                                    <Text style={[styles.liveCountVal, liveFound > 0 && { color: "#FF5A5F" }]}>
                                         {liveFound}
                                     </Text>
                                     <Text style={styles.liveCountLabel}>Duplicates found</Text>
@@ -738,7 +738,7 @@ export default function JunkWiperScanScreen({ navigation }) {
 
                             {/* Safety note */}
                             <View style={styles.safetyRow}>
-                                <Ionicons name="shield-checkmark-outline" size={14} color="#34D399" />
+                                <Ionicons name="shield-checkmark-outline" size={14} color="#2563EB" />
                                 <Text style={styles.safetyText}>Nothing will be deleted without your confirmation.</Text>
                             </View>
 
@@ -753,20 +753,20 @@ export default function JunkWiperScanScreen({ navigation }) {
                         <View style={styles.reportWrap}>
 
                             <View style={styles.reportHeader}>
-                                <Ionicons name="checkmark-circle" size={26} color="#34D399" />
+                                <Ionicons name="checkmark-circle" size={26} color="#2563EB" />
                                 <Text style={styles.reportTitle}>Scan Complete</Text>
                             </View>
 
                             {/* Stats grid */}
                             <View style={styles.statsGrid}>
-                                <StatBox label="Duplicates" value={stats.photos} icon="copy-outline" color="#F87171" />
-                                <StatBox label="Groups" value={stats.groups} icon="albums-outline" color="#FBBF24" />
-                                <StatBox label="Savings" value={`${stats.savedMB} MB`} icon="server-outline" color="#34D399" />
+                                <StatBox label="Duplicates" value={stats.photos} icon="copy-outline" color="#FF5A5F" />
+                                <StatBox label="Groups" value={stats.groups} icon="albums-outline" color="#B45309" />
+                                <StatBox label="Savings" value={`${stats.savedMB} MB`} icon="server-outline" color="#2563EB" />
                             </View>
 
                             {duplicates.length === 0 ? (
                                 <View style={styles.emptyBox}>
-                                    <Ionicons name="checkmark-circle-outline" size={44} color="#34D399" />
+                                    <Ionicons name="checkmark-circle-outline" size={44} color="#2563EB" />
                                     <Text style={styles.emptyTitle}>No duplicates found!</Text>
                                     <Text style={styles.emptySub}>Your photo library looks clean.</Text>
                                 </View>
@@ -775,9 +775,9 @@ export default function JunkWiperScanScreen({ navigation }) {
                                     {/* Legend */}
                                     <View style={styles.legendRow}>
                                         {[
-                                            { color: "#F87171", label: "Exact copy" },
-                                            { color: "#FBBF24", label: "Same name" },
-                                            { color: "#A5B4FC", label: "Burst shot" },
+                                            { color: "#FF5A5F", label: "Exact copy" },
+                                            { color: "#B45309", label: "Same name" },
+                                            { color: "#2563EB", label: "Burst shot" },
                                         ].map(l => (
                                             <View key={l.label} style={styles.legendItem}>
                                                 <View style={[styles.legendDot, { backgroundColor: l.color }]} />
@@ -826,7 +826,7 @@ export default function JunkWiperScanScreen({ navigation }) {
                                                 </View>
                                                 <Ionicons
                                                     name="trash-bin-outline" size={16}
-                                                    color={isSel ? "#F87171" : "rgba(255,255,255,0.25)"}
+                                                    color={isSel ? "#FF5A5F" : "#9CA3AF"}
                                                 />
                                             </Pressable>
                                         );
@@ -848,7 +848,7 @@ export default function JunkWiperScanScreen({ navigation }) {
                             )}
 
                             <View style={styles.safetyRow}>
-                                <Ionicons name="shield-checkmark-outline" size={14} color="#34D399" />
+                                <Ionicons name="shield-checkmark-outline" size={14} color="#2563EB" />
                                 <Text style={styles.safetyText}>Newest copy of each file is always kept.</Text>
                             </View>
 
@@ -856,7 +856,7 @@ export default function JunkWiperScanScreen({ navigation }) {
                                 style={styles.rescanBtn}
                                 onPress={() => { setPhase("idle"); setDuplicates([]); setSelected(new Set()); }}
                             >
-                                <Ionicons name="refresh-outline" size={16} color="rgba(255,255,255,0.70)" />
+                                <Ionicons name="refresh-outline" size={16} color="#6B7280" />
                                 <Text style={styles.rescanText}>Scan Again</Text>
                             </Pressable>
                         </View>
@@ -907,40 +907,40 @@ const styles = StyleSheet.create({
     header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
     backBtn: {
         width: 36, height: 36, borderRadius: 12,
-        backgroundColor: "rgba(255,255,255,0.07)",
+        backgroundColor: "rgba(255,255,255,0.74)",
         alignItems: "center", justifyContent: "center",
     },
-    headerTitle: { color: "#fff", fontSize: 20, fontWeight: "900" },
-    complianceNote: { color: "rgba(255,255,255,0.50)", fontSize: 12, fontWeight: "700", textAlign: "center", lineHeight: 18 },
+    headerTitle: { color: "#111111", fontSize: 20, fontWeight: "900" },
+    complianceNote: { color: "#6B7280", fontSize: 12, fontWeight: "700", textAlign: "center", lineHeight: 18 },
 
     // ── Idle ──
     idleBox: {
-        backgroundColor: "rgba(255,255,255,0.04)",
-        borderWidth: 1, borderColor: "rgba(255,255,255,0.09)",
+        backgroundColor: "rgba(255,255,255,0.74)",
+        borderWidth: 1, borderColor: "rgba(255,255,255,0.90)",
         borderRadius: 24, padding: 24, gap: 16, alignItems: "center",
     },
     idleOrbit: { width: 110, height: 110, alignItems: "center", justifyContent: "center" },
     idleRingOuter: {
         position: "absolute", width: 110, height: 110, borderRadius: 55,
-        borderWidth: 1.5, borderColor: "rgba(165,180,252,0.25)", borderStyle: "dashed",
+        borderWidth: 1.5, borderColor: "rgba(79,140,255,0.25)", borderStyle: "dashed",
     },
     idleRingInner: {
         position: "absolute", width: 80, height: 80, borderRadius: 40,
-        borderWidth: 1, borderColor: "rgba(99,102,241,0.35)",
+        borderWidth: 1, borderColor: "rgba(79,140,255,0.35)",
     },
     idleIconBox: {
         width: 70, height: 70, borderRadius: 22,
-        backgroundColor: "rgba(99,102,241,0.18)",
-        borderWidth: 1, borderColor: "rgba(165,180,252,0.30)",
+        backgroundColor: "rgba(79,140,255,0.18)",
+        borderWidth: 1, borderColor: "rgba(79,140,255,0.30)",
         alignItems: "center", justifyContent: "center",
     },
-    idleTitle: { color: "#fff", fontSize: 20, fontWeight: "900" },
-    idleBody: { color: "rgba(255,255,255,0.60)", fontWeight: "700", textAlign: "center", lineHeight: 20, fontSize: 13 },
+    idleTitle: { color: "#111111", fontSize: 20, fontWeight: "900" },
+    idleBody: { color: "#6B7280", fontWeight: "700", textAlign: "center", lineHeight: 20, fontSize: 13 },
     strategyRow: { flexDirection: "row", gap: 8, flexWrap: "wrap", justifyContent: "center" },
     strategyChip: {
         flexDirection: "row", alignItems: "center", gap: 5,
-        backgroundColor: "rgba(255,255,255,0.05)",
-        borderWidth: 1, borderColor: "rgba(255,255,255,0.10)",
+        backgroundColor: "rgba(255,255,255,0.74)",
+        borderWidth: 1, borderColor: "rgba(255,255,255,0.90)",
         borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6,
     },
     strategyChipText: { fontWeight: "800", fontSize: 12 },
@@ -950,19 +950,19 @@ const styles = StyleSheet.create({
         borderWidth: 1, borderColor: "rgba(251,191,36,0.28)",
         borderRadius: 12, padding: 10, alignSelf: "stretch",
     },
-    limitedBannerText: { flex: 1, color: "#FBBF24", fontWeight: "700", fontSize: 12, lineHeight: 17 },
+    limitedBannerText: { flex: 1, color: "#B45309", fontWeight: "700", fontSize: 12, lineHeight: 17 },
     fullAccessBanner: {
         flexDirection: "row", alignItems: "center", gap: 7,
-        backgroundColor: "rgba(52,211,153,0.08)",
-        borderWidth: 1, borderColor: "rgba(52,211,153,0.25)",
+        backgroundColor: "rgba(79,140,255,0.08)",
+        borderWidth: 1, borderColor: "rgba(79,140,255,0.25)",
         borderRadius: 12, padding: 10, alignSelf: "stretch",
     },
-    fullAccessText: { color: "#34D399", fontWeight: "700", fontSize: 12 },
+    fullAccessText: { color: "#2563EB", fontWeight: "700", fontSize: 12 },
     startBtn: {
         flexDirection: "row", alignItems: "center", gap: 10,
-        backgroundColor: "rgba(99,102,241,0.85)",
+        backgroundColor: "#4F8CFF",
         borderRadius: 18, paddingVertical: 14, paddingHorizontal: 24,
-        borderWidth: 1, borderColor: "rgba(165,180,252,0.35)", alignSelf: "stretch", justifyContent: "center",
+        borderWidth: 1, borderColor: "rgba(79,140,255,0.35)", alignSelf: "stretch", justifyContent: "center",
     },
     startBtnText: { color: "#fff", fontWeight: "900", fontSize: 15 },
 
@@ -972,7 +972,7 @@ const styles = StyleSheet.create({
     hexRing: {
         position: "absolute",
         width: 250, height: 250, borderRadius: 125,
-        borderWidth: 1, borderColor: "rgba(165,180,252,0.12)",
+        borderWidth: 1, borderColor: "rgba(79,140,255,0.12)",
         alignSelf: "center",
     },
 
@@ -981,9 +981,9 @@ const styles = StyleSheet.create({
         alignItems: "center", justifyContent: "center",
     },
     ring: { position: "absolute", borderRadius: 999 },
-    ring1: { width: 130, height: 130, borderWidth: 2, borderColor: "rgba(165,180,252,0.65)", borderStyle: "dashed" },
-    ring2: { width: 165, height: 165, borderWidth: 1.5, borderColor: "rgba(99,102,241,0.40)" },
-    ring3: { width: 205, height: 205, borderWidth: 1, borderColor: "rgba(165,180,252,0.20)", borderStyle: "dotted" },
+    ring1: { width: 130, height: 130, borderWidth: 2, borderColor: "rgba(79,140,255,0.65)", borderStyle: "dashed" },
+    ring2: { width: 165, height: 165, borderWidth: 1.5, borderColor: "rgba(79,140,255,0.40)" },
+    ring3: { width: 205, height: 205, borderWidth: 1, borderColor: "rgba(79,140,255,0.20)", borderStyle: "dotted" },
 
     radarWedge: {
         position: "absolute",
@@ -994,21 +994,21 @@ const styles = StyleSheet.create({
         borderStyle: "solid",
         borderLeftColor: "transparent",
         borderRightColor: "transparent",
-        borderBottomColor: "rgba(99,102,241,0.18)",
+        borderBottomColor: "rgba(79,140,255,0.18)",
         top: 110, left: 110,
     },
 
     glow: {
         position: "absolute",
         width: 100, height: 100, borderRadius: 50,
-        backgroundColor: "rgba(99,102,241,0.30)",
+        backgroundColor: "rgba(79,140,255,0.30)",
     },
     scanLine: {
         position: "absolute",
         width: 140, height: 2,
-        backgroundColor: "rgba(165,180,252,0.80)",
+        backgroundColor: "rgba(79,140,255,0.80)",
         borderRadius: 1,
-        shadowColor: "#A5B4FC",
+        shadowColor: "#2563EB",
         shadowOffset: { width: 0, height: 0 },
         shadowOpacity: 1,
         shadowRadius: 6,
@@ -1016,119 +1016,119 @@ const styles = StyleSheet.create({
     particle: {
         position: "absolute",
         width: 5, height: 5, borderRadius: 3,
-        backgroundColor: "#A5B4FC",
+        backgroundColor: "#2563EB",
     },
     centerIcon: {
         width: 68, height: 68, borderRadius: 22,
-        backgroundColor: "rgba(13,20,38,0.95)",
-        borderWidth: 1.5, borderColor: "rgba(165,180,252,0.45)",
+        backgroundColor: "rgba(255,255,255,0.95)",
+        borderWidth: 1.5, borderColor: "rgba(79,140,255,0.45)",
         alignItems: "center", justifyContent: "center",
     },
 
-    progressPct: { color: "#fff", fontSize: 38, fontWeight: "900", letterSpacing: -1 },
-    scanMsg: { color: "#A5B4FC", fontWeight: "800", fontSize: 14, textAlign: "center" },
+    progressPct: { color: "#111111", fontSize: 38, fontWeight: "900", letterSpacing: -1 },
+    scanMsg: { color: "#2563EB", fontWeight: "800", fontSize: 14, textAlign: "center" },
 
     liveCountRow: {
         flexDirection: "row", alignItems: "center",
-        backgroundColor: "rgba(255,255,255,0.05)",
-        borderWidth: 1, borderColor: "rgba(255,255,255,0.09)",
+        backgroundColor: "rgba(255,255,255,0.74)",
+        borderWidth: 1, borderColor: "rgba(255,255,255,0.90)",
         borderRadius: 16, paddingVertical: 12, paddingHorizontal: 20, gap: 0,
         alignSelf: "stretch",
     },
     liveCounter: { flex: 1, alignItems: "center", gap: 2 },
-    liveCountVal: { color: "#fff", fontWeight: "900", fontSize: 22 },
-    liveCountLabel: { color: "rgba(255,255,255,0.50)", fontWeight: "700", fontSize: 11 },
-    liveCountDivider: { width: 1, height: 36, backgroundColor: "rgba(255,255,255,0.12)" },
+    liveCountVal: { color: "#111111", fontWeight: "900", fontSize: 22 },
+    liveCountLabel: { color: "#6B7280", fontWeight: "700", fontSize: 11 },
+    liveCountDivider: { width: 1, height: 36, backgroundColor: "#E5E7EB" },
 
     progressBarTrack: {
         alignSelf: "stretch", height: 4, borderRadius: 2,
-        backgroundColor: "rgba(255,255,255,0.08)",
+        backgroundColor: "#E5E7EB",
         overflow: "hidden",
     },
     progressBarFill: {
         height: 4, borderRadius: 2,
-        backgroundColor: "#A5B4FC",
+        backgroundColor: "#2563EB",
     },
 
     safetyRow: {
         flexDirection: "row", alignItems: "center", gap: 7,
-        backgroundColor: "rgba(52,211,153,0.06)",
-        borderWidth: 1, borderColor: "rgba(52,211,153,0.18)",
+        backgroundColor: "rgba(79,140,255,0.06)",
+        borderWidth: 1, borderColor: "rgba(79,140,255,0.18)",
         borderRadius: 12, padding: 10, alignSelf: "stretch",
     },
-    safetyText: { flex: 1, color: "rgba(255,255,255,0.60)", fontSize: 12, fontWeight: "700", lineHeight: 17 },
+    safetyText: { flex: 1, color: "#6B7280", fontSize: 12, fontWeight: "700", lineHeight: 17 },
 
     cancelBtn: {
         paddingVertical: 12, paddingHorizontal: 28, borderRadius: 16,
-        backgroundColor: "rgba(255,255,255,0.06)",
-        borderWidth: 1, borderColor: "rgba(255,255,255,0.12)",
+        backgroundColor: "rgba(255,255,255,0.74)",
+        borderWidth: 1, borderColor: "#E5E7EB",
     },
-    cancelBtnText: { color: "rgba(255,255,255,0.65)", fontWeight: "800" },
+    cancelBtnText: { color: "#6B7280", fontWeight: "800" },
 
     // ── Report ──
     reportWrap: { gap: 14 },
     reportHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
-    reportTitle: { color: "#fff", fontSize: 20, fontWeight: "900" },
+    reportTitle: { color: "#111111", fontSize: 20, fontWeight: "900" },
 
     statsGrid: { flexDirection: "row", gap: 10 },
     statBox: {
-        flex: 1, backgroundColor: "rgba(255,255,255,0.05)",
-        borderWidth: 1, borderColor: "rgba(255,255,255,0.09)",
+        flex: 1, backgroundColor: "rgba(255,255,255,0.74)",
+        borderWidth: 1, borderColor: "rgba(255,255,255,0.90)",
         borderRadius: 16, padding: 12, alignItems: "center", gap: 4,
     },
     statValue: { fontWeight: "900", fontSize: 18 },
-    statLabel: { color: "rgba(255,255,255,0.50)", fontSize: 11, fontWeight: "700", textAlign: "center" },
+    statLabel: { color: "#6B7280", fontSize: 11, fontWeight: "700", textAlign: "center" },
 
     legendRow: { flexDirection: "row", gap: 12, flexWrap: "wrap" },
     legendItem: { flexDirection: "row", alignItems: "center", gap: 5 },
     legendDot: { width: 8, height: 8, borderRadius: 4 },
-    legendText: { color: "rgba(255,255,255,0.55)", fontWeight: "700", fontSize: 12 },
+    legendText: { color: "#6B7280", fontWeight: "700", fontSize: 12 },
 
     listHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-    listHeaderText: { color: "rgba(255,255,255,0.55)", fontWeight: "700", fontSize: 13, flex: 1 },
+    listHeaderText: { color: "#6B7280", fontWeight: "700", fontSize: 13, flex: 1 },
     selectionBtns: { flexDirection: "row", alignItems: "center", gap: 8 },
-    selAllText: { color: "#A5B4FC", fontWeight: "800", fontSize: 13 },
-    selNoneText: { color: "rgba(255,255,255,0.45)", fontWeight: "800", fontSize: 13 },
-    selDivider: { color: "rgba(255,255,255,0.20)", fontWeight: "400" },
+    selAllText: { color: "#2563EB", fontWeight: "800", fontSize: 13 },
+    selNoneText: { color: "#9CA3AF", fontWeight: "800", fontSize: 13 },
+    selDivider: { color: "#D1D5DB", fontWeight: "400" },
 
     emptyBox: { alignItems: "center", gap: 10, paddingVertical: 24 },
-    emptyTitle: { color: "#34D399", fontWeight: "900", fontSize: 18 },
-    emptySub: { color: "rgba(255,255,255,0.50)", fontWeight: "700", fontSize: 14 },
+    emptyTitle: { color: "#2563EB", fontWeight: "900", fontSize: 18 },
+    emptySub: { color: "#6B7280", fontWeight: "700", fontSize: 14 },
 
     dupRow: {
         flexDirection: "row", alignItems: "center", gap: 12,
-        backgroundColor: "rgba(255,255,255,0.04)",
-        borderWidth: 1, borderColor: "rgba(255,255,255,0.09)",
+        backgroundColor: "rgba(255,255,255,0.74)",
+        borderWidth: 1, borderColor: "rgba(255,255,255,0.90)",
         borderRadius: 16, padding: 14,
     },
-    dupRowSelected: { backgroundColor: "rgba(239,68,68,0.09)", borderColor: "rgba(239,68,68,0.35)" },
+    dupRowSelected: { backgroundColor: "rgba(255,90,95,0.09)", borderColor: "rgba(255,90,95,0.35)" },
     dupCheck: {
         width: 22, height: 22, borderRadius: 8,
-        borderWidth: 1.5, borderColor: "rgba(255,255,255,0.28)",
+        borderWidth: 1.5, borderColor: "#D1D5DB",
         alignItems: "center", justifyContent: "center",
     },
-    dupCheckActive: { backgroundColor: "#EF4444", borderColor: "#EF4444" },
-    dupName: { color: "#fff", fontWeight: "800", fontSize: 13 },
+    dupCheckActive: { backgroundColor: "#FF5A5F", borderColor: "#FF5A5F" },
+    dupName: { color: "#111111", fontWeight: "800", fontSize: 13 },
     dupMetaRow: { flexDirection: "row", alignItems: "center", gap: 7, flexWrap: "wrap", marginTop: 2 },
     stratBadge: {
         borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2,
     },
     stratBadgeText: { fontWeight: "800", fontSize: 10 },
-    dupMetaText: { color: "rgba(255,255,255,0.45)", fontWeight: "700", fontSize: 11 },
+    dupMetaText: { color: "#9CA3AF", fontWeight: "700", fontSize: 11 },
 
     deleteBtn: {
         flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
-        backgroundColor: "rgba(239,68,68,0.88)",
+        backgroundColor: "#FF5A5F",
         borderRadius: 18, paddingVertical: 15,
-        borderWidth: 1, borderColor: "rgba(239,68,68,0.35)",
+        borderWidth: 1, borderColor: "rgba(255,90,95,0.35)",
     },
     deleteBtnText: { color: "#fff", fontWeight: "900", fontSize: 15 },
 
     rescanBtn: {
         flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
         paddingVertical: 12, borderRadius: 14,
-        backgroundColor: "rgba(255,255,255,0.06)",
-        borderWidth: 1, borderColor: "rgba(255,255,255,0.11)",
+        backgroundColor: "rgba(255,255,255,0.74)",
+        borderWidth: 1, borderColor: "rgba(255,255,255,0.90)",
     },
-    rescanText: { color: "rgba(255,255,255,0.65)", fontWeight: "800" },
+    rescanText: { color: "#6B7280", fontWeight: "800" },
 });

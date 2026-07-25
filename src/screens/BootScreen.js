@@ -1,6 +1,7 @@
 import React from "react";
 import { View, Text, ActivityIndicator, StyleSheet } from "react-native";
 import GradientScreen from "../ui/GradientScreen";
+import { AppColors } from "../ui/tokens";
 
 export default function BootScreen() {
     return (
@@ -10,7 +11,7 @@ export default function BootScreen() {
                 <Text style={styles.tagline}>Your AI document assistant</Text>
                 <ActivityIndicator
                     size="large"
-                    color="#A5B4FC"
+                    color={AppColors.primary}
                     style={{ marginTop: 24 }}
                 />
             </View>
@@ -26,12 +27,12 @@ const styles = StyleSheet.create({
     },
     logo: {
         fontSize: 34,
-        fontWeight: "900",
-        color: "#fff",
+        fontWeight: "800",
+        color: AppColors.textPrimary,
     },
     tagline: {
         marginTop: 6,
-        color: "rgba(255,255,255,0.7)",
+        color: AppColors.textMuted,
         fontWeight: "600",
     },
 });

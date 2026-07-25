@@ -128,7 +128,7 @@ export default function AnalysisScreen({ route, navigation }) {
                                 <View style={styles.centerBox}>
                                     <ActivityIndicator
                                         size="large"
-                                        color="#A5B4FC"
+                                        color="#2563EB"
                                     />
                                     <Text style={styles.inProgressTitle}>
                                         {doc.status === "QUEUED"
@@ -261,7 +261,7 @@ export default function AnalysisScreen({ route, navigation }) {
                         <View style={styles.overlay}>
                             <ActivityIndicator
                                 size="large"
-                                color="#A5B4FC"
+                                color="#2563EB"
                             />
                             <Text style={styles.overlayText}>
                                 {rerunning
@@ -315,8 +315,8 @@ const styles = StyleSheet.create({
 
     timestamp: {
         marginBottom: 10,
-        color: "rgba(255,255,255,0.65)",
-        fontWeight: "700",
+        color: "#6B7280",
+        fontWeight: "600",
         fontSize: 12,
     },
 
