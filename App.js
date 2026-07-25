@@ -5,6 +5,7 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 
 import { getAccessToken } from "./src/storage/tokenStore";
+import { ensureExpoGoTestCredits } from "./src/api/dev";
 import ErrorBoundary from "./src/components/ErrorBoundary";
 
 /* =======================
@@ -38,6 +39,7 @@ import HelpCenterScreen from "./src/screens/HelpCenterScreen";
 import ContactSupportScreen from "./src/screens/ContactSupportScreen";
 import JunkWiperScanScreen from "./src/screens/JunkWiperScanScreen";
 import CameraDocumentScanScreen from "./src/screens/CameraDocumentScanScreen";
+import CodeScannerScreen from "./src/screens/CodeScannerScreen";
 import BootScreen from "./src/screens/BootScreen";
 
 const Stack = createNativeStackNavigator();
@@ -118,6 +120,8 @@ export default function App() {
                 if (mounted) {
                     setAuthed(!!token);
                 }
+                // Expo Go only: give fresh tester accounts dummy credits.
+                if (token) ensureExpoGoTestCredits();
             } catch {
                 if (mounted) {
                     setAuthed(false);
@@ -134,6 +138,13 @@ export default function App() {
             mounted = false;
         };
     }, []);
+
+    // Called by every auth screen on successful sign-in / registration.
+    // In Expo Go this also tops up brand-new accounts with dummy test credits.
+    const handleAuthed = () => {
+        setAuthed(true);
+        ensureExpoGoTestCredits();
+    };
 
     // ✅ Conditional render AFTER hooks
     if (!ready) {
@@ -170,7 +181,7 @@ export default function App() {
                             {(props) => (
                                 <LoginScreen
                                     {...props}
-                                    onAuthed={() => setAuthed(true)}
+                                    onAuthed={handleAuthed}
                                 />
                             )}
                         </Stack.Screen>
@@ -182,7 +193,7 @@ export default function App() {
                             {(props) => (
                                 <RegisterScreen
                                     {...props}
-                                    onAuthed={() => setAuthed(true)}
+                                    onAuthed={handleAuthed}
                                 />
                             )}
                         </Stack.Screen>
@@ -194,7 +205,7 @@ export default function App() {
                             {(props) => (
                                 <OtpLoginScreen
                                     {...props}
-                                    onAuthed={() => setAuthed(true)}
+                                    onAuthed={handleAuthed}
                                 />
                             )}
                         </Stack.Screen>
@@ -206,7 +217,7 @@ export default function App() {
                             {(props) => (
                                 <EmailOtpVerifyScreen
                                     {...props}
-                                    onAuthed={() => setAuthed(true)}
+                                    onAuthed={handleAuthed}
                                 />
                             )}
                         </Stack.Screen>
@@ -246,6 +257,11 @@ export default function App() {
                         <Stack.Screen
                             name="CameraScanner"
                             component={CameraDocumentScanScreen}
+                            options={{ headerShown: false }}
+                        />
+                        <Stack.Screen
+                            name="CodeScanner"
+                            component={CodeScannerScreen}
                             options={{ headerShown: false }}
                         />
                     </>
