@@ -225,6 +225,10 @@ export default function UploadScreen({ navigation }) {
         navigation.navigate("CameraScanner");
     }
 
+    function openCodeScanner() {
+        navigation.navigate("CodeScanner");
+    }
+
     return (
         <GradientScreen>
             <SafeAreaView style={{ flex: 1 }}>
@@ -333,7 +337,50 @@ export default function UploadScreen({ navigation }) {
                         )}
                     </View>
 
-                    {/* 3. Junk Wiper */}
+                    {/* 3. Scan Document — FREE (scan + save/PDF; AI optional) */}
+                    <View style={styles.card}>
+                        <View style={styles.cardHeader}>
+                            <View style={[styles.cardIcon, { backgroundColor: "rgba(52,211,153,0.12)" }]}>
+                                <Ionicons name="camera-outline" size={20} color="#34D399" />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.cardTitle}>Scan Document</Text>
+                                <Text style={styles.cardSubtitle}>
+                                    Capture pages with your camera, then save to Photos or export as PDF
+                                </Text>
+                            </View>
+                            <FreeBadge />
+                        </View>
+                        <ActionBtn icon="camera-outline" label="Open Document Scanner"
+                            onPress={openCameraScanner} color="#34D399" full />
+                    </View>
+
+                    {/* 4. Scan QR & Codes — FREE general utility */}
+                    <View style={styles.card}>
+                        <View style={styles.cardHeader}>
+                            <View style={[styles.cardIcon, { backgroundColor: "rgba(165,180,252,0.14)" }]}>
+                                <Ionicons name="qr-code-outline" size={20} color="#A5B4FC" />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.cardTitle}>Scan QR &amp; Codes</Text>
+                                <Text style={styles.cardSubtitle}>
+                                    Read QR codes and barcodes — view, copy, and open links instantly
+                                </Text>
+                            </View>
+                            <FreeBadge />
+                        </View>
+                        <ActionBtn icon="scan-outline" label="Open Code Scanner"
+                            onPress={openCodeScanner} color="#A5B4FC" full />
+                    </View>
+
+                    {/* ── Advanced ── */}
+                    <View style={styles.sectionDivider}>
+                        <View style={styles.dividerLine} />
+                        <Text style={styles.sectionLabel}>ADVANCED</Text>
+                        <View style={styles.dividerLine} />
+                    </View>
+
+                    {/* 5. Junk Wiper — advanced, credit-based */}
                     <View style={styles.card}>
                         <View style={styles.cardHeader}>
                             <View style={[styles.cardIcon, { backgroundColor: "rgba(239,68,68,0.12)" }]}>
@@ -351,26 +398,6 @@ export default function UploadScreen({ navigation }) {
                         </View>
                         <ActionBtn icon="search-outline" label="Start Duplicate Scan"
                             onPress={openJunkWiper} color="#F87171" full />
-                    </View>
-
-                    {/* 4. Camera Document Scanner (last — in progress) */}
-                    <View style={styles.card}>
-                        <View style={styles.cardHeader}>
-                            <View style={[styles.cardIcon, { backgroundColor: "rgba(52,211,153,0.12)" }]}>
-                                <Ionicons name="camera-outline" size={20} color="#34D399" />
-                            </View>
-                            <View style={{ flex: 1 }}>
-                                <Text style={styles.cardTitle}>Scan Document</Text>
-                                <Text style={styles.cardSubtitle}>
-                                    Use camera to capture a document — AI will analyse it
-                                    {configFor(FK.SCAN_AI).creditCost > 0
-                                        ? ` · ${configFor(FK.SCAN_AI).creditCost} credits on analysis`
-                                        : ""}
-                                </Text>
-                            </View>
-                        </View>
-                        <ActionBtn icon="camera-outline" label="Open Camera Scanner"
-                            onPress={openCameraScanner} color="#34D399" full />
                     </View>
 
                     <Pressable
@@ -455,6 +482,14 @@ function CreditBadge({ cost }) {
     );
 }
 
+function FreeBadge() {
+    return (
+        <View style={styles.freeBadge}>
+            <Text style={styles.freeBadgeText}>FREE</Text>
+        </View>
+    );
+}
+
 const styles = StyleSheet.create({
     container: { padding: 16, gap: 14, paddingBottom: 40 },
     header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 2 },
@@ -518,6 +553,14 @@ const styles = StyleSheet.create({
         backgroundColor: "rgba(251,191,36,0.12)", borderRadius: 8, paddingHorizontal: 7, paddingVertical: 3,
     },
     creditBadgeSmallText: { color: "#FBBF24", fontWeight: "900", fontSize: 11 },
+    freeBadge: {
+        backgroundColor: "rgba(52,211,153,0.14)", borderWidth: 1, borderColor: "rgba(52,211,153,0.30)",
+        borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3,
+    },
+    freeBadgeText: { color: "#34D399", fontWeight: "900", fontSize: 11, letterSpacing: 0.5 },
+    sectionDivider: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 6, marginBottom: 2 },
+    dividerLine: { flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.10)" },
+    sectionLabel: { color: "rgba(255,255,255,0.45)", fontWeight: "900", fontSize: 11, letterSpacing: 1.5 },
     upgradeBanner: {
         flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
         backgroundColor: "rgba(251,207,232,0.06)",
