@@ -61,6 +61,8 @@ function PaywallNative({ navigation }) {
     const [loadingSku, setLoadingSku] = useState(null);
     const [entitlement, setEntitlement] = useState(null);
     const [duration, setDuration] = useState("yearly");
+    // "loading" | "ready" | "partial" | "error" — drives the products banner.
+    const [productsStatus, setProductsStatus] = useState("loading");
 
     async function loadEntitlement() {
         try {
@@ -113,15 +115,41 @@ function PaywallNative({ navigation }) {
         loadEntitlement();
     }, []);
 
+    async function loadProducts() {
+        setProductsStatus("loading");
+        try {
+            const result = await fetchProducts({ skus: ALL_SUBSCRIPTION_SKUS, type: "subs" });
+            const returned = Array.isArray(result) ? result : [];
+            const returnedIds = new Set(returned.map((p) => p.id));
+            const missing = ALL_SUBSCRIPTION_SKUS.filter((sku) => !returnedIds.has(sku));
+            if (missing.length > 0) {
+                console.warn("[IAP] StoreKit did not return these SKUs:", missing.join(", "));
+            }
+            setProductsStatus(
+                returned.length === 0 ? "error" : missing.length > 0 ? "partial" : "ready"
+            );
+        } catch (e) {
+            console.warn("[IAP] fetchProducts failed:", e?.message ?? e);
+            setProductsStatus("error");
+        }
+    }
+
     useEffect(() => {
         if (!connected) return;
-        fetchProducts({ skus: ALL_SUBSCRIPTION_SKUS, type: "subs" }).catch(() => {});
+        loadProducts();
     }, [connected]);
 
     async function subscribe(sku) {
         if (loadingSku) return;
         if (!connected) {
             Alert.alert("Store unavailable", "Could not reach the App Store. Please try again in a moment.");
+            return;
+        }
+        if (!priceForSku(sku)) {
+            Alert.alert(
+                "Plan unavailable",
+                "This plan could not be loaded from the App Store right now. Please try again in a moment."
+            );
             return;
         }
         setLoadingSku(sku);
@@ -155,10 +183,11 @@ function PaywallNative({ navigation }) {
         }
     }
 
-    // Prefer the live App Store price; fall back to the static price in config.
-    function priceForSku(sku, fallback) {
+    // Only ever show the live App Store price. A product StoreKit didn't
+    // return renders as unavailable (never a fabricated static price).
+    function priceForSku(sku) {
         const product = subscriptions?.find((p) => p.id === sku);
-        return product?.displayPrice ?? fallback;
+        return product?.displayPrice ?? null;
     }
 
     return (
@@ -167,9 +196,13 @@ function PaywallNative({ navigation }) {
             setDuration={setDuration}
             entitlement={entitlement}
             loadingSku={loadingSku}
+            productsStatus={productsStatus}
+            onRetryProducts={loadProducts}
             priceForSku={priceForSku}
             onSubscribe={subscribe}
             onRestore={restore}
+            onOpenTerms={() => navigation.navigate("Terms")}
+            onOpenPrivacy={() => navigation.navigate("Privacy")}
         />
     );
 }
@@ -205,9 +238,12 @@ function PaywallExpoGo({ navigation }) {
             entitlement={entitlement}
             loadingSku={null}
             notice="You're in Expo Go — purchasing is disabled here. Use a TestFlight / App Store build to subscribe."
-            priceForSku={(sku, fallback) => fallback}
+            productsStatus="ready"
+            priceForSku={(sku, fallback) => fallback ?? null}
             onSubscribe={notifyUnavailable}
             onRestore={notifyUnavailable}
+            onOpenTerms={() => navigation.navigate("Terms")}
+            onOpenPrivacy={() => navigation.navigate("Privacy")}
         />
     );
 }
@@ -221,9 +257,13 @@ function PaywallView({
     entitlement,
     loadingSku,
     notice,
+    productsStatus = "ready",
+    onRetryProducts,
     priceForSku,
     onSubscribe,
     onRestore,
+    onOpenTerms,
+    onOpenPrivacy,
 }) {
     const scaleAnim = useRef(new Animated.Value(1)).current;
     const isBusyAny = !!loadingSku;
@@ -247,6 +287,21 @@ function PaywallView({
 
                 {!!notice && <Text style={styles.notice}>{notice}</Text>}
 
+                {(productsStatus === "error" || productsStatus === "partial") && (
+                    <View style={styles.productsBanner}>
+                        <Text style={styles.productsBannerText}>
+                            {productsStatus === "error"
+                                ? "Plans could not be loaded from the App Store."
+                                : "Some plans are unavailable right now."}
+                        </Text>
+                        {!!onRetryProducts && (
+                            <TouchableOpacity onPress={onRetryProducts} activeOpacity={0.8}>
+                                <Text style={styles.productsBannerRetry}>Retry</Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                )}
+
                 {/* Duration tabs */}
                 <View style={styles.tabs}>
                     {DURATIONS.map((d) => {
@@ -269,6 +324,8 @@ function PaywallView({
                 {/* Tier cards */}
                 {SUBSCRIPTION_TIERS.map((tier) => {
                     const product = tier.products[duration];
+                    const livePrice = priceForSku(product.sku, product.fallbackPrice);
+                    const priceUnavailable = livePrice == null;
                     const isActive =
                         entitlementIsActive(entitlement) &&
                         entitlement.productId === product.sku;
@@ -294,27 +351,37 @@ function PaywallView({
                                 <Text style={styles.tierName}>{tier.name}</Text>
                                 <Text style={styles.tierTagline}>{tier.tagline}</Text>
 
-                                <Text style={styles.price}>
-                                    {priceForSku(product.sku, product.fallbackPrice)}
-                                    <Text style={styles.per}> / {duration.replace("ly", "")}</Text>
-                                </Text>
+                                {priceUnavailable ? (
+                                    <Text style={styles.priceUnavailable}>
+                                        {productsStatus === "loading" ? "Loading price…" : "Unavailable"}
+                                    </Text>
+                                ) : (
+                                    <Text style={styles.price}>
+                                        {livePrice}
+                                        <Text style={styles.per}> / {duration.replace("ly", "")}</Text>
+                                    </Text>
+                                )}
                                 <Text style={styles.credits}>{product.credits} credits / cycle</Text>
 
                                 <TouchableOpacity
                                     onPress={() => onSubscribe(product.sku)}
-                                    disabled={isActive || isBusyAny}
+                                    disabled={isActive || isBusyAny || priceUnavailable}
                                     activeOpacity={0.9}
                                     style={[
                                         styles.cta,
                                         tier.highlight && styles.ctaHighlight,
-                                        (isActive || isBusyAny) && styles.ctaDisabled,
+                                        (isActive || isBusyAny || priceUnavailable) && styles.ctaDisabled,
                                     ]}
                                 >
                                     {isBusyThis ? (
                                         <ActivityIndicator color="#fff" />
                                     ) : (
                                         <Text style={styles.ctaText}>
-                                            {isActive ? "ACTIVE PLAN" : "Subscribe"}
+                                            {isActive
+                                                ? "ACTIVE PLAN"
+                                                : priceUnavailable
+                                                ? "UNAVAILABLE"
+                                                : "Subscribe"}
                                         </Text>
                                     )}
                                 </TouchableOpacity>
@@ -338,6 +405,16 @@ function PaywallView({
                     current period. Manage or cancel in App Store › Account › Subscriptions. Payment is
                     charged to your Apple ID at confirmation of purchase.
                 </Text>
+
+                <View style={styles.legalLinks}>
+                    <TouchableOpacity onPress={onOpenTerms}>
+                        <Text style={styles.legalLink}>Terms of Use</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.legalLinkDot}>·</Text>
+                    <TouchableOpacity onPress={onOpenPrivacy}>
+                        <Text style={styles.legalLink}>Privacy Policy</Text>
+                    </TouchableOpacity>
+                </View>
             </ScrollView>
         </ScreenContainer>
     );
@@ -394,6 +471,7 @@ const styles = StyleSheet.create({
     tierName: { color: "#fff", fontSize: 22, fontWeight: "900" },
     tierTagline: { color: "#94a3b8", fontSize: 13, marginTop: 2, marginBottom: 12 },
     price: { color: "#fff", fontSize: 26, fontWeight: "900" },
+    priceUnavailable: { color: "#64748b", fontSize: 20, fontWeight: "800", fontStyle: "italic" },
     per: { color: "#94a3b8", fontSize: 14, fontWeight: "700" },
     credits: { color: "#A5B4FC", fontSize: 14, fontWeight: "700", marginTop: 4, marginBottom: 14 },
 
@@ -420,6 +498,45 @@ const styles = StyleSheet.create({
         fontSize: 11,
         textAlign: "center",
         lineHeight: 16,
+    },
+    legalLinks: {
+        flexDirection: "row",
+        justifyContent: "center",
+        alignItems: "center",
+        marginTop: 10,
         paddingBottom: 40,
+        gap: 8,
+    },
+    legalLink: {
+        color: "#94a3b8",
+        fontSize: 12,
+        fontWeight: "700",
+        textDecorationLine: "underline",
+    },
+    legalLinkDot: { color: "#475569", fontSize: 12 },
+
+    productsBanner: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        backgroundColor: "rgba(239,68,68,0.10)",
+        borderColor: "rgba(239,68,68,0.35)",
+        borderWidth: 1,
+        borderRadius: 12,
+        padding: 12,
+        marginBottom: 18,
+    },
+    productsBannerText: {
+        color: "#fca5a5",
+        fontSize: 12,
+        fontWeight: "700",
+        flex: 1,
+        marginRight: 10,
+    },
+    productsBannerRetry: {
+        color: "#fff",
+        fontSize: 12,
+        fontWeight: "900",
+        textDecorationLine: "underline",
     },
 });

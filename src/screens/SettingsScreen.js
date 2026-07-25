@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import GradientScreen from "../ui/GradientScreen";
-import { logout } from "../api/auth";
+import { logout, deleteAccount } from "../api/auth";
 
 export default function SettingsScreen({ navigation, onLoggedOut }) {
     async function onLogout() {
@@ -33,6 +33,46 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
                 },
             },
         ]);
+    }
+
+    function onDeleteAccount() {
+        Alert.alert(
+            "Delete account?",
+            "This permanently deletes your account, documents, and personal data. Remaining credits are lost. Active subscriptions must be cancelled separately in App Store › Subscriptions.\n\nThis cannot be undone.",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: () => {
+                        // Second confirmation — deletion is irreversible.
+                        Alert.alert(
+                            "Are you absolutely sure?",
+                            "Your account and data will be permanently deleted.",
+                            [
+                                { text: "Keep my account", style: "cancel" },
+                                {
+                                    text: "Delete permanently",
+                                    style: "destructive",
+                                    onPress: async () => {
+                                        try {
+                                            await deleteAccount();
+                                            Alert.alert("Account deleted", "Your account and data have been removed.");
+                                            onLoggedOut?.();
+                                        } catch (e) {
+                                            Alert.alert(
+                                                "Deletion failed",
+                                                e?.userMessage ?? e?.message ?? "Please try again or contact support."
+                                            );
+                                        }
+                                    },
+                                },
+                            ]
+                        );
+                    },
+                },
+            ]
+        );
     }
 
     function Row({ icon, title, subtitle, onPress, danger }) {
@@ -132,6 +172,14 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
                             title="Log out"
                             subtitle="You’ll return to login"
                             onPress={onLogout}
+                            danger
+                        />
+
+                        <Row
+                            icon="trash-outline"
+                            title="Delete Account"
+                            subtitle="Permanently delete your account and data"
+                            onPress={onDeleteAccount}
                             danger
                         />
                     </View>
