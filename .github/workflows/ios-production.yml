@@ -23,11 +23,19 @@ on:
           - "false"
           - "true"
 
+# Single job on purpose. Every job is a separate hosted-runner acquisition, and
+# a run dies with "The job was not acquired by Runner of type hosted even after
+# multiple attempts" when GitHub can't allocate one — which is what killed runs
+# #1, #3, #20, #21 and #22 on 2026-08-06. Steps still run in order, so the cheap
+# checks below fail just as fast as a separate validate job did, but the run now
+# depends on one allocation instead of two. (This reduces exposure; it can't
+# eliminate it. If a run dies before any step logs, that's runner starvation on
+# GitHub's side, not this workflow — just re-run it.)
 jobs:
-  validate:
-    name: Validate
+  build-production:
+    name: Validate + EAS Build — iOS App Store
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 100
     steps:
       - uses: actions/checkout@v4
 
@@ -49,22 +57,6 @@ jobs:
         env:
           EXPO_PUBLIC_API_BASE_URL: ${{ secrets.API_BASE_URL_PRODUCTION }}
           EXPO_PUBLIC_APP_ENV: production
-
-  build-production:
-    name: EAS Build — iOS App Store
-    runs-on: ubuntu-latest
-    needs: validate
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
-
-      - name: Install dependencies
-        run: npm install
 
       - name: Install EAS CLI
         run: npm install -g eas-cli
