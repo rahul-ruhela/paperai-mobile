@@ -19,6 +19,7 @@ import * as SecureStore from "expo-secure-store";
 import GradientScreen from "../ui/GradientScreen";
 import CreditConfirmModal from "../ui/CreditConfirmModal";
 import { getCreditsBalance, getFeatureConfigs, reserveCredits, completeTransaction, refundTransaction } from "../api/credits";
+import { authedFetch } from "../api/client";
 import { API } from "../constants/api";
 
 const FK = {
@@ -97,13 +98,10 @@ export default function UploadScreen({ navigation }) {
 
     // ── Upload helper (shared by PDF, image, camera) ─────────────────────────
     async function uploadFile(uri, name, mimeType) {
-        const token = await SecureStore.getItemAsync("accessToken");
-        if (!token) throw new Error("Authentication required. Please log in again.");
         const form = new FormData();
         form.append("file", { uri, name: name || "upload", type: mimeType || "application/octet-stream" });
-        const res = await fetch(`${API.BASE_URL}/api/documents/upload`, {
+        const res = await authedFetch(`/api/documents/upload`, {
             method: "POST",
-            headers: { Authorization: `Bearer ${token}` },
             body: form,
         });
         const text = await res.text();
@@ -177,11 +175,9 @@ export default function UploadScreen({ navigation }) {
             const reservation = await reserveCredits(FK.OCR, uploaded.id);
             txnId = reservation.transactionId;
             // 3. Call OCR-only endpoint (no full AI analysis)
-            const token = await SecureStore.getItemAsync("accessToken");
-            const res = await fetch(`${API.BASE_URL}/api/documents/${uploaded.id}/ocr`, {
+            const res = await authedFetch(`/api/documents/${uploaded.id}/ocr`, {
                 method: "POST",
                 headers: {
-                    Authorization: `Bearer ${token}`,
                     "Content-Type": "application/json",
                     "X-Transaction-Id": txnId,
                 },

@@ -19,19 +19,16 @@ import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 
 import { API } from "../constants/api";
+import { authedFetch } from "../api/client";
 
 // ── Upload helper (only used by the optional paid "Analyze with AI" action) ───
 async function uploadFile(uri) {
-    const token = await SecureStore.getItemAsync("accessToken");
-    if (!token) throw new Error("Authentication required. Please log in again.");
-
     const filename = `scan_${Date.now()}.jpg`;
     const form = new FormData();
     form.append("file", { uri, name: filename, type: "image/jpeg" });
 
-    const res = await fetch(`${API.BASE_URL}/api/documents/upload`, {
+    const res = await authedFetch(`/api/documents/upload`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
         body: form,
     });
 

@@ -1,0 +1,64 @@
+// Centralized feature matrix — mobile mirror of the backend
+// Services/FeatureMatrix.cs. The app uses this to control visibility and UX only.
+// The backend is always the authority for actual authorization, credits and
+// usage limits — never gate a paid action on this file alone. Keep the two files
+// in sync (same keys, same requiredTier).
+
+export type AccessTier = "free" | "essential" | "plus" | "advance";
+
+// Least → most capable. Used to compare a user's tier against a feature's minimum.
+export const TIER_ORDER: Record<AccessTier, number> = {
+    free: 0,
+    essential: 1,
+    plus: 2,
+    advance: 3,
+};
+
+export interface FeatureDefinition {
+    key: string;
+    name: string;
+    requiredTier: AccessTier;
+    onDevice: boolean;
+    backendVerified: boolean;
+    creditFeatureKey?: string;
+}
+
+export const FEATURES: FeatureDefinition[] = [
+    // On-device / free base capabilities
+    { key: "upload_hub", name: "Upload Hub", requiredTier: "free", onDevice: true, backendVerified: false },
+    { key: "document_scanner", name: "Document Scanner", requiredTier: "free", onDevice: true, backendVerified: false },
+    { key: "code_scanner", name: "QR / Barcode Scanner", requiredTier: "free", onDevice: true, backendVerified: false },
+    { key: "signature_editor", name: "Signature Editor", requiredTier: "free", onDevice: true, backendVerified: false },
+    { key: "usage_dashboard", name: "Usage Dashboard", requiredTier: "free", onDevice: false, backendVerified: true },
+
+    // Essential tier
+    { key: "document_ai_analysis", name: "AI Document Analysis", requiredTier: "essential", onDevice: false, backendVerified: true, creditFeatureKey: "document_scan_ai_ready" },
+    { key: "image_ocr", name: "Image OCR", requiredTier: "essential", onDevice: false, backendVerified: true, creditFeatureKey: "image_ocr_extract_text" },
+    { key: "summarize_text", name: "Summarize Text", requiredTier: "essential", onDevice: false, backendVerified: true, creditFeatureKey: "summarize_text" },
+    { key: "receipt_extraction", name: "Receipt Extraction", requiredTier: "essential", onDevice: false, backendVerified: true, creditFeatureKey: "image_ocr_extract_text" },
+    { key: "smart_reminders", name: "Smart Reminders", requiredTier: "essential", onDevice: false, backendVerified: true },
+
+    // Plus tier
+    { key: "explain_text_detail", name: "Explain in Detail", requiredTier: "plus", onDevice: false, backendVerified: true, creditFeatureKey: "explain_text_detail" },
+    { key: "ai_chat", name: "AI Chat", requiredTier: "plus", onDevice: false, backendVerified: true },
+    { key: "deep_clean", name: "Deep Clean", requiredTier: "plus", onDevice: false, backendVerified: true, creditFeatureKey: "junk_wiper_scan_report" },
+
+    // Advance tier
+    { key: "household_assistant", name: "Household Assistant", requiredTier: "advance", onDevice: false, backendVerified: true },
+];
+
+const BY_KEY: Record<string, FeatureDefinition> = FEATURES.reduce(
+    (acc, f) => ((acc[f.key] = f), acc),
+    {} as Record<string, FeatureDefinition>
+);
+
+export function getFeature(key: string): FeatureDefinition | undefined {
+    return BY_KEY[key];
+}
+
+// Client-side allow check. This is a UX hint only — the backend re-checks.
+export function isFeatureAllowed(key: string, userTier: AccessTier): boolean {
+    const f = BY_KEY[key];
+    if (!f) return true; // unknown/on-device-only features are not gated here
+    return TIER_ORDER[userTier] >= TIER_ORDER[f.requiredTier];
+}
