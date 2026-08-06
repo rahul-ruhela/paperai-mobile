@@ -1,8 +1,16 @@
 name: iOS Production (App Store)
 
 # !! MANUAL ONLY — production builds never trigger automatically on push.
-# To build: GitHub → Actions → iOS Production → Run workflow
-# To also submit to App Store: set "submit" to "true"
+# This is now the ONLY workflow. Run it from: GitHub → Actions → iOS Production
+# → Run workflow → pick the branch you want to build (it defaults to the repo
+# default branch, which is usually NOT what you want).
+#
+#   submit: "true"   build + upload to App Store Connect. The binary lands in
+#                    TestFlight for sandbox IAP testing. This is the normal path.
+#   submit: "false"  build only, download the .ipa from expo.dev.
+#
+# Uploading here does NOT submit for App Store review — that is a separate,
+# deliberate click in App Store Connect after you have tested in TestFlight.
 on:
   workflow_dispatch:
     inputs:
