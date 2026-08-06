@@ -283,7 +283,10 @@ function PaywallView({
         <ScreenContainer>
             <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
                 <Text style={styles.header}>Choose your plan</Text>
-                <Text style={styles.subHeader}>Cancel anytime from App Store settings.</Text>
+                <Text style={styles.subHeader}>
+                    Credits power document scanning, OCR and AI analysis, and refresh with every
+                    renewal. Cancel anytime in App Store settings.
+                </Text>
 
                 {!!notice && <Text style={styles.notice}>{notice}</Text>}
 

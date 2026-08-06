@@ -303,8 +303,14 @@ export default function JunkWiperScanScreen({ navigation }) {
             setConfirmModal({ visible: false, loading: false });
             if (e?.response?.status === 402) {
                 const p = e.response?.data;
-                Alert.alert("Not Enough Credits",
-                    `You need ${p?.requiredCredits ?? featureCfg.creditCost} credits but have ${p?.credits ?? 0}.\n\nPlease top up and try again.`);
+                Alert.alert(
+                    "Not Enough Credits",
+                    `You need ${p?.requiredCredits ?? featureCfg.creditCost} credits but have ${p?.credits ?? 0}.\n\nChoose a plan to get more credits.`,
+                    [
+                        { text: "Not now", style: "cancel" },
+                        { text: "View plans", onPress: () => navigation.navigate("Paywall") },
+                    ]
+                );
             } else {
                 Alert.alert("Could Not Start Scan",
                     "There was a problem starting the scan. Please check your connection and try again.");

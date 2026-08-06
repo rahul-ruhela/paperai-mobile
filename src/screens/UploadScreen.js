@@ -198,7 +198,14 @@ export default function UploadScreen({ navigation }) {
         } catch (e) {
             if (txnId) await refundTransaction(txnId, e.message).catch(() => {});
             if (e?.response?.status === 402 || e?.message?.includes("402")) {
-                Alert.alert("Not enough credits", `You need ${cfg.creditCost} credits for OCR. Please top up.`);
+                Alert.alert(
+                    "Not enough credits",
+                    `You need ${cfg.creditCost} credits for OCR. Choose a plan to get more credits.`,
+                    [
+                        { text: "Not now", style: "cancel" },
+                        { text: "View plans", onPress: () => navigation.navigate("Paywall") },
+                    ]
+                );
             } else {
                 Alert.alert("OCR failed", e.message || "Processing failed. Your credits were not charged or have been refunded.");
             }

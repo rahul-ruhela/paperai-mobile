@@ -8,7 +8,7 @@ Use this checklist every time you submit a build for review. Go top to bottom �
 
 - [ ] `app.json` version and `buildNumber` are correct (bump buildNumber on each new binary)
 - [ ] `.env` for production has `EXPO_PUBLIC_APP_ENV=production` and `EXPO_PUBLIC_API_BASE_URL=https://apis.bseptechnologies.com`
-- [ ] All 3 IAP product IDs in `eas.json` production env block match App Store Connect exactly
+- [ ] All 9 IAP product IDs in `src/constants/api.ts` (`SUBSCRIPTION_TIERS`) match App Store Connect exactly
 - [ ] Backend `appsettings.Production.json` has `IAP:Enabled:true`, `AllowSandbox:false`, `DevMode:BypassSubscription:false`
 
 ---
@@ -39,9 +39,11 @@ Test on a real device using the TestFlight app. Use a **Sandbox Apple ID** for I
 ### Subscription / IAP flow (Critical — Apple will test this)
 - [ ] On device: Settings → App Store → scroll down → Sandbox Account → sign in with sandbox tester
 - [ ] Trigger the paywall / subscription screen
-- [ ] Purchase **Weekly** plan → IAP sheet appears → purchase completes → Pro access granted
-- [ ] Purchase **Monthly** plan (new sandbox account) → works correctly
-- [ ] Purchase **Yearly** plan (new sandbox account) → works correctly
+- [ ] All 9 SKUs load real prices from StoreKit (no "UNAVAILABLE" / fallback prices shown)
+- [ ] Purchase a **Weekly** plan → IAP sheet appears → purchase completes → credits granted
+- [ ] Purchase a **Monthly** plan (new sandbox account) → works correctly
+- [ ] Purchase a **Yearly** plan (new sandbox account) → works correctly
+- [ ] Upgrade across tiers (Essential → Plus) inside the group → proration handled, no duplicate charge
 - [ ] **Restore Purchases** button works → restores active subscription
 - [ ] Cancel subscription in iOS Settings → verify app handles expiry gracefully
 
@@ -68,9 +70,30 @@ Go to: **App Store Connect → Apps → Paper Ai Assistant → App Store tab**
 - [ ] **Description** written (4000 chars max) — see README Section 6 for copy
 - [ ] **Promotional Text** written (170 chars max)
 - [ ] **Keywords** set (100 chars max): `AI,document,scanner,PDF,analyzer,OCR,paper,assistant,extract,summarize,receipt,invoice`
-- [ ] **Support URL** set: `https://bseptechnologies.com/support`
-- [ ] **Privacy Policy URL** set: `https://bseptechnologies.com/privacy` ← required for subscription apps
+- [ ] **Support URL** set: `https://bseptechnologies.com/paper-ai/support`
+- [ ] **Privacy Policy URL** set: `https://bseptechnologies.com/paper-ai/privacy` ← required for subscription apps
 - [ ] **Marketing URL** set (optional): `https://bseptechnologies.com`
+- [ ] **Description ends with the subscription + legal block below** ← Apple rejects automatically without it
+
+> **Guideline 3.1.2 — Terms of Use (EULA) link is mandatory in the Description.**
+> The automated reviewer scans the App Description text for a Terms of Use URL. An in-app
+> Terms screen and the Privacy Policy URL field are **not** enough — this exact rejection
+> already happened once. Paste this block at the end of the English (U.S.) Description:
+>
+> ```
+> Paper Ai Assistant offers auto-renewable subscriptions. Payment is charged to your
+> Apple ID at confirmation of purchase. Subscriptions renew automatically unless
+> cancelled at least 24 hours before the end of the current period. Manage or cancel
+> in App Store › Account › Subscriptions.
+>
+> Terms of Use (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
+> Privacy Policy: https://bseptechnologies.com/paper-ai/privacy
+> ```
+>
+> Use Apple's **standard** EULA URL above — the checker always recognises it. Only swap in
+> `https://bseptechnologies.com/paper-ai/terms` if you also paste the full custom EULA text
+> into App Information → License Agreement (a URL alone is rejected there).
+> This is metadata-only: fixing it needs **no new build** — edit, save, resubmit the same binary.
 
 ### Screenshots (Required)
 - [ ] 6.9" iPhone 16 Pro Max screenshots uploaded (minimum 1, maximum 10) ← **REQUIRED**
@@ -95,14 +118,19 @@ Go to: **App Store Connect → Apps → Paper Ai Assistant → App Store tab**
 
 Go to: **App Store Connect → your app → Monetization → In-App Purchases → Subscriptions**
 
-- [ ] Subscription group **Pro Plans** exists
-- [ ] `com.bholeshankar.paperai.pro_weekly` → Status: **Ready to Submit**
-- [ ] `com.bholeshankar.paperai.pro_monthly` → Status: **Ready to Submit**
-- [ ] `com.bholeshankar.paperai.pro_yearly` → Status: **Ready to Submit**
+- [ ] Subscription group exists with all 9 products inside it (required for upgrade/downgrade)
+- [ ] Each of these is **Ready to Submit** (prefix `com.bholeshankar.paperai.`):
+  - [ ] `essential_weekly` · `essential_monthly` · `essential_yearly`
+  - [ ] `plus_weekly` · `plus_monthly` · `plus_yearly`
+  - [ ] `advance_weekly` · `advance_monthly` · `advance_yearly`
 - [ ] Each product has English display name and description filled in
-- [ ] Each product has pricing set
+- [ ] Each product has a price **schedule covering all territories** (see note below)
 
-> If any product shows "Missing Metadata", click it → Localizations → Add English → fill in display name and description.
+> If a product shows "Missing Metadata": click it → Localizations → Add English → fill in
+> display name and description. If it *still* shows Missing Metadata with localization done,
+> the cause is an incomplete price schedule — set the price for **all territories**, not just
+> the base one. Products stuck in Missing Metadata are silently dropped from the StoreKit
+> fetch, so the paywall renders them as "UNAVAILABLE".
 
 ---
 
@@ -134,9 +162,48 @@ Subscription test flow:
 Backend API: https://apis.bseptechnologies.com
 Health check: https://apis.bseptechnologies.com/health
 
-All 3 subscription products (weekly, monthly, yearly) are in Ready to Submit status.
+All 9 subscription products (Essential / Plus / Advance × weekly / monthly / yearly)
+are in Ready to Submit status within a single subscription group.
 Camera and photo permissions are requested only when the user tries to upload a document.
+
+Terms of Use (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
+Privacy Policy: https://bseptechnologies.com/paper-ai/privacy
 ```
+
+---
+
+## Phase 6.5 — Rejection-risk audit (verified 2026-08-06)
+
+Checked against the live App Review Guidelines. Green items are already handled in code —
+don't regress them.
+
+| Guideline | Requirement | Status |
+|-----------|-------------|--------|
+| 3.1.2 metadata | Terms of Use (EULA) link in **App Description** | ❌ **This caused the rejection** — see Phase 4 |
+| 3.1.2 metadata | Privacy Policy link in metadata | ✅ URL field + description block |
+| 3.1.2 binary | Subscription name, duration, what the plan provides | ✅ `PaywallScreen` tier name + duration tab + credits line |
+| 3.1.2 binary | Full renewal price, live and localized from StoreKit | ✅ `displayPrice` only — never a hardcoded price |
+| 3.1.2 binary | Restore / sign-in path for existing subscribers | ✅ Restore Purchases button |
+| 3.1.2 binary | Auto-renew + cancellation disclosure on the purchase screen | ✅ legal block above the Terms/Privacy links |
+| 3.1.1 | No purchase path outside IAP | ✅ no external checkout anywhere in `src/` |
+| 4.8 | Sign in with Apple offered alongside other login | ✅ `LoginScreen` Apple button |
+| 5.1.1(v) | In-app account deletion (not just deactivate) | ✅ Settings › Delete Account, two-step confirm |
+| 5.1.1 | Purpose strings for camera / photos / media library | ✅ all set in `app.json` |
+| 5.1.2 | Privacy manifest present | ✅ `ios/PaperAiAssistant/PrivacyInfo.xcprivacy` |
+| 2.1 | Reviewer can sign in without receiving an OTP email | ✅ email + password login works standalone — **give a password account, not an OTP-only one** |
+| 2.1 | No dead ends when out of credits | ✅ "Not enough credits" alerts route to the paywall |
+
+### The two highest remaining risks
+
+1. **Subscriptions must be attached to this version's submission.** Your first auto-renewable
+   subscription has to be submitted *together with an app version*, and each new subscription
+   must be submitted with its subscription group. Editing a subscription's display name — as
+   was just done for Essential / Plus / Advance — drops it back to "Ready to Submit", so it
+   must be re-added to the submission. If they aren't attached, the reviewer cannot purchase
+   and the app is rejected under 2.1 / 3.1.2.
+2. **Any SKU not returned by StoreKit renders as "UNAVAILABLE"** on the paywall (by design —
+   the app never fabricates a price). If the reviewer sees that, expect rejection. Confirm all
+   9 products load real prices in TestFlight *before* submitting.
 
 ---
 

@@ -19,7 +19,7 @@ export default function TermsScreen() {
         <GradientScreen>
             <SafeAreaView style={{ flex: 1 }}>
                 <ScrollView contentContainerStyle={styles.container}>
-                    <Text style={styles.title}>Terms of Service</Text>
+                    <Text style={styles.title}>Terms of Use (EULA)</Text>
                     <Text style={styles.updated}>Last updated: {LAST_UPDATED}</Text>
 
                     <Section heading="1. Acceptance of Terms">

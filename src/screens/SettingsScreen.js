@@ -133,15 +133,15 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
 
                         <Row
                             icon="shield-checkmark-outline"
-                            title="Privacy"
+                            title="Privacy Policy"
                             subtitle="How we handle your documents"
                             onPress={() => navigation.navigate("Privacy")}
                         />
 
                         <Row
                             icon="document-text-outline"
-                            title="Terms"
-                            subtitle="User agreement"
+                            title="Terms of Use (EULA)"
+                            subtitle="User agreement and subscription terms"
                             onPress={() => navigation.navigate("Terms")}
                         />
                     </View>

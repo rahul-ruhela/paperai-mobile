@@ -66,6 +66,7 @@ const FAQS = [
 const LINKS = [
     { icon: "card-outline", label: "Manage subscription", url: "https://apps.apple.com/account/subscriptions" },
     { icon: "refresh-outline", label: "Request an Apple refund", url: "https://reportaproblem.apple.com" },
+    { icon: "document-text-outline", label: "Terms of Use (EULA)", url: "https://bseptechnologies.com/paper-ai/terms" },
     { icon: "shield-checkmark-outline", label: "Privacy Policy", url: "https://bseptechnologies.com/paper-ai/privacy" },
     { icon: "globe-outline", label: "Support website", url: "https://bseptechnologies.com/paper-ai/support" },
     { icon: "mail-outline", label: "Email support", url: "mailto:info@bholeshankarenterprisesprivatelimited.com" },
