@@ -10,7 +10,6 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.bholeshankar.paperai",
-      "buildNumber": "3",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "UIBackgroundModes": ["remote-notification"]
