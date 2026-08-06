@@ -186,7 +186,11 @@ export default function LoginScreen({ navigation, onAuthed }) {
                             </Pressable>
                         )}
 
-                        {/* Phone OTP */}
+                        {/* Phone OTP — hidden until the Twilio SMS plan is active.
+                            Sending an OTP currently fails, and App Review rejects
+                            non-functional features (guideline 2.1). The OtpLogin
+                            screen and route are kept intact: restore this block to
+                            re-enable phone login once SMS delivery works.
                         <Pressable
                             style={[styles.socialBtnOutline, busy && { opacity: 0.5 }]}
                             onPress={() => navigation.navigate("OtpLogin")}
@@ -195,6 +199,7 @@ export default function LoginScreen({ navigation, onAuthed }) {
                             <Ionicons name="phone-portrait-outline" size={20} color="#A5B4FC" />
                             <Text style={styles.socialBtnOutlineText}>Continue with Phone OTP</Text>
                         </Pressable>
+                        */}
 
                         <View style={styles.rowLinks}>
                             <Text
