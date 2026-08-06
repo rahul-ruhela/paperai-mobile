@@ -25,7 +25,12 @@ import {
 } from "react-native";
 import Constants from "expo-constants";
 
-import { verifyIosTransactionAuto, getEntitlement } from "../api/billing";
+import { verifyIosTransactionAutoWithRetry, getEntitlement } from "../api/billing";
+import {
+    recordFailedVerification,
+    clearFailedVerification,
+    wasPreviouslyUnverified,
+} from "../storage/pendingPurchases";
 import {
     SUBSCRIPTION_TIERS,
     DURATION_LABELS,
@@ -84,22 +89,56 @@ function PaywallNative({ navigation }) {
         finishTransaction,
         restorePurchases,
     } = useIAP({
+        // StoreKit re-delivers unfinished transactions on every launch, so this
+        // also runs for purchases whose verification failed on a previous run.
+        // `finishTransaction` must stay behind a confirmed entitlement: leaving
+        // the transaction open is what lets a failed purchase heal itself once
+        // the backend is healthy again.
         onPurchaseSuccess: async (purchase) => {
+            const transactionId = purchase?.transactionId;
+            const productId = purchase?.productId ?? purchase?.id ?? null;
+            const isReplay = await wasPreviouslyUnverified(transactionId);
+
             try {
-                const transactionId = purchase?.transactionId;
                 if (!transactionId) throw new Error("Missing transaction id");
-                await verifyIosTransactionAuto(transactionId);
+
+                try {
+                    await verifyIosTransactionAutoWithRetry(transactionId);
+                } catch (verifyErr) {
+                    // The server may have recorded the purchase and still failed
+                    // the response. Ask what it actually believes before treating
+                    // a paid-for subscription as failed.
+                    const current = await loadEntitlement();
+                    if (!entitlementIsActive(current)) throw verifyErr;
+                    console.warn("[IAP] verify failed but entitlement is active — accepting.");
+                }
+
                 await finishTransaction({ purchase, isConsumable: false });
+                await clearFailedVerification(transactionId);
                 await loadEntitlement();
+
                 Alert.alert("Subscribed!", "Your plan is now active. Thank you!", [
                     { text: "Continue", onPress: () => navigation.goBack() },
                 ]);
             } catch (err) {
-                Alert.alert(
-                    "Verification failed",
-                    err?.userMessage ??
-                        'Your purchase went through but we could not activate it. Tap "Restore Purchases" or contact support.'
+                console.warn(
+                    "[IAP] verification failed",
+                    `transactionId=${transactionId}`,
+                    `status=${err?.response?.status ?? "none"}`,
+                    `body=${JSON.stringify(err?.response?.data ?? null)}`
                 );
+
+                const isFirstFailure = await recordFailedVerification(transactionId, productId);
+
+                // Only interrupt the user the first time. Later runs retry in the
+                // background so a recovering backend activates the plan quietly
+                // instead of greeting them with the same alert on every launch.
+                if (isFirstFailure && !isReplay) {
+                    Alert.alert(
+                        "Activation pending",
+                        "Your purchase went through and you have not been charged twice. We could not activate it just yet — we'll keep retrying automatically. If it hasn't activated shortly, tap \"Restore Purchases\" or contact support."
+                    );
+                }
             } finally {
                 setLoadingSku(null);
             }
