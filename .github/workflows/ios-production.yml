@@ -76,13 +76,25 @@ jobs:
           EXPO_PUBLIC_API_BASE_URL: ${{ secrets.API_BASE_URL_PRODUCTION }}
           EXPO_PUBLIC_APP_ENV: production
 
+      # The .p8 is gitignored, so CI has no fallback copy — the secret is the
+      # only source. Validate it here; otherwise an empty/malformed key fails
+      # later inside eas submit with a much less obvious error.
       - name: Write App Store Connect API key
         if: github.event.inputs.submit == 'true'
         env:
           ASC_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
         run: |
+          if [ -z "$ASC_PRIVATE_KEY" ]; then
+            echo "::error::Secret APP_STORE_CONNECT_PRIVATE_KEY is empty or unset."
+            exit 1
+          fi
           mkdir -p src/appstorekey
-          printf '%s' "$ASC_PRIVATE_KEY" > src/appstorekey/AuthKey_LY4822XN6Q.p8
+          printf '%s\n' "$ASC_PRIVATE_KEY" > src/appstorekey/AuthKey_LY4822XN6Q.p8
+          if ! grep -q 'BEGIN PRIVATE KEY' src/appstorekey/AuthKey_LY4822XN6Q.p8; then
+            echo "::error::APP_STORE_CONNECT_PRIVATE_KEY is not a valid .p8 (no 'BEGIN PRIVATE KEY' header)."
+            exit 1
+          fi
+          echo "ASC key written ($(wc -c < src/appstorekey/AuthKey_LY4822XN6Q.p8) bytes)."
 
       - name: EAS Submit — App Store Connect
         if: github.event.inputs.submit == 'true'
