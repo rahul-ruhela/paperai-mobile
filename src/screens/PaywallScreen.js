@@ -61,8 +61,10 @@ function PaywallNative({ navigation }) {
     const [loadingSku, setLoadingSku] = useState(null);
     const [entitlement, setEntitlement] = useState(null);
     const [duration, setDuration] = useState("yearly");
-    // "loading" | "ready" | "partial" | "error" — drives the products banner.
-    const [productsStatus, setProductsStatus] = useState("loading");
+    // A fetch has finished (successfully or not) — until then we show "Loading…"
+    // rather than "Unavailable", so a slow StoreKit call doesn't look like a failure.
+    const [fetchSettled, setFetchSettled] = useState(false);
+    const [fetchFailed, setFetchFailed] = useState(false);
 
     async function loadEntitlement() {
         try {
@@ -115,22 +117,20 @@ function PaywallNative({ navigation }) {
         loadEntitlement();
     }, []);
 
+    // NOTE: useIAP's fetchProducts resolves to `undefined` — it pushes its
+    // results into the hook's `subscriptions` state instead of returning them.
+    // The status therefore has to be derived from `subscriptions`; reading the
+    // return value reports "error" even when the store is perfectly healthy.
     async function loadProducts() {
-        setProductsStatus("loading");
+        setFetchSettled(false);
+        setFetchFailed(false);
         try {
-            const result = await fetchProducts({ skus: ALL_SUBSCRIPTION_SKUS, type: "subs" });
-            const returned = Array.isArray(result) ? result : [];
-            const returnedIds = new Set(returned.map((p) => p.id));
-            const missing = ALL_SUBSCRIPTION_SKUS.filter((sku) => !returnedIds.has(sku));
-            if (missing.length > 0) {
-                console.warn("[IAP] StoreKit did not return these SKUs:", missing.join(", "));
-            }
-            setProductsStatus(
-                returned.length === 0 ? "error" : missing.length > 0 ? "partial" : "ready"
-            );
+            await fetchProducts({ skus: ALL_SUBSCRIPTION_SKUS, type: "subs" });
         } catch (e) {
             console.warn("[IAP] fetchProducts failed:", e?.message ?? e);
-            setProductsStatus("error");
+            setFetchFailed(true);
+        } finally {
+            setFetchSettled(true);
         }
     }
 
@@ -138,6 +138,28 @@ function PaywallNative({ navigation }) {
         if (!connected) return;
         loadProducts();
     }, [connected]);
+
+    const loadedSkus = new Set((subscriptions ?? []).map((p) => p.id));
+    const missingCount = ALL_SUBSCRIPTION_SKUS.filter((sku) => !loadedSkus.has(sku)).length;
+
+    // "loading" | "ready" | "partial" | "error" — drives the products banner.
+    let productsStatus;
+    if (missingCount === 0) productsStatus = "ready";
+    else if (!fetchSettled) productsStatus = "loading";
+    else if (loadedSkus.size === 0) productsStatus = "error";
+    else productsStatus = "partial";
+
+    useEffect(() => {
+        if (!fetchSettled) return;
+        const missing = ALL_SUBSCRIPTION_SKUS.filter((sku) => !loadedSkus.has(sku));
+        if (missing.length > 0) {
+            console.warn(
+                `[IAP] StoreKit returned ${loadedSkus.size}/${ALL_SUBSCRIPTION_SKUS.length} SKUs.`,
+                `Missing: ${missing.join(", ")}.`,
+                fetchFailed ? "(fetchProducts threw)" : ""
+            );
+        }
+    }, [fetchSettled, fetchFailed, missingCount]);
 
     async function subscribe(sku) {
         if (loadingSku) return;

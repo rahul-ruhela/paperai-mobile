@@ -27,6 +27,7 @@ jobs:
   validate:
     name: Validate
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -41,10 +42,19 @@ jobs:
       - name: TypeScript check
         run: npx tsc --noEmit
 
+      # Catches Metro/import errors that would otherwise only surface as a
+      # "Bundle JavaScript" failure ~30 minutes into the EAS build.
+      - name: Bundle check (production JS)
+        run: npx expo export --platform ios --output-dir /tmp/expo-export
+        env:
+          EXPO_PUBLIC_API_BASE_URL: ${{ secrets.API_BASE_URL_PRODUCTION }}
+          EXPO_PUBLIC_APP_ENV: production
+
   build-production:
     name: EAS Build — iOS App Store
     runs-on: ubuntu-latest
     needs: validate
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
