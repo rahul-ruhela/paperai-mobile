@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useState } from "react";
-import { NavigationContainer } from "@react-navigation/native";
+import { NavigationContainer, DefaultTheme, DarkTheme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
@@ -7,6 +7,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { getAccessToken } from "./src/storage/tokenStore";
 import { ensureExpoGoTestCredits } from "./src/api/dev";
 import ErrorBoundary from "./src/components/ErrorBoundary";
+import { ThemeProvider, useTheme } from "./src/ui/ThemeContext";
 
 /* =======================
    Auth Screens
@@ -49,16 +50,17 @@ const Tab = createBottomTabNavigator();
    Tabs
 ======================= */
 function Tabs({ onLoggedOut }) {
+    const { colors } = useTheme();
     return (
         <Tab.Navigator
             screenOptions={({ route }) => ({
                 headerShown: false,
-                tabBarActiveTintColor: "#2563EB",
-                tabBarInactiveTintColor: "#6B7280",
+                tabBarActiveTintColor: colors.primaryDark,
+                tabBarInactiveTintColor: colors.muted,
                 tabBarLabelStyle: { fontWeight: "600", fontSize: 11 },
                 tabBarStyle: {
-                    backgroundColor: "rgba(255,255,255,0.96)",
-                    borderTopColor: "#E5E7EB",
+                    backgroundColor: colors.tabBarBg,
+                    borderTopColor: colors.border,
                     height: 90,
                     paddingBottom: 12,
                     paddingTop: 4,
@@ -149,27 +151,55 @@ export default function App() {
 
     // ✅ Conditional render AFTER hooks
     if (!ready) {
-        return <BootScreen />;
+        return (
+            <ThemeProvider>
+                <BootScreen />
+            </ThemeProvider>
+        );
     }
 
     return (
-        <ErrorBoundary>
-        <NavigationContainer>
+        <ThemeProvider>
+            <ErrorBoundary>
+                <RootNavigation authed={authed} handleAuthed={handleAuthed} setAuthed={setAuthed} />
+            </ErrorBoundary>
+        </ThemeProvider>
+    );
+}
+
+// Navigation tree — lives inside ThemeProvider so it can theme the nav chrome.
+function RootNavigation({ authed, handleAuthed, setAuthed }) {
+    const { colors, scheme } = useTheme();
+
+    const navTheme = {
+        ...(scheme === "dark" ? DarkTheme : DefaultTheme),
+        colors: {
+            ...(scheme === "dark" ? DarkTheme : DefaultTheme).colors,
+            background: colors.bg,
+            card: colors.headerBg,
+            text: colors.text,
+            border: colors.border,
+            primary: colors.primaryDark,
+        },
+    };
+
+    return (
+        <NavigationContainer theme={navTheme}>
             <Stack.Navigator
                 screenOptions={{
                     headerStyle: {
-                        backgroundColor: "#F5F7FB", // light app background
+                        backgroundColor: colors.headerBg,
                     },
                     headerTitleAlign: "center",
 
-                    headerTintColor: "#111111", // back arrow + title
+                    headerTintColor: colors.text, // back arrow + title
                     headerTitleStyle: {
                         fontWeight: "700",
                         fontSize: 16,
                     },
                     headerShadowVisible: false, // removes bottom border
                     contentStyle: {
-                        backgroundColor: "#F5F7FB", // PREVENTS dark flash
+                        backgroundColor: colors.bg, // PREVENTS dark flash
                     },
                 }}
             >
@@ -269,6 +299,5 @@ export default function App() {
                 )}
             </Stack.Navigator>
         </NavigationContainer>
-        </ErrorBoundary>
     );
 }

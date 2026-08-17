@@ -1,24 +1,31 @@
 import React from "react";
 import { View, StyleSheet, StatusBar } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { AppGradients } from "./tokens";
+import { useTheme } from "./ThemeContext";
 
 /**
- * Full-bleed light background with two soft blue accent glows.
- * (The pink glow was removed to keep the palette on-brand: blue + accent.)
+ * Full-bleed page background with two soft accent glows. Theme-aware: the
+ * gradient, glows and status-bar content all follow the active light/dark scheme.
  */
 export default function GradientScreen({ children }) {
+    const { colors } = useTheme();
     return (
         <View style={styles.root}>
-            <StatusBar barStyle="dark-content" />
+            <StatusBar barStyle={colors.statusBar} />
             <LinearGradient
-                colors={AppGradients.background}
+                colors={colors.bgGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={StyleSheet.absoluteFill}
             />
-            <View style={styles.glowTop} pointerEvents="none" />
-            <View style={styles.glowBottom} pointerEvents="none" />
+            <View
+                style={[styles.glowTop, { backgroundColor: colors.isDark ? "rgba(79,140,255,0.14)" : "rgba(79,140,255,0.16)" }]}
+                pointerEvents="none"
+            />
+            <View
+                style={[styles.glowBottom, { backgroundColor: colors.isDark ? "rgba(255,213,74,0.08)" : "rgba(255,213,74,0.14)" }]}
+                pointerEvents="none"
+            />
             {children}
         </View>
     );
@@ -33,7 +40,6 @@ const styles = StyleSheet.create({
         width: 260,
         height: 260,
         borderRadius: 260,
-        backgroundColor: "rgba(79,140,255,0.16)",
     },
     glowBottom: {
         position: "absolute",
@@ -42,6 +48,5 @@ const styles = StyleSheet.create({
         width: 320,
         height: 320,
         borderRadius: 320,
-        backgroundColor: "rgba(255,213,74,0.14)",
     },
 });

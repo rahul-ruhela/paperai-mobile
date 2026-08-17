@@ -191,6 +191,14 @@ function PaywallNative({ navigation }) {
         return product?.displayPrice ?? null;
     }
 
+    // The subscription display name as configured in App Store Connect. StoreKit
+    // returns it on the fetched product, so any label change in ASC shows up in
+    // the app automatically. Falls back to the static tier name if not loaded.
+    function titleForSku(sku) {
+        const product = subscriptions?.find((p) => p.id === sku);
+        return product?.title ?? product?.displayName ?? null;
+    }
+
     return (
         <PaywallView
             duration={duration}
@@ -200,6 +208,7 @@ function PaywallNative({ navigation }) {
             productsStatus={productsStatus}
             onRetryProducts={loadProducts}
             priceForSku={priceForSku}
+            titleForSku={titleForSku}
             onSubscribe={subscribe}
             onRestore={restore}
             onOpenTerms={() => navigation.navigate("Terms")}
@@ -241,6 +250,7 @@ function PaywallExpoGo({ navigation }) {
             notice="You're in Expo Go — purchasing is disabled here. Use a TestFlight / App Store build to subscribe."
             productsStatus="ready"
             priceForSku={(sku, fallback) => fallback ?? null}
+            titleForSku={() => null}
             onSubscribe={notifyUnavailable}
             onRestore={notifyUnavailable}
             onOpenTerms={() => navigation.navigate("Terms")}
@@ -261,6 +271,7 @@ function PaywallView({
     productsStatus = "ready",
     onRetryProducts,
     priceForSku,
+    titleForSku,
     onSubscribe,
     onRestore,
     onOpenTerms,
@@ -325,6 +336,8 @@ function PaywallView({
                 {/* Tier cards */}
                 {SUBSCRIPTION_TIERS.map((tier) => {
                     const product = tier.products[duration];
+                    // Prefer the App Store Connect display name for this product.
+                    const displayTitle = titleForSku?.(product.sku) || tier.name;
                     const livePrice = priceForSku(product.sku, product.fallbackPrice);
                     const priceUnavailable = livePrice == null;
                     const isActive =
@@ -349,7 +362,7 @@ function PaywallView({
                                     </View>
                                 )}
 
-                                <Text style={styles.tierName}>{tier.name}</Text>
+                                <Text style={styles.tierName}>{displayTitle}</Text>
                                 <Text style={styles.tierTagline}>{tier.tagline}</Text>
 
                                 {priceUnavailable ? (

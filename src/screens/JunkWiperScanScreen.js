@@ -50,20 +50,6 @@ const PAGE_SIZE = 500;
 
 const { height: SCREEN_H } = Dimensions.get("window");
 
-// ── Dummy junk file generator ─────────────────────────────────────────────────
-// Cycles through counts [4,5,6,3,5,4,6] so each scan gives a different number.
-// Generates unique names each time using a random hex suffix.
-const DUMMY_COUNTS = [4, 5, 6, 3, 5, 4, 6];
-let _dummyScanIdx = 0;
-
-function randHex(n = 4) {
-    return Math.floor(Math.random() * 16 ** n).toString(16).padStart(n, "0");
-}
-
-function randInt(min, max) {
-    return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
 // Human-readable size from raw bytes (used for the live junk-size readout).
 function formatSize(bytes) {
     if (!bytes || bytes <= 0) return "0 MB";
@@ -71,70 +57,6 @@ function formatSize(bytes) {
     if (mb >= 1024) return `${(mb / 1024).toFixed(2)} GB`;
     if (mb >= 10) return `${mb.toFixed(0)} MB`;
     return `${mb.toFixed(1)} MB`;
-}
-
-function generateDummyJunk() {
-    const count = DUMMY_COUNTS[_dummyScanIdx % DUMMY_COUNTS.length];
-    _dummyScanIdx += 1;
-
-    // Pool of fake system-cache template generators
-    const cacheTemplates = [
-        () => `apple_hck_cache_${randHex(4)}.tmp`,
-        () => `com.apple.mediaserverd_${randHex(6)}.log`,
-        () => `Photo_Burst_residual_${randHex(4)}.dat`,
-        () => `com.apple.mobileslideshow_${randHex(8)}.purgeable`,
-        () => `cloudkit_asset_${randHex(8)}.tmp`,
-        () => `hls_cache_segment_${randHex(4)}.ts`,
-        () => `BackgroundTransfer_${randHex(6)}.log`,
-        () => `NSURLCache_${randHex(8)}.sqlite-shm`,
-        () => `com.apple.photos.ObjectStore_${randHex(6)}.tmp`,
-        () => `mediaanalysis_${randHex(6)}.cache`,
-    ];
-
-    // Pool of fake duplicate photo name generators
-    const photoTemplates = [
-        () => `IMG_${randInt(1000, 9999)}_copy.jpg`,
-        () => `IMG_${randInt(1000, 9999)} (${randInt(1, 3)}).jpg`,
-        () => `WhatsApp Image 2026-0${randInt(1, 6)}-${randInt(10, 28)} (${randInt(2, 4)}).jpg`,
-        () => `Photo ${randInt(1, 12)}-${randInt(1, 28)}-2025 at ${randInt(9, 12)}.${randInt(10, 59)} ${randInt(1, 2) === 1 ? "AM" : "PM"} (1).jpg`,
-        () => `Screenshot 2025-1${randInt(0, 2)}-${randInt(10, 30)} at ${randInt(9, 11)}.${randInt(10, 59)}.${randInt(10, 59)}_copy.png`,
-        () => `HEIF_convert_${randHex(4)}_duplicate.jpg`,
-        () => `Snapshot-${randInt(1, 99)}-copy.jpg`,
-    ];
-
-    const items = [];
-    const usedNames = new Set();
-
-    for (let i = 0; i < count; i++) {
-        // Alternate: even index = cache file, odd index = photo
-        const isCacheFile = i % 2 === 0;
-        const pool = isCacheFile ? cacheTemplates : photoTemplates;
-
-        let name;
-        let tries = 0;
-        do {
-            name = pool[randInt(0, pool.length - 1)]();
-            tries++;
-        } while (usedNames.has(name) && tries < 20);
-        usedNames.add(name);
-
-        const fakeSizeMB = isCacheFile ? randInt(2, 48) : randInt(3, 90);
-        const fakeBytes = fakeSizeMB * 1024 * 1024;
-
-        items.push({
-            id: `dummy__${randHex(8)}__${i}`,
-            label: name,
-            strategy: isCacheFile ? "cache" : "exact",
-            count: 1,
-            totalBytes: fakeBytes,
-            saveMB: fakeSizeMB,
-            assetIds: [],
-            allCount: 2,
-            isDummy: true,
-        });
-    }
-
-    return items;
 }
 
 export default function JunkWiperScanScreen({ navigation }) {
@@ -378,9 +300,8 @@ export default function JunkWiperScanScreen({ navigation }) {
             stopAnimations();
             setProgress(100);
 
-            // If no real duplicates found, inject dummy junk files so there's always
-            // something actionable to show. Dummy deletes are UI-only (nothing removed from device).
-            const finalGroups = groups.length > 0 ? groups : generateDummyJunk();
+            // Only ever show REAL detected duplicates from the device library.
+            const finalGroups = groups;
 
             const totalBytes = finalGroups.reduce((acc, g) => acc + g.totalBytes, 0);
             setStats({
@@ -390,8 +311,14 @@ export default function JunkWiperScanScreen({ navigation }) {
             });
             setDuplicates(finalGroups);
 
+            // Fair billing: if the scan found nothing, refund the reserved credits
+            // so the user is never charged for an empty result. Otherwise confirm.
             if (txnIdRef.current) {
-                await completeTransaction(txnIdRef.current).catch(() => {});
+                if (finalGroups.length === 0) {
+                    await refundTransaction(txnIdRef.current, "No duplicates found").catch(() => {});
+                } else {
+                    await completeTransaction(txnIdRef.current).catch(() => {});
+                }
                 txnIdRef.current = null;
             }
             setPhase("done");
@@ -476,16 +403,8 @@ export default function JunkWiperScanScreen({ navigation }) {
         }
 
         // ── Strategy 3: burst / near-duplicate shots ──────────────────────────────
-        // Same dimensions, creation time within 3 seconds of each other
-        const timeMap = {};
-        for (const a of enriched) {
-            if (!a.width || !a.height) continue;
-            // Round creation time to nearest 3-second bucket
-            const timeBucket = Math.floor((a.creationTime ?? 0) / 3000);
-            const key = `${a.width}__${a.height}__${timeBucket}`;
-            if (!timeMap[key]) timeMap[key] = [];
-            timeMap[key].push(a);
-        }
+        // Built below with a sorted-neighbour sweep (more accurate than fixed
+        // time buckets — catches bursts that straddle a bucket boundary).
 
         // ── Merge all strategies into unified groups ───────────────────────────────
         // Track which asset IDs have already been assigned to a group to avoid double-counting
@@ -540,12 +459,33 @@ export default function JunkWiperScanScreen({ navigation }) {
             buildGroup(items, "name");
         }
 
-        // Strategy 3 — burst shots (least reliable — do last)
-        for (const items of Object.values(timeMap)) {
-            // Extra guard: require at least 2 items with non-zero fileSize
-            const valid = items.filter(a => (a.fileSize ?? 0) > 0);
-            buildGroup(valid, "burst");
+        // Strategy 3 — burst / near-duplicate shots (sorted-neighbour sweep).
+        // Walk assets in time order and cluster consecutive shots that share the
+        // exact dimensions and were taken within 2 seconds of each other. Only
+        // assets not already claimed by the exact/name strategies are considered.
+        const NEAR_WINDOW_MS = 2000;
+        const timeSorted = enriched
+            .filter(a => a.width && a.height && (a.fileSize ?? 0) > 0 && !assignedIds.has(a.id))
+            .sort((a, b) => (a.creationTime ?? 0) - (b.creationTime ?? 0));
+
+        let cluster = [];
+        const flushCluster = () => {
+            if (cluster.length >= 2) buildGroup(cluster, "burst");
+            cluster = [];
+        };
+        for (const a of timeSorted) {
+            if (cluster.length === 0) { cluster = [a]; continue; }
+            const prev = cluster[cluster.length - 1];
+            const sameDims = prev.width === a.width && prev.height === a.height;
+            const closeInTime = Math.abs((a.creationTime ?? 0) - (prev.creationTime ?? 0)) <= NEAR_WINDOW_MS;
+            if (sameDims && closeInTime) {
+                cluster.push(a);
+            } else {
+                flushCluster();
+                cluster = [a];
+            }
         }
+        flushCluster();
 
         onProgress(100);
         onFound(groups.length);
@@ -684,18 +624,24 @@ export default function JunkWiperScanScreen({ navigation }) {
             <SafeAreaView style={{ flex: 1 }}>
                 <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
 
-                    {/* Header */}
-                    <View style={styles.header}>
-                        <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.backBtn}>
-                            <Ionicons name="chevron-back" size={20} color="#2563EB" />
-                        </Pressable>
-                        <Text style={styles.headerTitle}>Junk Wiper</Text>
-                        <View style={{ width: 36 }} />
-                    </View>
+                    {/* Header + compliance note hide during scanning so the dark
+                        console reads as an intentional full-screen scanner mode
+                        (looks right in both light and dark themes). */}
+                    {phase !== "scanning" && (
+                        <>
+                            <View style={styles.header}>
+                                <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.backBtn}>
+                                    <Ionicons name="chevron-back" size={20} color="#2563EB" />
+                                </Pressable>
+                                <Text style={styles.headerTitle}>Junk Wiper</Text>
+                                <View style={{ width: 36 }} />
+                            </View>
 
-                    <Text style={styles.complianceNote}>
-                        Smart Duplicate Cleaner · scans only your permitted photos{"\n"}Nothing is deleted without your explicit confirmation
-                    </Text>
+                            <Text style={styles.complianceNote}>
+                                Smart Duplicate Cleaner · scans only your permitted photos{"\n"}Nothing is deleted without your explicit confirmation
+                            </Text>
+                        </>
+                    )}
 
                     {/* ──────────── IDLE ──────────── */}
                     {phase === "idle" && (
@@ -763,7 +709,7 @@ export default function JunkWiperScanScreen({ navigation }) {
                         </View>
                     )}
 
-                    {/* ──────────── SCANNING — PREMIUM RADAR ──────────── */}
+                    {/* ──────────── SCANNING — PREMIUM RADAR (full-bleed dark console) ──────────── */}
                     {phase === "scanning" && (
                         <LinearGradient
                             colors={["#0A1230", "#0B1B44", "#08122E"]}
@@ -1258,20 +1204,20 @@ const styles = StyleSheet.create({
     },
     cancelBtnText: { color: "#6B7280", fontWeight: "800" },
 
-    // ── Premium radar scanner ──
+    // ── Premium radar scanner (full-bleed dark console) ──
+    // Negative margins cancel the ScrollView container padding (18) so the dark
+    // gradient reaches every edge — reads as an intentional scanner mode in both
+    // light and dark themes instead of a dark card floating on a light page.
     radarScreen: {
-        borderRadius: 28,
-        paddingVertical: 28,
-        paddingHorizontal: 20,
+        marginHorizontal: -18,
+        marginTop: -16,
+        marginBottom: -48,
+        minHeight: SCREEN_H,
+        paddingVertical: 48,
+        paddingHorizontal: 24,
         alignItems: "center",
+        justifyContent: "center",
         gap: 18,
-        borderWidth: 1,
-        borderColor: "rgba(56,189,248,0.18)",
-        shadowColor: "#0A1230",
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.4,
-        shadowRadius: 20,
-        elevation: 8,
     },
     radarStage: {
         width: 230, height: 230,
