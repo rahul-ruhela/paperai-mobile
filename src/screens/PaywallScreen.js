@@ -27,6 +27,7 @@ import Constants from "expo-constants";
 import { LinearGradient } from "expo-linear-gradient";
 
 import { verifyIosTransactionAutoWithRetry, getEntitlement } from "../api/billing";
+import { invalidateEntitlements } from "../services/entitlementService";
 import {
     recordFailedVerification,
     clearFailedVerification,
@@ -45,6 +46,11 @@ import useThemedStyles from "../ui/useThemedStyles";
 const IS_EXPO_GO = Constants.executionEnvironment === "storeClient";
 
 const DURATIONS = ["weekly", "monthly", "yearly"];
+
+// How often to ask the backend whether an in-flight purchase has activated,
+// and how long to keep asking before handing the user back control.
+const PURCHASE_POLL_MS = 2000;
+const PURCHASE_TIMEOUT_MS = 45000;
 
 // Backend may return either `active` or `isActive` — accept both.
 function entitlementIsActive(e) {
@@ -80,6 +86,9 @@ function PaywallNative({ navigation }) {
         try {
             const e = await getEntitlement();
             setEntitlement(e);
+            // Other screens (Settings, feature gates) read a cached snapshot
+            // from entitlementService — drop it so they don't show a stale plan.
+            invalidateEntitlements();
             return e;
         } catch {
             return null;
@@ -160,6 +169,54 @@ function PaywallNative({ navigation }) {
     useEffect(() => {
         loadEntitlement();
     }, []);
+
+    // Reconcile a purchase that is in flight against the server.
+    //
+    // A plan change inside the subscription group (e.g. moving to Weekly while
+    // another tier is active) can settle without onPurchaseSuccess firing the
+    // way a first-time purchase does. Nothing would then clear `loadingSku` and
+    // the tier button spins forever. Polling the entitlement both fixes that
+    // and makes activation feel immediate: the moment the backend reports the
+    // plan active we stop the spinner, rather than waiting on StoreKit.
+    useEffect(() => {
+        if (!loadingSku || loadingSku === "__restore__") return;
+
+        let cancelled = false;
+        let elapsed = 0;
+
+        const timer = setInterval(async () => {
+            elapsed += PURCHASE_POLL_MS;
+
+            const current = await loadEntitlement();
+            if (cancelled) return;
+
+            // Match on the product, not just "active": when switching plans the
+            // previous subscription is still active, so checking activity alone
+            // would stop the spinner before the new plan actually took effect.
+            const switchedToThisPlan =
+                entitlementIsActive(current) && current?.productId === loadingSku;
+
+            if (switchedToThisPlan) {
+                clearInterval(timer);
+                setLoadingSku(null);
+                return;
+            }
+
+            if (elapsed >= PURCHASE_TIMEOUT_MS) {
+                clearInterval(timer);
+                setLoadingSku(null);
+                Alert.alert(
+                    "Still processing",
+                    "Apple has not confirmed this purchase yet. If it completed, tap \"Restore Purchases\" in a moment — you will not be charged twice."
+                );
+            }
+        }, PURCHASE_POLL_MS);
+
+        return () => {
+            cancelled = true;
+            clearInterval(timer);
+        };
+    }, [loadingSku]);
 
     // NOTE: useIAP's fetchProducts resolves to `undefined` — it pushes its
     // results into the hook's `subscriptions` state instead of returning them.

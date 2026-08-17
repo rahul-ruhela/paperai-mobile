@@ -110,6 +110,25 @@ export default function LoginScreen({ navigation, onAuthed }) {
             onAuthed();
         } catch (e) {
             if (e?.code === "ERR_REQUEST_CANCELED") return; // user dismissed the sheet
+
+            // The backend validates the identity token's audience against its
+            // Apple:ClientId setting. When that key is absent it answers
+            // apple_token_invalid with the raw config error, which must never be
+            // shown to a user (and would read as a broken app in review).
+            const serverError = e?.response?.data;
+            const isServerMisconfigured =
+                serverError?.error === "apple_token_invalid" &&
+                /missing in configuration/i.test(serverError?.reason ?? "");
+
+            if (isServerMisconfigured) {
+                console.warn("[AppleSignIn] server misconfigured:", serverError?.reason);
+                Alert.alert(
+                    "Apple Sign In unavailable",
+                    "Sign in with Apple is temporarily unavailable. Please sign in with your email and password, or try again later."
+                );
+                return;
+            }
+
             Alert.alert("Apple Sign In failed", e?.userMessage ?? e?.message ?? "Something went wrong.");
         } finally {
             setBusy(false);
