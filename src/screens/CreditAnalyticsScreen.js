@@ -4,6 +4,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import GradientScreen from "../ui/GradientScreen";
 import { getCreditsBalance, getFeatureConfigs } from "../api/credits";
 
+import { useTheme } from "../ui/ThemeProvider";
+import useThemedStyles from "../ui/useThemedStyles";
 // Friendly display name for a feature config.
 function featureLabel(f) {
     return f.userNoticeTitle || prettify(f.featureKey);
@@ -15,6 +17,8 @@ function prettify(key = "") {
 }
 
 export default function CreditAnalyticsScreen() {
+    const { theme } = useTheme();
+    const styles = useThemedStyles(makeStyles);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState(false);
@@ -70,13 +74,13 @@ export default function CreditAnalyticsScreen() {
             <SafeAreaView style={{ flex: 1 }}>
                 <ScrollView
                     contentContainerStyle={styles.container}
-                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#4F8CFF" />}
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />}
                 >
                     <Text style={styles.title}>Credit Analytics</Text>
                     <Text style={styles.subtitle}>Your balance and how features consume credits.</Text>
 
                     {loading ? (
-                        <View style={styles.center}><ActivityIndicator color="#4F8CFF" /></View>
+                        <View style={styles.center}><ActivityIndicator color={theme.colors.primary} /></View>
                     ) : (
                         <>
                             {/* Balance hero */}
@@ -171,6 +175,7 @@ export default function CreditAnalyticsScreen() {
 }
 
 function StatCard({ title, value, hint }) {
+    const styles = useThemedStyles(makeStyles);
     return (
         <View style={styles.stat}>
             <Text style={styles.statTitle}>{title}</Text>
@@ -180,70 +185,71 @@ function StatCard({ title, value, hint }) {
     );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t) =>
+    StyleSheet.create({
     container: { padding: 18, gap: 14, paddingBottom: 40 },
-    title: { color: "#111111", fontSize: 26, fontWeight: "800" },
-    subtitle: { color: "#6B7280", fontWeight: "500" },
+    title: { color: t.colors.textPrimary, fontSize: 26, fontWeight: "800" },
+    subtitle: { color: t.colors.textMuted, fontWeight: "500" },
     center: { paddingVertical: 40, alignItems: "center" },
 
     hero: {
-        backgroundColor: "rgba(79,140,255,0.10)",
+        backgroundColor: t.colors.infoBg,
         borderWidth: 1,
-        borderColor: "rgba(79,140,255,0.30)",
+        borderColor: t.colors.infoBorder,
         borderRadius: 22,
         padding: 18,
         alignItems: "center",
     },
-    heroLabel: { color: "#6B7280", fontWeight: "700", fontSize: 13 },
-    heroValue: { color: "#111111", fontSize: 44, fontWeight: "800", marginVertical: 2 },
-    heroHint: { color: "#2563EB", fontWeight: "700", fontSize: 12 },
+    heroLabel: { color: t.colors.textMuted, fontWeight: "700", fontSize: 13 },
+    heroValue: { color: t.colors.textPrimary, fontSize: 44, fontWeight: "800", marginVertical: 2 },
+    heroHint: { color: t.colors.accentText, fontWeight: "700", fontSize: 12 },
 
     grid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
     stat: {
         width: "47%",
-        backgroundColor: "rgba(255,255,255,0.74)",
+        backgroundColor: t.colors.glass,
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.90)",
+        borderColor: t.colors.glassBorder,
         borderRadius: 18,
         padding: 14,
         gap: 4,
-        shadowColor: "#4F8CFF", shadowOffset: { width: 0, height: 8 },
+        shadowColor: t.colors.primary, shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.1, shadowRadius: 18, elevation: 4,
     },
-    statTitle: { color: "#6B7280", fontWeight: "700", fontSize: 12 },
-    statValue: { color: "#111111", fontSize: 22, fontWeight: "800" },
-    statHint: { color: "#6B7280", fontWeight: "500", fontSize: 11 },
+    statTitle: { color: t.colors.textMuted, fontWeight: "700", fontSize: 12 },
+    statValue: { color: t.colors.textPrimary, fontSize: 22, fontWeight: "800" },
+    statHint: { color: t.colors.textMuted, fontWeight: "500", fontSize: 11 },
 
     insight: {
-        backgroundColor: "rgba(79,140,255,0.10)",
+        backgroundColor: t.colors.infoBg,
         borderWidth: 1,
-        borderColor: "rgba(79,140,255,0.30)",
+        borderColor: t.colors.infoBorder,
         borderRadius: 16,
         padding: 14,
     },
-    insightText: { color: "#374151", fontWeight: "500", lineHeight: 20 },
-    insightStrong: { color: "#2563EB", fontWeight: "800" },
+    insightText: { color: t.colors.textSecondary, fontWeight: "500", lineHeight: 20 },
+    insightStrong: { color: t.colors.accentText, fontWeight: "800" },
 
     card: {
-        backgroundColor: "rgba(255,255,255,0.74)",
+        backgroundColor: t.colors.glass,
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.90)",
+        borderColor: t.colors.glassBorder,
         borderRadius: 22,
         padding: 16,
         gap: 12,
-        shadowColor: "#4F8CFF", shadowOffset: { width: 0, height: 8 },
+        shadowColor: t.colors.primary, shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.1, shadowRadius: 18, elevation: 4,
     },
-    cardTitle: { color: "#2563EB", fontWeight: "800" },
-    cardText: { color: "#6B7280", fontWeight: "500" },
+    cardTitle: { color: t.colors.accentText, fontWeight: "800" },
+    cardText: { color: t.colors.textMuted, fontWeight: "500" },
 
     barRow: { gap: 6 },
     barHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
-    barLabel: { color: "#374151", fontWeight: "700", flex: 1, fontSize: 13 },
-    barValue: { color: "#111111", fontWeight: "800", fontSize: 13 },
-    barTrack: { height: 10, borderRadius: 999, backgroundColor: "#E5E7EB", overflow: "hidden" },
-    barFill: { height: 10, borderRadius: 999, backgroundColor: "#4F8CFF" },
-    barFillAlt: { backgroundColor: "#FFD54A" },
+    barLabel: { color: t.colors.textSecondary, fontWeight: "700", flex: 1, fontSize: 13 },
+    barValue: { color: t.colors.textPrimary, fontWeight: "800", fontSize: 13 },
+    barTrack: { height: 10, borderRadius: 999, backgroundColor: t.colors.separator, overflow: "hidden" },
+    barFill: { height: 10, borderRadius: 999, backgroundColor: t.colors.primary },
+    barFillAlt: { backgroundColor: t.colors.accent },
 
-    note: { textAlign: "center", color: "#6B7280", fontSize: 12, fontWeight: "500" },
+    note: { textAlign: "center", color: t.colors.textMuted, fontSize: 12, fontWeight: "500" },
 });

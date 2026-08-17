@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, Pressable, StyleSheet } from "react-native";
-import { AppColors, InputStyle, Radius, Spacing } from "./tokens";
+import { Spacing } from "./tokens";
+import { useTheme } from "./ThemeProvider";
+import useThemedStyles from "./useThemedStyles";
 import AppIcon from "./AppIcon";
 
 /**
@@ -21,6 +23,9 @@ export default function AppInput({
 }) {
     const [focused, setFocused] = useState(false);
     const [hide, setHide] = useState(!!secureTextEntry);
+    const { theme } = useTheme();
+    const c = theme.colors;
+    const styles = useThemedStyles(makeStyles);
 
     const hasError = !!error;
 
@@ -39,7 +44,7 @@ export default function AppInput({
                     <AppIcon
                         name={icon}
                         size={20}
-                        color={hasError ? AppColors.dangerDark : AppColors.textMuted}
+                        color={hasError ? c.dangerDark : c.textMuted}
                     />
                 ) : null}
 
@@ -48,7 +53,9 @@ export default function AppInput({
                     value={value}
                     onChangeText={onChangeText}
                     placeholder={placeholder}
-                    placeholderTextColor={AppColors.textMuted}
+                    placeholderTextColor={c.placeholder}
+                    // Without this the iOS keyboard stays white in dark mode.
+                    keyboardAppearance={theme.keyboardAppearance}
                     secureTextEntry={hide}
                     onFocus={() => setFocused(true)}
                     onBlur={() => setFocused(false)}
@@ -62,16 +69,16 @@ export default function AppInput({
                         accessibilityRole="button"
                         accessibilityLabel={hide ? "Show password" : "Hide password"}
                     >
-                        <AppIcon name={hide ? "eye" : "eyeOff"} size={20} color={AppColors.textMuted} />
+                        <AppIcon name={hide ? "eye" : "eyeOff"} size={20} color={c.textMuted} />
                     </Pressable>
                 ) : hasError ? (
-                    <AppIcon name="error" size={20} color={AppColors.dangerDark} />
+                    <AppIcon name="error" size={20} color={c.dangerDark} />
                 ) : null}
             </View>
 
             {hasError ? (
                 <View style={styles.errorRow}>
-                    <AppIcon name="warning" size={14} color={AppColors.dangerDark} />
+                    <AppIcon name="warning" size={14} color={c.dangerDark} />
                     <Text style={styles.errorText}>{error}</Text>
                 </View>
             ) : null}
@@ -79,35 +86,36 @@ export default function AppInput({
     );
 }
 
-const styles = StyleSheet.create({
-    wrap: { marginBottom: Spacing.md },
-    label: {
-        fontSize: 13,
-        fontWeight: "600",
-        color: AppColors.textSecondary,
-        marginBottom: 6,
-    },
-    field: {
-        ...InputStyle,
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 10,
-    },
-    focused: {
-        borderColor: AppColors.primary,
-        shadowColor: AppColors.primary,
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.25,
-        shadowRadius: 8,
-        elevation: 2,
-    },
-    errored: { borderColor: AppColors.dangerDark },
-    input: {
-        flex: 1,
-        color: AppColors.textPrimary,
-        fontSize: 15,
-        paddingVertical: 0,
-    },
-    errorRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 },
-    errorText: { color: AppColors.dangerDark, fontSize: 13, fontWeight: "600", flex: 1 },
-});
+const makeStyles = (t) =>
+    StyleSheet.create({
+        wrap: { marginBottom: Spacing.md },
+        label: {
+            fontSize: 13,
+            fontWeight: "600",
+            color: t.colors.textSecondary,
+            marginBottom: 6,
+        },
+        field: {
+            ...t.input,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 10,
+        },
+        focused: {
+            borderColor: t.colors.primary,
+            shadowColor: t.colors.primary,
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: 0.25,
+            shadowRadius: 8,
+            elevation: 2,
+        },
+        errored: { borderColor: t.colors.dangerDark },
+        input: {
+            flex: 1,
+            color: t.colors.textPrimary,
+            fontSize: 15,
+            paddingVertical: 0,
+        },
+        errorRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 },
+        errorText: { color: t.colors.dangerDark, fontSize: 13, fontWeight: "600", flex: 1 },
+    });

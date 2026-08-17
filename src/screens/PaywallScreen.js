@@ -39,6 +39,8 @@ import {
 } from "../constants/api";
 import ScreenContainer from "../ui/ScreenContainer";
 
+import { useTheme } from "../ui/ThemeProvider";
+import useThemedStyles from "../ui/useThemedStyles";
 // "storeClient" === running inside Expo Go, where native modules are unavailable.
 const IS_EXPO_GO = Constants.executionEnvironment === "storeClient";
 
@@ -53,6 +55,8 @@ function entitlementIsActive(e) {
    Public component — picks the right implementation for the environment.
 ========================================================================= */
 export default function PaywallScreen(props) {
+    const { theme } = useTheme();
+    const styles = useThemedStyles(makeStyles);
     if (IS_EXPO_GO) return <PaywallExpoGo {...props} />;
     return <PaywallNative {...props} />;
 }
@@ -327,6 +331,7 @@ function PaywallView({
     onOpenTerms,
     onOpenPrivacy,
 }) {
+    const styles = useThemedStyles(makeStyles);
     const scaleAnim = useRef(new Animated.Value(1)).current;
     const isBusyAny = !!loadingSku;
 
@@ -477,6 +482,8 @@ function PaywallView({
 
 // ── Subscription CTA — PaperAI blue gradient with gentle press animation ──────
 function GradientCTA({ onPress, busy, disabled, label }) {
+    const { theme } = useTheme();
+    const styles = useThemedStyles(makeStyles);
     const scale = useRef(new Animated.Value(1)).current;
 
     const pressIn = () =>
@@ -516,7 +523,7 @@ function GradientCTA({ onPress, busy, disabled, label }) {
                     style={styles.cta}
                 >
                     {busy ? (
-                        <ActivityIndicator color="#FFFFFF" />
+                        <ActivityIndicator color={theme.colors.white} />
                     ) : (
                         <Text style={styles.ctaText}>{label}</Text>
                     )}
@@ -526,14 +533,15 @@ function GradientCTA({ onPress, busy, disabled, label }) {
     );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t) =>
+    StyleSheet.create({
     container: { flexGrow: 1, padding: 24 },
-    header: { color: "#111111", fontSize: 28, fontWeight: "800", marginBottom: 6 },
-    subHeader: { color: "#6B7280", fontSize: 14, marginBottom: 18 },
+    header: { color: t.colors.textPrimary, fontSize: 28, fontWeight: "800", marginBottom: 6 },
+    subHeader: { color: t.colors.textMuted, fontSize: 14, marginBottom: 18 },
     notice: {
-        color: "#B45309",
-        backgroundColor: "rgba(245,158,11,0.12)",
-        borderColor: "rgba(245,158,11,0.4)",
+        color: t.colors.warningText,
+        backgroundColor: t.colors.warningBg,
+        borderColor: t.colors.warningBorder,
         borderWidth: 1,
         borderRadius: 12,
         padding: 12,
@@ -544,46 +552,46 @@ const styles = StyleSheet.create({
 
     tabs: {
         flexDirection: "row",
-        backgroundColor: "rgba(255,255,255,0.72)",
-        borderColor: "#E5E7EB",
+        backgroundColor: t.colors.glassButton,
+        borderColor: t.colors.border,
         borderWidth: 1,
         borderRadius: 14,
         padding: 4,
         marginBottom: 20,
     },
     tab: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: "center", minHeight: 44, justifyContent: "center" },
-    tabActive: { backgroundColor: "#4F8CFF" },
-    tabText: { color: "#374151", fontWeight: "700", fontSize: 13 },
-    tabTextActive: { color: "#FFFFFF" },
+    tabActive: { backgroundColor: t.colors.primary },
+    tabText: { color: t.colors.textSecondary, fontWeight: "700", fontSize: 13 },
+    tabTextActive: { color: t.colors.white },
 
     card: {
-        backgroundColor: "rgba(255,255,255,0.74)",
-        borderColor: "rgba(255,255,255,0.90)",
+        backgroundColor: t.colors.glass,
+        borderColor: t.colors.glassBorder,
         borderWidth: 1,
         borderRadius: 20,
         padding: 18,
         marginBottom: 16,
-        shadowColor: "#4F8CFF", shadowOffset: { width: 0, height: 8 },
+        shadowColor: t.colors.primary, shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.1, shadowRadius: 18, elevation: 4,
     },
-    cardHighlight: { borderColor: "#4F8CFF", backgroundColor: "rgba(79,140,255,0.08)" },
-    cardActive: { borderColor: "#22C55E" },
+    cardHighlight: { borderColor: t.colors.primary, backgroundColor: t.colors.infoBg },
+    cardActive: { borderColor: t.colors.success },
     popular: {
         alignSelf: "flex-start",
-        backgroundColor: "#FFD54A",
+        backgroundColor: t.colors.accent,
         borderRadius: 999,
         paddingHorizontal: 10,
         paddingVertical: 3,
         marginBottom: 8,
     },
-    popularText: { color: "#111111", fontSize: 10, fontWeight: "800", letterSpacing: 0.5 },
+    popularText: { color: t.colors.textPrimary, fontSize: 10, fontWeight: "800", letterSpacing: 0.5 },
 
-    tierName: { color: "#111111", fontSize: 22, fontWeight: "800" },
-    tierTagline: { color: "#6B7280", fontSize: 13, marginTop: 2, marginBottom: 12 },
-    price: { color: "#111111", fontSize: 26, fontWeight: "800" },
-    priceUnavailable: { color: "#6B7280", fontSize: 20, fontWeight: "700", fontStyle: "italic" },
-    per: { color: "#6B7280", fontSize: 14, fontWeight: "600" },
-    credits: { color: "#2563EB", fontSize: 14, fontWeight: "700", marginTop: 4, marginBottom: 14 },
+    tierName: { color: t.colors.textPrimary, fontSize: 22, fontWeight: "800" },
+    tierTagline: { color: t.colors.textMuted, fontSize: 13, marginTop: 2, marginBottom: 12 },
+    price: { color: t.colors.textPrimary, fontSize: 26, fontWeight: "800" },
+    priceUnavailable: { color: t.colors.textMuted, fontSize: 20, fontWeight: "700", fontStyle: "italic" },
+    per: { color: t.colors.textMuted, fontSize: 14, fontWeight: "600" },
+    credits: { color: t.colors.accentText, fontSize: 14, fontWeight: "700", marginTop: 4, marginBottom: 14 },
 
     cta: {
         borderRadius: 14,
@@ -595,18 +603,18 @@ const styles = StyleSheet.create({
     // Wrapper carries the rounded corners + subtle blue glow around the gradient.
     ctaGlow: {
         borderRadius: 14,
-        shadowColor: "#2563EB",
+        shadowColor: t.colors.primary,
         shadowOffset: { width: 0, height: 6 },
         shadowOpacity: 0.45,
         shadowRadius: 14,
         elevation: 6,
     },
-    ctaDisabled: { backgroundColor: "#D1D5DB" },
-    ctaText: { color: "#FFFFFF", fontWeight: "800", fontSize: 15, letterSpacing: 0.3 },
+    ctaDisabled: { backgroundColor: t.colors.disabled },
+    ctaText: { color: t.colors.white, fontWeight: "800", fontSize: 15, letterSpacing: 0.3 },
 
     restore: {
         marginTop: 10,
-        color: "#2563EB",
+        color: t.colors.accentText,
         textAlign: "center",
         textDecorationLine: "underline",
         fontSize: 14,
@@ -614,7 +622,7 @@ const styles = StyleSheet.create({
     },
     legal: {
         marginTop: 20,
-        color: "#6B7280",
+        color: t.colors.textMuted,
         fontSize: 11,
         textAlign: "center",
         lineHeight: 16,
@@ -628,33 +636,33 @@ const styles = StyleSheet.create({
         gap: 8,
     },
     legalLink: {
-        color: "#2563EB",
+        color: t.colors.accentText,
         fontSize: 12,
         fontWeight: "600",
         textDecorationLine: "underline",
     },
-    legalLinkDot: { color: "#6B7280", fontSize: 12 },
+    legalLinkDot: { color: t.colors.textMuted, fontSize: 12 },
 
     productsBanner: {
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
-        backgroundColor: "rgba(255,90,95,0.10)",
-        borderColor: "rgba(255,90,95,0.4)",
+        backgroundColor: t.colors.dangerBg,
+        borderColor: t.colors.dangerBorder,
         borderWidth: 1,
         borderRadius: 12,
         padding: 12,
         marginBottom: 18,
     },
     productsBannerText: {
-        color: "#DC2626",
+        color: t.colors.dangerText,
         fontSize: 12,
         fontWeight: "600",
         flex: 1,
         marginRight: 10,
     },
     productsBannerRetry: {
-        color: "#DC2626",
+        color: t.colors.dangerText,
         fontSize: 12,
         fontWeight: "800",
         textDecorationLine: "underline",

@@ -1,6 +1,6 @@
 import React from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { AppColors } from "./tokens";
+import { useTheme } from "./ThemeProvider";
 
 /**
  * Single, consistent icon surface for the whole app.
@@ -70,17 +70,21 @@ const ICONS = {
 export default function AppIcon({
     name,
     size = 22,
-    color = AppColors.textSecondary,
+    color,
     style,
     accessibilityLabel,
 }) {
+    const { colors } = useTheme();
     const glyph = ICONS[name] || name;
+    // Undefined (rather than a literal) default so an un-tinted icon follows
+    // the active appearance.
+    const tint = color ?? colors.textSecondary;
 
     return (
         <Ionicons
             name={glyph}
             size={size}
-            color={color}
+            color={tint}
             style={style}
             accessibilityLabel={accessibilityLabel}
             accessibilityRole={accessibilityLabel ? "image" : "none"}

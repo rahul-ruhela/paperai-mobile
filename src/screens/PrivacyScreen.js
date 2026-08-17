@@ -3,9 +3,12 @@ import { ScrollView, Text, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import GradientScreen from "../ui/GradientScreen";
 
+import { useTheme } from "../ui/ThemeProvider";
+import useThemedStyles from "../ui/useThemedStyles";
 const LAST_UPDATED = "June 30, 2026";
 
 function Section({ heading, children }) {
+    const styles = useThemedStyles(makeStyles);
     return (
         <View style={styles.section}>
             <Text style={styles.heading}>{heading}</Text>
@@ -15,6 +18,8 @@ function Section({ heading, children }) {
 }
 
 export default function PrivacyScreen() {
+    const { theme } = useTheme();
+    const styles = useThemedStyles(makeStyles);
     return (
         <GradientScreen>
             <SafeAreaView style={{ flex: 1 }}>
@@ -109,12 +114,13 @@ export default function PrivacyScreen() {
     );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t) =>
+    StyleSheet.create({
     container: { padding: 18, paddingBottom: 40 },
-    title: { color: "#111111", fontSize: 24, fontWeight: "900" },
-    updated: { color: "#9CA3AF", fontWeight: "700", fontSize: 12, marginTop: 4, marginBottom: 12 },
-    intro: { color: "#374151", lineHeight: 22, fontWeight: "600" },
+    title: { color: t.colors.textPrimary, fontSize: 24, fontWeight: "900" },
+    updated: { color: t.colors.placeholder, fontWeight: "700", fontSize: 12, marginTop: 4, marginBottom: 12 },
+    intro: { color: t.colors.textSecondary, lineHeight: 22, fontWeight: "600" },
     section: { marginTop: 16 },
-    heading: { color: "#2563EB", fontWeight: "900", fontSize: 15, marginBottom: 6 },
-    text: { color: "#374151", lineHeight: 22, fontWeight: "600" },
+    heading: { color: t.colors.accentText, fontWeight: "900", fontSize: 15, marginBottom: 6 },
+    text: { color: t.colors.textSecondary, lineHeight: 22, fontWeight: "600" },
 });

@@ -1,14 +1,17 @@
 import React from "react";
 import { View } from "react-native";
-import { GlassCardStyle, Spacing } from "./tokens";
+import { Spacing } from "./tokens";
+import { useTheme } from "./ThemeProvider";
 
 /**
- * Legacy card. Now renders the branded glass surface so existing screens
- * that use <Card> pick up the new look without changes.
+ * Legacy card. Renders the branded glass surface so existing screens that use
+ * <Card> pick up the active theme without changes.
  */
 export default function Card({ children, style }) {
+    const { theme } = useTheme();
+
     return (
-        <View style={[{ ...GlassCardStyle, padding: Spacing.md }, style]}>
+        <View style={[{ ...theme.glassCard, padding: Spacing.md }, style]}>
             {children}
         </View>
     );

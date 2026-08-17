@@ -4,6 +4,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import GradientScreen from "../ui/GradientScreen";
 
+import { useTheme } from "../ui/ThemeProvider";
+import useThemedStyles from "../ui/useThemedStyles";
 const FAQS = [
     {
         q: "How do I scan a document?",
@@ -83,12 +85,14 @@ async function openLink(url) {
 }
 
 function FAQ({ q, a }) {
+    const { theme } = useTheme();
+    const styles = useThemedStyles(makeStyles);
     const [open, setOpen] = useState(false);
     return (
         <TouchableOpacity style={styles.card} activeOpacity={0.85} onPress={() => setOpen((v) => !v)}>
             <View style={styles.qRow}>
                 <Text style={styles.q}>{q}</Text>
-                <Ionicons name={open ? "chevron-up" : "chevron-down"} size={18} color="#2563EB" />
+                <Ionicons name={open ? "chevron-up" : "chevron-down"} size={18} color={theme.colors.accentText} />
             </View>
             {open && <Text style={styles.a}>{a}</Text>}
         </TouchableOpacity>
@@ -96,6 +100,8 @@ function FAQ({ q, a }) {
 }
 
 export default function HelpCenterScreen() {
+    const { theme } = useTheme();
+    const styles = useThemedStyles(makeStyles);
     return (
         <GradientScreen>
             <SafeAreaView style={{ flex: 1 }}>
@@ -110,9 +116,9 @@ export default function HelpCenterScreen() {
                     <Text style={styles.sectionTitle}>Quick links</Text>
                     {LINKS.map((l) => (
                         <TouchableOpacity key={l.label} style={styles.linkRow} onPress={() => openLink(l.url)}>
-                            <Ionicons name={l.icon} size={20} color="#2563EB" />
+                            <Ionicons name={l.icon} size={20} color={theme.colors.accentText} />
                             <Text style={styles.linkText}>{l.label}</Text>
-                            <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                            <Ionicons name="chevron-forward" size={18} color={theme.colors.placeholder} />
                         </TouchableOpacity>
                     ))}
                 </ScrollView>
@@ -121,31 +127,32 @@ export default function HelpCenterScreen() {
     );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t) =>
+    StyleSheet.create({
     container: { padding: 18, gap: 12, paddingBottom: 40 },
-    title: { color: "#111111", fontSize: 24, fontWeight: "900" },
-    subtitle: { color: "#6B7280", fontWeight: "700", marginBottom: 4 },
+    title: { color: t.colors.textPrimary, fontSize: 24, fontWeight: "900" },
+    subtitle: { color: t.colors.textMuted, fontWeight: "700", marginBottom: 4 },
     card: {
-        backgroundColor: "rgba(255,255,255,0.74)",
+        backgroundColor: t.colors.glass,
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.90)",
+        borderColor: t.colors.glassBorder,
         padding: 14,
         borderRadius: 16,
     },
     qRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
-    q: { color: "#111111", fontWeight: "900", flex: 1 },
-    a: { marginTop: 8, color: "#374151", fontWeight: "600", lineHeight: 20 },
+    q: { color: t.colors.textPrimary, fontWeight: "900", flex: 1 },
+    a: { marginTop: 8, color: t.colors.textSecondary, fontWeight: "600", lineHeight: 20 },
 
-    sectionTitle: { color: "#111111", fontSize: 18, fontWeight: "900", marginTop: 18 },
+    sectionTitle: { color: t.colors.textPrimary, fontSize: 18, fontWeight: "900", marginTop: 18 },
     linkRow: {
         flexDirection: "row",
         alignItems: "center",
         gap: 12,
-        backgroundColor: "rgba(255,255,255,0.74)",
+        backgroundColor: t.colors.glass,
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.90)",
+        borderColor: t.colors.glassBorder,
         borderRadius: 16,
         padding: 14,
     },
-    linkText: { color: "#111111", fontWeight: "800", flex: 1 },
+    linkText: { color: t.colors.textPrimary, fontWeight: "800", flex: 1 },
 });

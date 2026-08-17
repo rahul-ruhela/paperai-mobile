@@ -8,7 +8,11 @@ import GradientScreen from "../ui/GradientScreen";
 import AppButton from "../ui/AppButton";
 import { api } from "../api/client";
 
+import { useTheme } from "../ui/ThemeProvider";
+import useThemedStyles from "../ui/useThemedStyles";
 export default function ProfileScreen() {
+    const { theme } = useTheme();
+    const styles = useThemedStyles(makeStyles);
     const [data, setData] = useState({});
     const [loading, setLoading] = useState(true);
 
@@ -48,7 +52,7 @@ export default function ProfileScreen() {
                     <Card title="Account">
                         {data.isAppleUser && (
                             <View style={styles.appleBadge}>
-                                <Ionicons name="logo-apple" size={16} color="#fff" accessibilityLabel="Apple" />
+                                <Ionicons name="logo-apple" size={16} color={theme.colors.white} accessibilityLabel="Apple" />
                                 <Text style={styles.appleBadgeText}>Signed in with Apple</Text>
                             </View>
                         )}
@@ -85,6 +89,7 @@ export default function ProfileScreen() {
 }
 
 function Card({ title, children }) {
+    const styles = useThemedStyles(makeStyles);
     return (
         <View style={styles.card}>
             <Text style={styles.section}>{title}</Text>
@@ -94,6 +99,8 @@ function Card({ title, children }) {
 }
 
 function Input({ label, k, data, setData }) {
+    const { theme } = useTheme();
+    const styles = useThemedStyles(makeStyles);
     return (
         <>
             <Text style={styles.label}>{label}</Text>
@@ -101,13 +108,15 @@ function Input({ label, k, data, setData }) {
                 value={data[k] || ""}
                 onChangeText={v => setData({ ...data, [k]: v })}
                 style={styles.input}
-                placeholderTextColor="#6B7280"
+                placeholderTextColor={theme.colors.textMuted}
+                keyboardAppearance={theme.keyboardAppearance}
             />
         </>
     );
 }
 
 function ReadOnly({ label, value }) {
+    const styles = useThemedStyles(makeStyles);
     return (
         <>
             <Text style={styles.label}>{label}</Text>
@@ -118,58 +127,63 @@ function ReadOnly({ label, value }) {
     );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t) =>
+    StyleSheet.create({
     container: { padding: 18, gap: 16 },
-    title: { color: "#111111", fontSize: 26, fontWeight: "800" },
-    subtitle: { color: "#6B7280", fontWeight: "600" },
+    title: { color: t.colors.textPrimary, fontSize: 26, fontWeight: "800" },
+    subtitle: { color: t.colors.textMuted, fontWeight: "600" },
 
     card: {
-        backgroundColor: "rgba(255,255,255,0.74)",
+        backgroundColor: t.colors.glass,
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.90)",
+        borderColor: t.colors.glassBorder,
         borderRadius: 20,
         padding: 16,
         gap: 10,
-        shadowColor: "#4F8CFF", shadowOffset: { width: 0, height: 8 },
+        shadowColor: t.colors.primary, shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.1, shadowRadius: 18, elevation: 4,
     },
-    section: { color: "#2563EB", fontSize: 18, fontWeight: "800" },
-    label: { color: "#374151", fontWeight: "700" },
+    section: { color: t.colors.accentText, fontSize: 18, fontWeight: "800" },
+    label: { color: t.colors.textSecondary, fontWeight: "700" },
 
     input: {
-        backgroundColor: "rgba(255,255,255,0.82)",
+        backgroundColor: t.colors.inputBg,
         borderWidth: 1,
-        borderColor: "#D1D5DB",
+        borderColor: t.colors.inputBorder,
         borderRadius: 14,
         padding: 14,
-        color: "#111111",
+        color: t.colors.textPrimary,
         fontWeight: "600",
         minHeight: 52,
     },
 
     readOnly: {
-        backgroundColor: "rgba(255,255,255,0.6)",
+        backgroundColor: t.colors.glassSoft,
         borderWidth: 1,
-        borderColor: "#E5E7EB",
+        borderColor: t.colors.border,
         borderRadius: 14,
         padding: 14,
     },
     readOnlyText: {
-        color: "#374151",
+        color: t.colors.textSecondary,
         fontWeight: "600",
     },
     appleBadge: {
         flexDirection: "row",
         alignItems: "center",
         gap: 6,
+        // Apple's brand mark stays black in both appearances; the hairline
+        // keeps it from disappearing into a dark card.
         backgroundColor: "#111111",
+        borderWidth: t.isDark ? 1 : 0,
+        borderColor: t.colors.border,
         borderRadius: 10,
         paddingHorizontal: 10,
         paddingVertical: 6,
         alignSelf: "flex-start",
     },
     appleBadgeText: {
-        color: "#fff",
+        color: t.colors.white,
         fontWeight: "700",
         fontSize: 13,
     },

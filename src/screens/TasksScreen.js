@@ -15,12 +15,18 @@ import Card from "../ui/Card";
 import AppButton from "../ui/AppButton";
 import AiHeader from "../ui/AiHeader";
 
-import { Theme } from "../ui/theme";
-import { Common, TaskStyles as S } from "../ui/styles";
+import { useLegacyTheme } from "../ui/theme";
+import { makeCommon, makeTaskStyles } from "../ui/styles";
+import useThemedStyles from "../ui/useThemedStyles";
+import { useTheme } from "../ui/ThemeProvider";
 
 import { listTasks, createTask, updateTask } from "../api/tasks";
 
 export default function TasksScreen() {
+    const { theme } = useTheme();
+    const Theme = useLegacyTheme();
+    const Common = useThemedStyles(makeCommon);
+    const S = useThemedStyles(makeTaskStyles);
     const [tasks, setTasks] = useState([]);
     const [title, setTitle] = useState("");
     const [expandedId, setExpandedId] = useState(null);
@@ -69,6 +75,7 @@ export default function TasksScreen() {
                             <TextInput
                                 placeholder="Ask AI to track an action…"
                                 placeholderTextColor={Theme.colors.muted}
+                                keyboardAppearance={theme.keyboardAppearance}
                                 value={title}
                                 onChangeText={setTitle}
                                 style={S.input}

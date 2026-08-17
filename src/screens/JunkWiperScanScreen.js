@@ -21,7 +21,10 @@ import GradientScreen from "../ui/GradientScreen";
 import ConfirmActionSheet from "../ui/ConfirmActionSheet";
 import CreditConfirmModal from "../ui/CreditConfirmModal";
 import { reserveCredits, completeTransaction, refundTransaction, getFeatureConfig } from "../api/credits";
+import { listDocuments, deleteDocument } from "../api/documents";
 
+import { useTheme } from "../ui/ThemeProvider";
+import useThemedStyles from "../ui/useThemedStyles";
 // ── Duplicate detection strategies ────────────────────────────────────────────
 // Strategy 1 — Exact duplicate: same fileSize + same pixel dimensions + same mediaType
 //   Catches: screenshots saved twice, downloaded photos saved multiple times,
@@ -30,7 +33,15 @@ import { reserveCredits, completeTransaction, refundTransaction, getFeatureConfi
 //   Catches: photos organised into albums but original still in Camera Roll
 // Strategy 3 — Near-duplicate burst shots: same dimensions + creation within 2 seconds
 //   Catches: burst-mode photos, Live Photos saved as stills
-// We run all three and deduplicate the results by asset ID so nothing is counted twice.
+// Strategy 4 — Duplicate PaperAI documents: same normalised title in GET /api/documents
+//   Catches: the same file uploaded to the app more than once
+// Strategies 1–3 run over the media library and are deduplicated by asset ID so
+// nothing is counted twice; strategy 4 runs over the user's uploaded documents.
+//
+// Results are grouped by `kind` ("photo" | "video" | "document") so the report can
+// be filtered. Every reported row maps to something real: the API exposes no size
+// for a document, so document groups carry no megabyte figure rather than an
+// invented one, and nothing is ever synthesised to pad out an empty result.
 // ──────────────────────────────────────────────────────────────────────────────
 
 const SCAN_MESSAGES = [
@@ -48,21 +59,18 @@ const SCAN_MESSAGES = [
 
 const PAGE_SIZE = 500;
 
+// Report categories. "all" is always shown; the rest hide themselves when the
+// scan found nothing of that kind.
+const KIND_FILTERS = [
+    { key: "all", label: "All", icon: "layers-outline" },
+    { key: "photo", label: "Photos", icon: "image-outline" },
+    { key: "video", label: "Videos", icon: "videocam-outline" },
+    { key: "document", label: "Docs", icon: "document-text-outline" },
+];
+
 const { height: SCREEN_H } = Dimensions.get("window");
 
-// ── Dummy junk file generator ─────────────────────────────────────────────────
-// Cycles through counts [4,5,6,3,5,4,6] so each scan gives a different number.
-// Generates unique names each time using a random hex suffix.
-const DUMMY_COUNTS = [4, 5, 6, 3, 5, 4, 6];
-let _dummyScanIdx = 0;
-
-function randHex(n = 4) {
-    return Math.floor(Math.random() * 16 ** n).toString(16).padStart(n, "0");
-}
-
-function randInt(min, max) {
-    return Math.floor(Math.random() * (max - min + 1)) + min;
-}
+// ── Scan helpers ──────────────────────────────────────────────────────────────
 
 // Human-readable size from raw bytes (used for the live junk-size readout).
 function formatSize(bytes) {
@@ -73,71 +81,10 @@ function formatSize(bytes) {
     return `${mb.toFixed(1)} MB`;
 }
 
-function generateDummyJunk() {
-    const count = DUMMY_COUNTS[_dummyScanIdx % DUMMY_COUNTS.length];
-    _dummyScanIdx += 1;
-
-    // Pool of fake system-cache template generators
-    const cacheTemplates = [
-        () => `apple_hck_cache_${randHex(4)}.tmp`,
-        () => `com.apple.mediaserverd_${randHex(6)}.log`,
-        () => `Photo_Burst_residual_${randHex(4)}.dat`,
-        () => `com.apple.mobileslideshow_${randHex(8)}.purgeable`,
-        () => `cloudkit_asset_${randHex(8)}.tmp`,
-        () => `hls_cache_segment_${randHex(4)}.ts`,
-        () => `BackgroundTransfer_${randHex(6)}.log`,
-        () => `NSURLCache_${randHex(8)}.sqlite-shm`,
-        () => `com.apple.photos.ObjectStore_${randHex(6)}.tmp`,
-        () => `mediaanalysis_${randHex(6)}.cache`,
-    ];
-
-    // Pool of fake duplicate photo name generators
-    const photoTemplates = [
-        () => `IMG_${randInt(1000, 9999)}_copy.jpg`,
-        () => `IMG_${randInt(1000, 9999)} (${randInt(1, 3)}).jpg`,
-        () => `WhatsApp Image 2026-0${randInt(1, 6)}-${randInt(10, 28)} (${randInt(2, 4)}).jpg`,
-        () => `Photo ${randInt(1, 12)}-${randInt(1, 28)}-2025 at ${randInt(9, 12)}.${randInt(10, 59)} ${randInt(1, 2) === 1 ? "AM" : "PM"} (1).jpg`,
-        () => `Screenshot 2025-1${randInt(0, 2)}-${randInt(10, 30)} at ${randInt(9, 11)}.${randInt(10, 59)}.${randInt(10, 59)}_copy.png`,
-        () => `HEIF_convert_${randHex(4)}_duplicate.jpg`,
-        () => `Snapshot-${randInt(1, 99)}-copy.jpg`,
-    ];
-
-    const items = [];
-    const usedNames = new Set();
-
-    for (let i = 0; i < count; i++) {
-        // Alternate: even index = cache file, odd index = photo
-        const isCacheFile = i % 2 === 0;
-        const pool = isCacheFile ? cacheTemplates : photoTemplates;
-
-        let name;
-        let tries = 0;
-        do {
-            name = pool[randInt(0, pool.length - 1)]();
-            tries++;
-        } while (usedNames.has(name) && tries < 20);
-        usedNames.add(name);
-
-        const fakeSizeMB = isCacheFile ? randInt(2, 48) : randInt(3, 90);
-        const fakeBytes = fakeSizeMB * 1024 * 1024;
-
-        items.push({
-            id: `dummy__${randHex(8)}__${i}`,
-            label: name,
-            strategy: isCacheFile ? "cache" : "exact",
-            count: 1,
-            totalBytes: fakeBytes,
-            saveMB: fakeSizeMB,
-            assetIds: [],
-            allCount: 2,
-            isDummy: true,
-        });
-    }
-
-    return items;
-}
 
 export default function JunkWiperScanScreen({ navigation }) {
+    const { theme } = useTheme();
+    const styles = useThemedStyles(makeStyles);
     const [phase, setPhase] = useState("idle");
     const [messageIdx, setMessageIdx] = useState(0);
     const [progress, setProgress] = useState(0);
@@ -146,6 +93,7 @@ export default function JunkWiperScanScreen({ navigation }) {
     const [liveBytes, setLiveBytes] = useState(0);
     const [stats, setStats] = useState({ photos: 0, groups: 0, savedMB: 0 });
     const [duplicates, setDuplicates] = useState([]);
+    const [kindFilter, setKindFilter] = useState("all");
     const [selected, setSelected] = useState(new Set());
     const [deleteConfirm, setDeleteConfirm] = useState(false);
     const [deleting, setDeleting] = useState(false);
@@ -168,7 +116,8 @@ export default function JunkWiperScanScreen({ navigation }) {
     const [featureCfg, setFeatureCfg] = useState({
         creditCost: 30,
         userNoticeTitle: "Start Duplicate Scan",
-        userNoticeMessage: "Junk Wiper will scan only the photos and files you allow. This duplicate scan report will use 30 credits. Nothing will be deleted automatically. You will review and confirm before removing anything.",
+        userNoticeMessage:
+            "Junk Wiper scans the photos, videos and PaperAI documents you allow, and reports duplicate copies. Nothing is deleted automatically — you review and confirm before anything is removed.",
     });
 
     // ── Jarvis animation refs ─────────────────────────────────────────────────
@@ -384,9 +333,13 @@ export default function JunkWiperScanScreen({ navigation }) {
             stopAnimations();
             setProgress(100);
 
-            // If no real duplicates found, inject dummy junk files so there's always
-            // something actionable to show. Dummy deletes are UI-only (nothing removed from device).
-            const finalGroups = groups.length > 0 ? groups : generateDummyJunk();
+            // Report exactly what the scan found. Never synthesise placeholder
+            // "junk" to make the result look productive: the user pays credits
+            // for this scan, and inventing findings that delete nothing is both
+            // dishonest and an App Review rejection (guideline 2.3.1 accurate
+            // functionality / 5.6 code of conduct). A clean library legitimately
+            // returns zero groups and renders the empty state below.
+            const finalGroups = groups;
 
             const totalBytes = finalGroups.reduce((acc, g) => acc + g.totalBytes, 0);
             setStats({
@@ -396,6 +349,10 @@ export default function JunkWiperScanScreen({ navigation }) {
             });
             setDuplicates(finalGroups);
 
+            // The scan itself is the paid service, so it is charged whenever it
+            // runs to completion — including a clean library that legitimately
+            // returns zero groups. Credits come back only when the scan fails or
+            // the user cancels it (see the catch below and cancelScan).
             if (txnIdRef.current) {
                 await completeTransaction(txnIdRef.current).catch(() => {});
                 txnIdRef.current = null;
@@ -523,6 +480,9 @@ export default function JunkWiperScanScreen({ navigation }) {
                 id: `${strategyLabel}__${sorted[0].id}`,
                 label: fname,
                 strategy: strategyLabel,
+                // Photos and videos both live in the media library; split them so
+                // the report can be filtered by what the user is looking for.
+                kind: sorted[0].mediaType === MediaLibrary.MediaType.video ? "video" : "photo",
                 count: dupes.length,
                 totalBytes,
                 saveMB: parseFloat((totalBytes / 1024 / 1024).toFixed(2)),
@@ -553,6 +513,52 @@ export default function JunkWiperScanScreen({ navigation }) {
             buildGroup(valid, "burst");
         }
 
+        onProgress(96);
+
+        // ── Strategy 4: duplicate documents uploaded to PaperAI ───────────────────
+        // Uses the existing GET /api/documents list — no new endpoint. The API
+        // exposes no size or checksum for a document, so these are matched on
+        // normalised title only and deliberately claim NO megabyte savings:
+        // reporting an invented size is exactly the dishonesty this screen was
+        // cleaned up to remove. They still count as duplicates worth deleting.
+        try {
+            const docs = await listDocuments();
+            const docMap = {};
+            for (const d of docs ?? []) {
+                const title = (d.title || "").toLowerCase().trim().replace(/\s+/g, " ");
+                if (!title) continue;
+                (docMap[title] ??= []).push(d);
+            }
+
+            for (const items of Object.values(docMap)) {
+                if (items.length < 2) continue;
+                // Keep the newest upload, offer the older copies for deletion.
+                const sorted = [...items].sort(
+                    (a, b) =>
+                        new Date(b.createdAt ?? b.uploadedAt ?? 0) -
+                        new Date(a.createdAt ?? a.uploadedAt ?? 0)
+                );
+                const dupes = sorted.slice(1);
+
+                groups.push({
+                    id: `document__${sorted[0].id}`,
+                    label: sorted[0].title || "Untitled document",
+                    strategy: "document",
+                    kind: "document",
+                    count: dupes.length,
+                    totalBytes: 0, // unknown — never guessed
+                    saveMB: 0,
+                    assetIds: [],
+                    docIds: dupes.map(d => d.id),
+                    allCount: sorted.length,
+                });
+            }
+            onFound?.(groups.length);
+        } catch {
+            // Offline or the documents call failed — report the media results we
+            // do have rather than failing the whole scan.
+        }
+
         onProgress(100);
         onFound(groups.length);
 
@@ -568,8 +574,26 @@ export default function JunkWiperScanScreen({ navigation }) {
         });
     }
 
-    function selectAll() { setSelected(new Set(duplicates.map(d => d.id))); }
-    function deselectAll() { setSelected(new Set()); }
+    // Rows currently on screen for the chosen category.
+    const visibleDuplicates =
+        kindFilter === "all" ? duplicates : duplicates.filter(d => d.kind === kindFilter);
+
+    // Select/deselect act on the visible category only, so "All" inside Photos
+    // never silently marks documents for deletion too.
+    function selectAll() {
+        setSelected(prev => {
+            const next = new Set(prev);
+            visibleDuplicates.forEach(d => next.add(d.id));
+            return next;
+        });
+    }
+    function deselectAll() {
+        setSelected(prev => {
+            const next = new Set(prev);
+            visibleDuplicates.forEach(d => next.delete(d.id));
+            return next;
+        });
+    }
 
     // Fire the rocket launch animation, then run the actual deletion.
     function deleteSelected() {
@@ -626,19 +650,41 @@ export default function JunkWiperScanScreen({ navigation }) {
         if (flameLoop.current) { flameLoop.current.stop(); flameLoop.current = null; }
         try {
             const selectedItems = duplicates.filter(d => selected.has(d.id));
+            const assetIds = selectedItems.flatMap(d => d.assetIds ?? []);
+            const docIds = selectedItems.flatMap(d => d.docIds ?? []);
 
-            // Only call deleteAssetsAsync for real (non-dummy) items
-            const realAssetIds = selectedItems
-                .filter(d => !d.isDummy)
-                .flatMap(d => d.assetIds);
-
-            if (realAssetIds.length > 0) {
-                await MediaLibrary.deleteAssetsAsync(realAssetIds);
+            // Every row maps to something real, so the OS delete dialog and the
+            // storage the user is told they reclaimed refer to the same files.
+            if (assetIds.length > 0) {
+                await MediaLibrary.deleteAssetsAsync(assetIds);
             }
-            // Dummy items: skip deletion silently — they represent system junk
-            // that doesn't map to a real asset ID; the UI removal IS the cleanup action.
 
-            const remaining = duplicates.filter(d => !selected.has(d.id));
+            // Documents go through the existing DELETE /api/documents/{id}.
+            // Collect failures instead of aborting: a half-finished delete that
+            // throws would leave the list claiming rows were removed when they
+            // weren't.
+            const failedDocs = [];
+            for (const id of docIds) {
+                try {
+                    await deleteDocument(id);
+                } catch {
+                    failedDocs.push(id);
+                }
+            }
+
+            const failedSet = new Set(failedDocs);
+            const remaining = duplicates.filter(d => {
+                if (!selected.has(d.id)) return true;
+                // Keep any document group whose deletions did not all succeed.
+                return (d.docIds ?? []).some(id => failedSet.has(id));
+            });
+
+            if (failedDocs.length > 0) {
+                Alert.alert(
+                    "Some documents kept",
+                    `${failedDocs.length} document${failedDocs.length === 1 ? "" : "s"} could not be deleted and ${failedDocs.length === 1 ? "is" : "are"} still listed. Please try again.`
+                );
+            }
 
             // Show the "cleaned up!" confirmation for a beat before tearing down.
             setCleanDone(true);
@@ -649,7 +695,14 @@ export default function JunkWiperScanScreen({ navigation }) {
                 setCleanDone(false);
                 setDeleting(false);
                 if (remaining.length === 0) {
-                    Alert.alert("✓ All Done!", "Junk files cleaned successfully. Your device storage has been freed up.");
+                    // Only claim reclaimed storage when media was actually removed;
+                    // deleted documents have no size we can honestly report.
+                    Alert.alert(
+                        "✓ All Done!",
+                        assetIds.length > 0
+                            ? "Duplicates removed. The space they used on your device has been freed up."
+                            : "Duplicate documents removed from your PaperAI library."
+                    );
                 }
             }, 900);
         } catch (err) {
@@ -679,10 +732,11 @@ export default function JunkWiperScanScreen({ navigation }) {
     );
 
     function strategyBadge(strategy) {
-        if (strategy === "exact") return { label: "Exact copy", color: "#FF5A5F" };
-        if (strategy === "name") return { label: "Same name", color: "#B45309" };
-        if (strategy === "cache") return { label: "System junk", color: "#6B7280" };
-        return { label: "Burst shot", color: "#2563EB" };
+        if (strategy === "exact") return { label: "Exact copy", color: theme.colors.danger };
+        if (strategy === "name") return { label: "Same name", color: theme.colors.warningText };
+        if (strategy === "document") return { label: "Document", color: theme.colors.success };
+        if (strategy === "cache") return { label: "System junk", color: theme.colors.textMuted };
+        return { label: "Burst shot", color: theme.colors.accentText };
     }
 
     return (
@@ -693,7 +747,7 @@ export default function JunkWiperScanScreen({ navigation }) {
                     {/* Header */}
                     <View style={styles.header}>
                         <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.backBtn}>
-                            <Ionicons name="chevron-back" size={20} color="#2563EB" />
+                            <Ionicons name="chevron-back" size={20} color={theme.colors.accentText} />
                         </Pressable>
                         <Text style={styles.headerTitle}>Junk Wiper</Text>
                         <View style={{ width: 36 }} />
@@ -710,18 +764,21 @@ export default function JunkWiperScanScreen({ navigation }) {
                                 <View style={styles.idleRingOuter} />
                                 <View style={styles.idleRingInner} />
                                 <View style={styles.idleIconBox}>
-                                    <Ionicons name="search" size={36} color="#2563EB" />
+                                    <Ionicons name="search" size={36} color={theme.colors.accentText} />
                                 </View>
                             </View>
                             <Text style={styles.idleTitle}>Ready to Scan</Text>
                             <Text style={styles.idleBody}>
-                                Junk Wiper uses three detection strategies to find exact copies, same-name files across albums, and burst-shot clusters.
+                                Junk Wiper finds duplicate photos, videos and PaperAI
+                                documents — exact copies, the same file saved across
+                                albums, burst-shot clusters, and documents uploaded twice.
                             </Text>
                             <View style={styles.strategyRow}>
                                 {[
-                                    { icon: "copy-outline", color: "#FF5A5F", label: "Exact copies" },
-                                    { icon: "document-text-outline", color: "#B45309", label: "Same filename" },
-                                    { icon: "images-outline", color: "#2563EB", label: "Burst shots" },
+                                    { icon: "copy-outline", color: theme.colors.danger, label: "Exact copies" },
+                                    { icon: "document-text-outline", color: theme.colors.warningText, label: "Same filename" },
+                                    { icon: "images-outline", color: theme.colors.accentText, label: "Burst shots" },
+                                    { icon: "documents-outline", color: theme.colors.success, label: "Documents" },
                                 ].map(s => (
                                     <View key={s.label} style={styles.strategyChip}>
                                         <Ionicons name={s.icon} size={14} color={s.color} />
@@ -735,7 +792,7 @@ export default function JunkWiperScanScreen({ navigation }) {
                                     style={styles.limitedBanner}
                                     onPress={() => Linking.openSettings()}
                                 >
-                                    <Ionicons name="warning-outline" size={15} color="#B45309" />
+                                    <Ionicons name="warning-outline" size={15} color={theme.colors.warningText} />
                                     <Text style={styles.limitedBannerText}>
                                         Limited access — only selected photos will be scanned.{" "}
                                         <Text style={{ textDecorationLine: "underline" }}>Enable full access →</Text>
@@ -744,7 +801,7 @@ export default function JunkWiperScanScreen({ navigation }) {
                             )}
                             {accessLevel === "all" && (
                                 <View style={styles.fullAccessBanner}>
-                                    <Ionicons name="checkmark-circle-outline" size={15} color="#2563EB" />
+                                    <Ionicons name="checkmark-circle-outline" size={15} color={theme.colors.accentText} />
                                     <Text style={styles.fullAccessText}>Full photo library access granted</Text>
                                 </View>
                             )}
@@ -756,12 +813,12 @@ export default function JunkWiperScanScreen({ navigation }) {
                             >
                                 {preparing ? (
                                     <>
-                                        <ActivityIndicator size="small" color="#fff" />
+                                        <ActivityIndicator size="small" color={theme.colors.white} />
                                         <Text style={styles.startBtnText}>Starting…</Text>
                                     </>
                                 ) : (
                                     <>
-                                        <Ionicons name="play-circle" size={22} color="#fff" />
+                                        <Ionicons name="play-circle" size={22} color={theme.colors.white} />
                                         <Text style={styles.startBtnText}>Start Scan · {featureCfg.creditCost} credits</Text>
                                     </>
                                 )}
@@ -881,31 +938,69 @@ export default function JunkWiperScanScreen({ navigation }) {
                         <View style={styles.reportWrap}>
 
                             <View style={styles.reportHeader}>
-                                <Ionicons name="checkmark-circle" size={26} color="#2563EB" />
+                                <Ionicons name="checkmark-circle" size={26} color={theme.colors.accentText} />
                                 <Text style={styles.reportTitle}>Scan Complete</Text>
                             </View>
 
                             {/* Stats grid */}
                             <View style={styles.statsGrid}>
-                                <StatBox label="Duplicates" value={stats.photos} icon="copy-outline" color="#FF5A5F" />
-                                <StatBox label="Groups" value={stats.groups} icon="albums-outline" color="#B45309" />
-                                <StatBox label="Savings" value={`${stats.savedMB} MB`} icon="server-outline" color="#2563EB" />
+                                <StatBox label="Duplicates" value={stats.photos} icon="copy-outline" color={theme.colors.danger} />
+                                <StatBox label="Groups" value={stats.groups} icon="albums-outline" color={theme.colors.warningText} />
+                                <StatBox label="Savings" value={`${stats.savedMB} MB`} icon="server-outline" color={theme.colors.accentText} />
                             </View>
 
                             {duplicates.length === 0 ? (
                                 <View style={styles.emptyBox}>
-                                    <Ionicons name="checkmark-circle-outline" size={44} color="#2563EB" />
+                                    <Ionicons name="checkmark-circle-outline" size={44} color={theme.colors.accentText} />
                                     <Text style={styles.emptyTitle}>No duplicates found!</Text>
-                                    <Text style={styles.emptySub}>Your photo library looks clean.</Text>
+                                    <Text style={styles.emptySub}>
+                                        Your photos, videos and documents look clean.
+                                    </Text>
                                 </View>
                             ) : (
                                 <>
+                                    {/* Category filter — Photos / Videos / Documents */}
+                                    <View style={styles.kindRow}>
+                                        {KIND_FILTERS.map(k => {
+                                            const count =
+                                                k.key === "all"
+                                                    ? duplicates.length
+                                                    : duplicates.filter(d => d.kind === k.key).length;
+                                            if (k.key !== "all" && count === 0) return null;
+                                            const active = kindFilter === k.key;
+                                            return (
+                                                <Pressable
+                                                    key={k.key}
+                                                    onPress={() => setKindFilter(k.key)}
+                                                    accessibilityRole="tab"
+                                                    accessibilityState={{ selected: active }}
+                                                    style={[styles.kindChip, active && styles.kindChipActive]}
+                                                >
+                                                    <Ionicons
+                                                        name={k.icon}
+                                                        size={13}
+                                                        color={active ? theme.colors.white : theme.colors.textMuted}
+                                                    />
+                                                    <Text
+                                                        style={[
+                                                            styles.kindChipText,
+                                                            active && styles.kindChipTextActive,
+                                                        ]}
+                                                    >
+                                                        {k.label} {count}
+                                                    </Text>
+                                                </Pressable>
+                                            );
+                                        })}
+                                    </View>
+
                                     {/* Legend */}
                                     <View style={styles.legendRow}>
                                         {[
-                                            { color: "#FF5A5F", label: "Exact copy" },
-                                            { color: "#B45309", label: "Same name" },
-                                            { color: "#2563EB", label: "Burst shot" },
+                                            { color: theme.colors.danger, label: "Exact copy" },
+                                            { color: theme.colors.warningText, label: "Same name" },
+                                            { color: theme.colors.accentText, label: "Burst shot" },
+                                            { color: theme.colors.success, label: "Document" },
                                         ].map(l => (
                                             <View key={l.label} style={styles.legendItem}>
                                                 <View style={[styles.legendDot, { backgroundColor: l.color }]} />
@@ -916,7 +1011,7 @@ export default function JunkWiperScanScreen({ navigation }) {
 
                                     <View style={styles.listHeader}>
                                         <Text style={styles.listHeaderText}>
-                                            {duplicates.length} duplicate {duplicates.length === 1 ? "group" : "groups"} · tap to select
+                                            {visibleDuplicates.length} duplicate {visibleDuplicates.length === 1 ? "group" : "groups"} · tap to select
                                         </Text>
                                         <View style={styles.selectionBtns}>
                                             <Pressable onPress={selectAll} hitSlop={8}>
@@ -929,7 +1024,7 @@ export default function JunkWiperScanScreen({ navigation }) {
                                         </View>
                                     </View>
 
-                                    {duplicates.map(item => {
+                                    {visibleDuplicates.map(item => {
                                         const badge = strategyBadge(item.strategy);
                                         const isSel = selected.has(item.id);
                                         return (
@@ -939,7 +1034,7 @@ export default function JunkWiperScanScreen({ navigation }) {
                                                 onPress={() => toggleSelect(item.id)}
                                             >
                                                 <View style={[styles.dupCheck, isSel && styles.dupCheckActive]}>
-                                                    {isSel && <Ionicons name="checkmark" size={12} color="#fff" />}
+                                                    {isSel && <Ionicons name="checkmark" size={12} color={theme.colors.white} />}
                                                 </View>
                                                 <View style={{ flex: 1, gap: 3 }}>
                                                     <Text style={styles.dupName} numberOfLines={1}>{item.label}</Text>
@@ -948,13 +1043,16 @@ export default function JunkWiperScanScreen({ navigation }) {
                                                             <Text style={[styles.stratBadgeText, { color: badge.color }]}>{badge.label}</Text>
                                                         </View>
                                                         <Text style={styles.dupMetaText}>
-                                                            {item.allCount} copies · remove {item.count} · save ~{item.saveMB} MB
+                                                            {item.allCount} copies · remove {item.count}
+                                                            {/* Documents have no size from the API, so no
+                                                                savings figure is shown rather than "0 MB". */}
+                                                            {item.saveMB > 0 ? ` · save ~${item.saveMB} MB` : ""}
                                                         </Text>
                                                     </View>
                                                 </View>
                                                 <Ionicons
                                                     name="trash-bin-outline" size={16}
-                                                    color={isSel ? "#FF5A5F" : "#9CA3AF"}
+                                                    color={isSel ? theme.colors.danger : theme.colors.placeholder}
                                                 />
                                             </Pressable>
                                         );
@@ -966,7 +1064,7 @@ export default function JunkWiperScanScreen({ navigation }) {
                                             onPress={() => setDeleteConfirm(true)}
                                             disabled={deleting}
                                         >
-                                            <Ionicons name="trash-outline" size={18} color="#fff" />
+                                            <Ionicons name="trash-outline" size={18} color={theme.colors.white} />
                                             <Text style={styles.deleteBtnText}>
                                                 {deleting ? "Deleting…" : `Delete ${selected.size} selected ${selected.size === 1 ? "group" : "groups"}`}
                                             </Text>
@@ -976,7 +1074,7 @@ export default function JunkWiperScanScreen({ navigation }) {
                             )}
 
                             <View style={styles.safetyRow}>
-                                <Ionicons name="shield-checkmark-outline" size={14} color="#2563EB" />
+                                <Ionicons name="shield-checkmark-outline" size={14} color={theme.colors.accentText} />
                                 <Text style={styles.safetyText}>Newest copy of each file is always kept.</Text>
                             </View>
 
@@ -984,7 +1082,7 @@ export default function JunkWiperScanScreen({ navigation }) {
                                 style={styles.rescanBtn}
                                 onPress={() => { setPhase("idle"); setDuplicates([]); setSelected(new Set()); }}
                             >
-                                <Ionicons name="refresh-outline" size={16} color="#6B7280" />
+                                <Ionicons name="refresh-outline" size={16} color={theme.colors.textMuted} />
                                 <Text style={styles.rescanText}>Scan Again</Text>
                             </Pressable>
                         </View>
@@ -1068,7 +1166,7 @@ export default function JunkWiperScanScreen({ navigation }) {
                         </>
                     ) : (
                         <View style={styles.cleanDoneBox}>
-                            <Ionicons name="checkmark-circle" size={64} color="#22C55E" />
+                            <Ionicons name="checkmark-circle" size={64} color={theme.colors.success} />
                             <Text style={styles.cleanDoneText}>All cleaned up!</Text>
                         </View>
                     )}
@@ -1084,13 +1182,14 @@ export default function JunkWiperScanScreen({ navigation }) {
                 loading={confirmModal.loading}
                 onConfirm={startScan}
                 onCancel={() => setConfirmModal({ visible: false, loading: false })}
-                safetyNote="Nothing will be deleted without your confirmation."
+                safetyNote="Nothing is deleted without your confirmation. The scan uses credits each time it runs, including when your library is already clean and no duplicates are found."
             />
         </GradientScreen>
     );
 }
 
 function StatBox({ label, value, icon, color }) {
+    const styles = useThemedStyles(makeStyles);
     return (
         <View style={styles.statBox}>
             <Ionicons name={icon} size={18} color={color} />
@@ -1100,70 +1199,71 @@ function StatBox({ label, value, icon, color }) {
     );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t) =>
+    StyleSheet.create({
     container: { padding: 18, gap: 16, paddingBottom: 48 },
 
     header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
     backBtn: {
         width: 36, height: 36, borderRadius: 12,
-        backgroundColor: "rgba(255,255,255,0.74)",
+        backgroundColor: t.colors.glass,
         alignItems: "center", justifyContent: "center",
     },
-    headerTitle: { color: "#111111", fontSize: 20, fontWeight: "900" },
-    complianceNote: { color: "#6B7280", fontSize: 12, fontWeight: "700", textAlign: "center", lineHeight: 18 },
+    headerTitle: { color: t.colors.textPrimary, fontSize: 20, fontWeight: "900" },
+    complianceNote: { color: t.colors.textMuted, fontSize: 12, fontWeight: "700", textAlign: "center", lineHeight: 18 },
 
     // ── Idle ──
     idleBox: {
-        backgroundColor: "rgba(255,255,255,0.74)",
-        borderWidth: 1, borderColor: "rgba(255,255,255,0.90)",
+        backgroundColor: t.colors.glass,
+        borderWidth: 1, borderColor: t.colors.glassBorder,
         borderRadius: 24, padding: 24, gap: 16, alignItems: "center",
     },
     idleOrbit: { width: 110, height: 110, alignItems: "center", justifyContent: "center" },
     idleRingOuter: {
         position: "absolute", width: 110, height: 110, borderRadius: 55,
-        borderWidth: 1.5, borderColor: "rgba(79,140,255,0.25)", borderStyle: "dashed",
+        borderWidth: 1.5, borderColor: t.colors.infoBorder, borderStyle: "dashed",
     },
     idleRingInner: {
         position: "absolute", width: 80, height: 80, borderRadius: 40,
-        borderWidth: 1, borderColor: "rgba(79,140,255,0.35)",
+        borderWidth: 1, borderColor: t.colors.infoBorder,
     },
     idleIconBox: {
         width: 70, height: 70, borderRadius: 22,
-        backgroundColor: "rgba(79,140,255,0.18)",
-        borderWidth: 1, borderColor: "rgba(79,140,255,0.30)",
+        backgroundColor: t.colors.infoBg,
+        borderWidth: 1, borderColor: t.colors.infoBorder,
         alignItems: "center", justifyContent: "center",
     },
-    idleTitle: { color: "#111111", fontSize: 20, fontWeight: "900" },
-    idleBody: { color: "#6B7280", fontWeight: "700", textAlign: "center", lineHeight: 20, fontSize: 13 },
+    idleTitle: { color: t.colors.textPrimary, fontSize: 20, fontWeight: "900" },
+    idleBody: { color: t.colors.textMuted, fontWeight: "700", textAlign: "center", lineHeight: 20, fontSize: 13 },
     strategyRow: { flexDirection: "row", gap: 8, flexWrap: "wrap", justifyContent: "center" },
     strategyChip: {
         flexDirection: "row", alignItems: "center", gap: 5,
-        backgroundColor: "rgba(255,255,255,0.74)",
-        borderWidth: 1, borderColor: "rgba(255,255,255,0.90)",
+        backgroundColor: t.colors.glass,
+        borderWidth: 1, borderColor: t.colors.glassBorder,
         borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6,
     },
     strategyChipText: { fontWeight: "800", fontSize: 12 },
     limitedBanner: {
         flexDirection: "row", alignItems: "flex-start", gap: 8,
-        backgroundColor: "rgba(251,191,36,0.08)",
-        borderWidth: 1, borderColor: "rgba(251,191,36,0.28)",
+        backgroundColor: t.colors.warningBg,
+        borderWidth: 1, borderColor: t.colors.warningBorder,
         borderRadius: 12, padding: 10, alignSelf: "stretch",
     },
-    limitedBannerText: { flex: 1, color: "#B45309", fontWeight: "700", fontSize: 12, lineHeight: 17 },
+    limitedBannerText: { flex: 1, color: t.colors.warningText, fontWeight: "700", fontSize: 12, lineHeight: 17 },
     fullAccessBanner: {
         flexDirection: "row", alignItems: "center", gap: 7,
-        backgroundColor: "rgba(79,140,255,0.08)",
-        borderWidth: 1, borderColor: "rgba(79,140,255,0.25)",
+        backgroundColor: t.colors.infoBg,
+        borderWidth: 1, borderColor: t.colors.infoBorder,
         borderRadius: 12, padding: 10, alignSelf: "stretch",
     },
-    fullAccessText: { color: "#2563EB", fontWeight: "700", fontSize: 12 },
+    fullAccessText: { color: t.colors.accentText, fontWeight: "700", fontSize: 12 },
     startBtn: {
         flexDirection: "row", alignItems: "center", gap: 10,
-        backgroundColor: "#4F8CFF",
+        backgroundColor: t.colors.primary,
         borderRadius: 18, paddingVertical: 14, paddingHorizontal: 24,
-        borderWidth: 1, borderColor: "rgba(79,140,255,0.35)", alignSelf: "stretch", justifyContent: "center",
+        borderWidth: 1, borderColor: t.colors.infoBorder, alignSelf: "stretch", justifyContent: "center",
     },
-    startBtnText: { color: "#fff", fontWeight: "900", fontSize: 15 },
+    startBtnText: { color: t.colors.white, fontWeight: "900", fontSize: 15 },
 
     // ── Scanner / Jarvis ──
     scannerWrap: { alignItems: "center", gap: 18 },
@@ -1171,7 +1271,7 @@ const styles = StyleSheet.create({
     hexRing: {
         position: "absolute",
         width: 250, height: 250, borderRadius: 125,
-        borderWidth: 1, borderColor: "rgba(79,140,255,0.12)",
+        borderWidth: 1, borderColor: t.colors.infoBorder,
         alignSelf: "center",
     },
 
@@ -1180,9 +1280,9 @@ const styles = StyleSheet.create({
         alignItems: "center", justifyContent: "center",
     },
     ring: { position: "absolute", borderRadius: 999 },
-    ring1: { width: 130, height: 130, borderWidth: 2, borderColor: "rgba(79,140,255,0.65)", borderStyle: "dashed" },
-    ring2: { width: 165, height: 165, borderWidth: 1.5, borderColor: "rgba(79,140,255,0.40)" },
-    ring3: { width: 205, height: 205, borderWidth: 1, borderColor: "rgba(79,140,255,0.20)", borderStyle: "dotted" },
+    ring1: { width: 130, height: 130, borderWidth: 2, borderColor: t.colors.infoBorder, borderStyle: "dashed" },
+    ring2: { width: 165, height: 165, borderWidth: 1.5, borderColor: t.colors.infoBorder },
+    ring3: { width: 205, height: 205, borderWidth: 1, borderColor: t.colors.infoBorder, borderStyle: "dotted" },
 
     radarWedge: {
         position: "absolute",
@@ -1193,21 +1293,21 @@ const styles = StyleSheet.create({
         borderStyle: "solid",
         borderLeftColor: "transparent",
         borderRightColor: "transparent",
-        borderBottomColor: "rgba(79,140,255,0.18)",
+        borderBottomColor: t.colors.infoBorder,
         top: 110, left: 110,
     },
 
     glow: {
         position: "absolute",
         width: 100, height: 100, borderRadius: 50,
-        backgroundColor: "rgba(79,140,255,0.30)",
+        backgroundColor: t.colors.infoBg,
     },
     scanLine: {
         position: "absolute",
         width: 140, height: 2,
         backgroundColor: "rgba(79,140,255,0.80)",
         borderRadius: 1,
-        shadowColor: "#2563EB",
+        shadowColor: t.colors.primary,
         shadowOffset: { width: 0, height: 0 },
         shadowOpacity: 1,
         shadowRadius: 6,
@@ -1215,54 +1315,54 @@ const styles = StyleSheet.create({
     particle: {
         position: "absolute",
         width: 5, height: 5, borderRadius: 3,
-        backgroundColor: "#2563EB",
+        backgroundColor: t.colors.primary,
     },
     centerIcon: {
         width: 68, height: 68, borderRadius: 22,
-        backgroundColor: "rgba(255,255,255,0.95)",
-        borderWidth: 1.5, borderColor: "rgba(79,140,255,0.45)",
+        backgroundColor: t.colors.surface,
+        borderWidth: 1.5, borderColor: t.colors.infoBorder,
         alignItems: "center", justifyContent: "center",
     },
 
-    progressPct: { color: "#111111", fontSize: 38, fontWeight: "900", letterSpacing: -1 },
-    scanMsg: { color: "#2563EB", fontWeight: "800", fontSize: 14, textAlign: "center" },
+    progressPct: { color: t.colors.textPrimary, fontSize: 38, fontWeight: "900", letterSpacing: -1 },
+    scanMsg: { color: t.colors.accentText, fontWeight: "800", fontSize: 14, textAlign: "center" },
 
     liveCountRow: {
         flexDirection: "row", alignItems: "center",
-        backgroundColor: "rgba(255,255,255,0.74)",
-        borderWidth: 1, borderColor: "rgba(255,255,255,0.90)",
+        backgroundColor: t.colors.glass,
+        borderWidth: 1, borderColor: t.colors.glassBorder,
         borderRadius: 16, paddingVertical: 12, paddingHorizontal: 20, gap: 0,
         alignSelf: "stretch",
     },
     liveCounter: { flex: 1, alignItems: "center", gap: 2 },
-    liveCountVal: { color: "#111111", fontWeight: "900", fontSize: 22 },
-    liveCountLabel: { color: "#6B7280", fontWeight: "700", fontSize: 11 },
-    liveCountDivider: { width: 1, height: 36, backgroundColor: "#E5E7EB" },
+    liveCountVal: { color: t.colors.textPrimary, fontWeight: "900", fontSize: 22 },
+    liveCountLabel: { color: t.colors.textMuted, fontWeight: "700", fontSize: 11 },
+    liveCountDivider: { width: 1, height: 36, backgroundColor: t.colors.separator },
 
     progressBarTrack: {
         alignSelf: "stretch", height: 4, borderRadius: 2,
-        backgroundColor: "#E5E7EB",
+        backgroundColor: t.colors.separator,
         overflow: "hidden",
     },
     progressBarFill: {
         height: 4, borderRadius: 2,
-        backgroundColor: "#2563EB",
+        backgroundColor: t.colors.primary,
     },
 
     safetyRow: {
         flexDirection: "row", alignItems: "center", gap: 7,
-        backgroundColor: "rgba(79,140,255,0.06)",
-        borderWidth: 1, borderColor: "rgba(79,140,255,0.18)",
+        backgroundColor: t.colors.infoBg,
+        borderWidth: 1, borderColor: t.colors.infoBorder,
         borderRadius: 12, padding: 10, alignSelf: "stretch",
     },
-    safetyText: { flex: 1, color: "#6B7280", fontSize: 12, fontWeight: "700", lineHeight: 17 },
+    safetyText: { flex: 1, color: t.colors.textMuted, fontSize: 12, fontWeight: "700", lineHeight: 17 },
 
     cancelBtn: {
         paddingVertical: 12, paddingHorizontal: 28, borderRadius: 16,
-        backgroundColor: "rgba(255,255,255,0.74)",
-        borderWidth: 1, borderColor: "#E5E7EB",
+        backgroundColor: t.colors.glass,
+        borderWidth: 1, borderColor: t.colors.border,
     },
-    cancelBtnText: { color: "#6B7280", fontWeight: "800" },
+    cancelBtnText: { color: t.colors.textMuted, fontWeight: "800" },
 
     // ── Premium radar scanner ──
     radarScreen: {
@@ -1338,7 +1438,7 @@ const styles = StyleSheet.create({
         backgroundColor: "rgba(9,18,46,0.65)",
         borderWidth: 1, borderColor: "rgba(56,189,248,0.4)",
     },
-    radarPct: { color: "#FFFFFF", fontSize: 28, fontWeight: "900", letterSpacing: -1 },
+    radarPct: { color: t.colors.white, fontSize: 28, fontWeight: "900", letterSpacing: -1 },
     radarCenterLabel: { color: "#7DD3FC", fontSize: 10, fontWeight: "800", letterSpacing: 2 },
 
     radarMsg: { color: "#BAE6FD", fontWeight: "700", fontSize: 14, textAlign: "center" },
@@ -1360,7 +1460,7 @@ const styles = StyleSheet.create({
         alignSelf: "stretch",
     },
     radarStat: { flex: 1, alignItems: "center", gap: 2 },
-    radarStatVal: { color: "#FFFFFF", fontWeight: "900", fontSize: 18 },
+    radarStatVal: { color: t.colors.white, fontWeight: "900", fontSize: 18 },
     radarStatLabel: { color: "#94A3B8", fontWeight: "700", fontSize: 10, letterSpacing: 0.4 },
     radarStatDivider: { width: 1, height: 34, backgroundColor: "rgba(148,163,184,0.25)" },
 
@@ -1389,69 +1489,95 @@ const styles = StyleSheet.create({
     // ── Report ──
     reportWrap: { gap: 14 },
     reportHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
-    reportTitle: { color: "#111111", fontSize: 20, fontWeight: "900" },
+    reportTitle: { color: t.colors.textPrimary, fontSize: 20, fontWeight: "900" },
 
     statsGrid: { flexDirection: "row", gap: 10 },
     statBox: {
-        flex: 1, backgroundColor: "rgba(255,255,255,0.74)",
-        borderWidth: 1, borderColor: "rgba(255,255,255,0.90)",
+        flex: 1, backgroundColor: t.colors.glass,
+        borderWidth: 1, borderColor: t.colors.glassBorder,
         borderRadius: 16, padding: 12, alignItems: "center", gap: 4,
     },
     statValue: { fontWeight: "900", fontSize: 18 },
-    statLabel: { color: "#6B7280", fontSize: 11, fontWeight: "700", textAlign: "center" },
+    statLabel: { color: t.colors.textMuted, fontSize: 11, fontWeight: "700", textAlign: "center" },
+
+    kindRow: {
+        flexDirection: "row",
+        gap: 6,
+        flexWrap: "wrap",
+        justifyContent: "center",
+        marginBottom: 10,
+    },
+    kindChip: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 5,
+        minHeight: 32,
+        paddingHorizontal: 11,
+        paddingVertical: 6,
+        borderRadius: 999,
+        borderWidth: 1,
+        borderColor: t.colors.border,
+        backgroundColor: t.colors.glassSoft,
+    },
+    kindChipActive: {
+        backgroundColor: t.colors.primary,
+        borderColor: t.colors.primary,
+    },
+    kindChipText: { color: t.colors.textMuted, fontWeight: "800", fontSize: 11 },
+    kindChipTextActive: { color: t.colors.white },
 
     legendRow: { flexDirection: "row", gap: 12, flexWrap: "wrap" },
     legendItem: { flexDirection: "row", alignItems: "center", gap: 5 },
     legendDot: { width: 8, height: 8, borderRadius: 4 },
-    legendText: { color: "#6B7280", fontWeight: "700", fontSize: 12 },
+    legendText: { color: t.colors.textMuted, fontWeight: "700", fontSize: 12 },
 
     listHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-    listHeaderText: { color: "#6B7280", fontWeight: "700", fontSize: 13, flex: 1 },
+    listHeaderText: { color: t.colors.textMuted, fontWeight: "700", fontSize: 13, flex: 1 },
     selectionBtns: { flexDirection: "row", alignItems: "center", gap: 8 },
-    selAllText: { color: "#2563EB", fontWeight: "800", fontSize: 13 },
-    selNoneText: { color: "#9CA3AF", fontWeight: "800", fontSize: 13 },
-    selDivider: { color: "#D1D5DB", fontWeight: "400" },
+    selAllText: { color: t.colors.accentText, fontWeight: "800", fontSize: 13 },
+    selNoneText: { color: t.colors.placeholder, fontWeight: "800", fontSize: 13 },
+    selDivider: { color: t.colors.inputBorder, fontWeight: "400" },
 
     emptyBox: { alignItems: "center", gap: 10, paddingVertical: 24 },
-    emptyTitle: { color: "#2563EB", fontWeight: "900", fontSize: 18 },
-    emptySub: { color: "#6B7280", fontWeight: "700", fontSize: 14 },
+    emptyTitle: { color: t.colors.accentText, fontWeight: "900", fontSize: 18 },
+    emptySub: { color: t.colors.textMuted, fontWeight: "700", fontSize: 14 },
 
     dupRow: {
         flexDirection: "row", alignItems: "center", gap: 12,
-        backgroundColor: "rgba(255,255,255,0.74)",
-        borderWidth: 1, borderColor: "rgba(255,255,255,0.90)",
+        backgroundColor: t.colors.glass,
+        borderWidth: 1, borderColor: t.colors.glassBorder,
         borderRadius: 16, padding: 14,
     },
-    dupRowSelected: { backgroundColor: "rgba(255,90,95,0.09)", borderColor: "rgba(255,90,95,0.35)" },
+    dupRowSelected: { backgroundColor: t.colors.dangerBg, borderColor: t.colors.dangerBorder },
     dupCheck: {
         width: 22, height: 22, borderRadius: 8,
-        borderWidth: 1.5, borderColor: "#D1D5DB",
+        borderWidth: 1.5, borderColor: t.colors.inputBorder,
         alignItems: "center", justifyContent: "center",
     },
-    dupCheckActive: { backgroundColor: "#FF5A5F", borderColor: "#FF5A5F" },
-    dupName: { color: "#111111", fontWeight: "800", fontSize: 13 },
+    dupCheckActive: { backgroundColor: t.colors.danger, borderColor: t.colors.danger },
+    dupName: { color: t.colors.textPrimary, fontWeight: "800", fontSize: 13 },
     dupMetaRow: { flexDirection: "row", alignItems: "center", gap: 7, flexWrap: "wrap", marginTop: 2 },
     stratBadge: {
         borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2,
     },
     stratBadgeText: { fontWeight: "800", fontSize: 10 },
-    dupMetaText: { color: "#9CA3AF", fontWeight: "700", fontSize: 11 },
+    dupMetaText: { color: t.colors.placeholder, fontWeight: "700", fontSize: 11 },
 
     deleteBtn: {
         flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
-        backgroundColor: "#FF5A5F",
+        backgroundColor: t.colors.danger,
         borderRadius: 18, paddingVertical: 15,
-        borderWidth: 1, borderColor: "rgba(255,90,95,0.35)",
+        borderWidth: 1, borderColor: t.colors.dangerBorder,
     },
-    deleteBtnText: { color: "#fff", fontWeight: "900", fontSize: 15 },
+    deleteBtnText: { color: t.colors.white, fontWeight: "900", fontSize: 15 },
 
     rescanBtn: {
         flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
         paddingVertical: 12, borderRadius: 14,
-        backgroundColor: "rgba(255,255,255,0.74)",
-        borderWidth: 1, borderColor: "rgba(255,255,255,0.90)",
+        backgroundColor: t.colors.glass,
+        borderWidth: 1, borderColor: t.colors.glassBorder,
     },
-    rescanText: { color: "#6B7280", fontWeight: "800" },
+    rescanText: { color: t.colors.textMuted, fontWeight: "800" },
 
     // ── Rocket cleanup overlay ──
     cleanOverlay: {
@@ -1504,12 +1630,12 @@ const styles = StyleSheet.create({
     cleanText: {
         position: "absolute",
         bottom: 60,
-        color: "#fff", fontWeight: "900", fontSize: 16, textAlign: "center",
+        color: t.colors.white, fontWeight: "900", fontSize: 16, textAlign: "center",
     },
     cleanDoneBox: {
         alignItems: "center", gap: 14,
         alignSelf: "center",
         marginBottom: SCREEN_H * 0.35,
     },
-    cleanDoneText: { color: "#fff", fontWeight: "900", fontSize: 22 },
+    cleanDoneText: { color: t.colors.white, fontWeight: "900", fontSize: 22 },
 });

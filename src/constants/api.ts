@@ -2,12 +2,19 @@
 // to __DEV__-based defaults so local dev works without any configuration.
 const envUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
 
+// The live, publicly reachable API. Anything that is not explicitly pointed
+// somewhere else must land here: a build that falls back to a LAN address is
+// dead on any device outside that Wi-Fi — including every App Review device,
+// which reads as "app doesn't work" (guideline 2.1). Cleartext http:// would
+// also trip App Transport Security.
+const PRODUCTION_API = "https://apis.bseptechnologies.com";
+
 function resolveBaseUrl(): string {
     if (envUrl && envUrl.trim().length > 0) return envUrl.trim();
     // Default to the LIVE API in every environment so the app never silently
     // hits a stale LAN IP. To use a local backend, set EXPO_PUBLIC_API_BASE_URL
     // (e.g. in .env.local) to your machine's LAN IP.
-    return "http://192.168.29.223:5263";
+    return PRODUCTION_API;
 }
 
 export const API = {

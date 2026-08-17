@@ -1,22 +1,26 @@
 import React from "react";
-import { View, StyleSheet, StatusBar } from "react-native";
+import { View, StyleSheet } from "react-native";
+import { StatusBar } from "expo-status-bar";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AppColors, AppGradients } from "./tokens";
+import { useTheme } from "./ThemeProvider";
+import useThemedStyles from "./useThemedStyles";
 import BottomFade from "./BottomFade";
 
 /**
- * Base page wrapper: soft light background gradient + safe-area aware
- * bottom padding + a fade so scrolled content dissolves above the tab bar.
+ * Base page wrapper: themed background gradient + safe-area aware bottom
+ * padding + a fade so scrolled content dissolves above the tab bar.
  */
 export default function ScreenContainer({ children, padded = false, fade = true }) {
     const insets = useSafeAreaInsets();
+    const { theme } = useTheme();
+    const styles = useThemedStyles(makeStyles);
 
     return (
         <View style={styles.root}>
-            <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
+            <StatusBar style={theme.statusBarStyle} translucent />
             <LinearGradient
-                colors={AppGradients.background}
+                colors={theme.gradients.background}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 0, y: 1 }}
                 style={StyleSheet.absoluteFill}
@@ -36,12 +40,13 @@ export default function ScreenContainer({ children, padded = false, fade = true 
     );
 }
 
-const styles = StyleSheet.create({
-    root: {
-        flex: 1,
-        backgroundColor: AppColors.background,
-    },
-    content: {
-        flex: 1,
-    },
-});
+const makeStyles = (t) =>
+    StyleSheet.create({
+        root: {
+            flex: 1,
+            backgroundColor: t.colors.background,
+        },
+        content: {
+            flex: 1,
+        },
+    });

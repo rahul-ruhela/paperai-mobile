@@ -6,7 +6,11 @@ import GradientScreen from "../ui/GradientScreen";
 import AppButton from "../ui/AppButton";
 import { verifyEmailOtp, sendEmailOtp } from "../api/auth";
 
+import { useTheme } from "../ui/ThemeProvider";
+import useThemedStyles from "../ui/useThemedStyles";
 export default function EmailOtpVerifyScreen({ route, navigation, onAuthed }) {
+    const { theme } = useTheme();
+    const styles = useThemedStyles(makeStyles);
     const { email, name, password, phone } = route.params;
     const [code, setCode] = useState("");
     const [busy, setBusy] = useState(false);
@@ -43,13 +47,13 @@ export default function EmailOtpVerifyScreen({ route, navigation, onAuthed }) {
             <SafeAreaView style={{ flex: 1 }}>
                 <View style={styles.container}>
                     <Pressable onPress={() => navigation.goBack()} style={styles.back}>
-                        <Ionicons name="arrow-back" size={22} color="#2563EB" />
+                        <Ionicons name="arrow-back" size={22} color={theme.colors.accentText} />
                         <Text style={styles.backText}>Back</Text>
                     </Pressable>
 
                     <View style={styles.card}>
                         <View style={styles.iconWrap}>
-                            <Ionicons name="mail-open-outline" size={32} color="#4F8CFF" />
+                            <Ionicons name="mail-open-outline" size={32} color={theme.colors.primary} />
                         </View>
 
                         <Text style={styles.title}>Check your email</Text>
@@ -59,17 +63,16 @@ export default function EmailOtpVerifyScreen({ route, navigation, onAuthed }) {
                         </Text>
 
                         <View style={styles.inputWrap}>
-                            <Ionicons name="keypad-outline" size={18} color="#6B7280" />
+                            <Ionicons name="keypad-outline" size={18} color={theme.colors.textMuted} />
                             <TextInput
                                 placeholder="6-digit code"
-                                placeholderTextColor="#6B7280"
+                                placeholderTextColor={theme.colors.textMuted}
                                 keyboardType="number-pad"
                                 value={code}
                                 onChangeText={setCode}
                                 maxLength={6}
                                 style={styles.input}
-                                autoFocus
-                            />
+                                autoFocus keyboardAppearance={theme.keyboardAppearance} />
                         </View>
 
                         <View style={{ marginTop: 6 }}>
@@ -92,33 +95,34 @@ export default function EmailOtpVerifyScreen({ route, navigation, onAuthed }) {
     );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t) =>
+    StyleSheet.create({
     container: { flex: 1, padding: 18, justifyContent: "center" },
     back: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 20, alignSelf: "flex-start" },
-    backText: { color: "#2563EB", fontWeight: "700" },
+    backText: { color: t.colors.accentText, fontWeight: "700" },
 
     card: {
-        backgroundColor: "rgba(255,255,255,0.74)",
-        borderWidth: 1, borderColor: "rgba(255,255,255,0.90)",
+        backgroundColor: t.colors.glass,
+        borderWidth: 1, borderColor: t.colors.glassBorder,
         borderRadius: 22, padding: 20,
-        shadowColor: "#4F8CFF", shadowOffset: { width: 0, height: 8 },
+        shadowColor: t.colors.primary, shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.1, shadowRadius: 18, elevation: 4,
     },
     iconWrap: {
         width: 60, height: 60, borderRadius: 18,
-        backgroundColor: "rgba(79,140,255,0.12)",
+        backgroundColor: t.colors.infoBg,
         alignItems: "center", justifyContent: "center", marginBottom: 14,
     },
-    title: { color: "#111111", fontSize: 22, fontWeight: "800", marginBottom: 6 },
-    subtitle: { color: "#6B7280", marginBottom: 18, lineHeight: 22 },
-    emailHighlight: { color: "#2563EB", fontWeight: "700" },
+    title: { color: t.colors.textPrimary, fontSize: 22, fontWeight: "800", marginBottom: 6 },
+    subtitle: { color: t.colors.textMuted, marginBottom: 18, lineHeight: 22 },
+    emailHighlight: { color: t.colors.accentText, fontWeight: "700" },
 
     inputWrap: {
         flexDirection: "row", alignItems: "center", gap: 10,
-        backgroundColor: "rgba(255,255,255,0.82)",
-        borderWidth: 1, borderColor: "#D1D5DB",
+        backgroundColor: t.colors.inputBg,
+        borderWidth: 1, borderColor: t.colors.inputBorder,
         borderRadius: 14, paddingHorizontal: 12, paddingVertical: 14, marginBottom: 4,
     },
-    input: { flex: 1, color: "#111111", fontSize: 20, letterSpacing: 6, fontWeight: "700" },
-    resend: { marginTop: 14, color: "#2563EB", textAlign: "center", fontWeight: "700" },
+    input: { flex: 1, color: t.colors.textPrimary, fontSize: 20, letterSpacing: 6, fontWeight: "700" },
+    resend: { marginTop: 14, color: t.colors.accentText, textAlign: "center", fontWeight: "700" },
 });

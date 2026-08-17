@@ -1,6 +1,8 @@
 import React, { useEffect, useRef } from "react";
 import { Modal, View, Text, Pressable, StyleSheet, Animated } from "react-native";
-import { AppColors, GlassCardStyle, Spacing } from "./tokens";
+import { Spacing } from "./tokens";
+import { useTheme } from "./ThemeProvider";
+import useThemedStyles from "./useThemedStyles";
 import AppIcon from "./AppIcon";
 import useReduceMotion from "./useReduceMotion";
 
@@ -11,6 +13,8 @@ import useReduceMotion from "./useReduceMotion";
  */
 export default function GlassModal({ visible, onClose, title, children }) {
     const reduceMotion = useReduceMotion();
+    const { colors } = useTheme();
+    const styles = useThemedStyles(makeStyles);
     const progress = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
@@ -55,7 +59,7 @@ export default function GlassModal({ visible, onClose, title, children }) {
                                 accessibilityRole="button"
                                 accessibilityLabel="Close"
                             >
-                                <AppIcon name="close" size={22} color={AppColors.textMuted} />
+                                <AppIcon name="close" size={22} color={colors.textMuted} />
                             </Pressable>
                         </View>
                     ) : null}
@@ -66,23 +70,26 @@ export default function GlassModal({ visible, onClose, title, children }) {
     );
 }
 
-const styles = StyleSheet.create({
-    backdrop: {
-        flex: 1,
-        backgroundColor: "rgba(17,17,17,0.45)",
-        justifyContent: "center",
-        paddingHorizontal: Spacing.lg,
-    },
-    card: {
-        ...GlassCardStyle,
-        backgroundColor: AppColors.surface,
-        padding: Spacing.lg,
-    },
-    header: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        marginBottom: Spacing.md,
-    },
-    title: { fontSize: 17, fontWeight: "700", color: AppColors.textPrimary, flex: 1 },
-});
+const makeStyles = (t) =>
+    StyleSheet.create({
+        backdrop: {
+            flex: 1,
+            backgroundColor: t.colors.overlay,
+            justifyContent: "center",
+            paddingHorizontal: Spacing.lg,
+        },
+        card: {
+            ...t.glassCard,
+            // Opaque so the dialog reads as a solid sheet over the scrim.
+            backgroundColor: t.colors.sheet,
+            borderColor: t.colors.border,
+            padding: Spacing.lg,
+        },
+        header: {
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: Spacing.md,
+        },
+        title: { fontSize: 17, fontWeight: "700", color: t.colors.textPrimary, flex: 1 },
+    });

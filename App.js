@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useState } from "react";
-import { NavigationContainer } from "@react-navigation/native";
+import { NavigationContainer, DefaultTheme, DarkTheme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
@@ -7,6 +7,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { getAccessToken } from "./src/storage/tokenStore";
 import { ensureExpoGoTestCredits } from "./src/api/dev";
 import ErrorBoundary from "./src/components/ErrorBoundary";
+import { ThemeProvider, useTheme } from "./src/ui/ThemeProvider";
 
 /* =======================
    Auth Screens
@@ -49,16 +50,18 @@ const Tab = createBottomTabNavigator();
    Tabs
 ======================= */
 function Tabs({ onLoggedOut }) {
+    const { colors } = useTheme();
+
     return (
         <Tab.Navigator
             screenOptions={({ route }) => ({
                 headerShown: false,
-                tabBarActiveTintColor: "#2563EB",
-                tabBarInactiveTintColor: "#6B7280",
+                tabBarActiveTintColor: colors.accentText,
+                tabBarInactiveTintColor: colors.textMuted,
                 tabBarLabelStyle: { fontWeight: "600", fontSize: 11 },
                 tabBarStyle: {
-                    backgroundColor: "rgba(255,255,255,0.96)",
-                    borderTopColor: "#E5E7EB",
+                    backgroundColor: colors.tabBar,
+                    borderTopColor: colors.separator,
                     height: 90,
                     paddingBottom: 12,
                     paddingTop: 4,
@@ -108,7 +111,16 @@ function Tabs({ onLoggedOut }) {
    App Root
 ======================= */
 export default function App() {
+    return (
+        <ThemeProvider>
+            <AppShell />
+        </ThemeProvider>
+    );
+}
+
+function AppShell() {
     // ✅ ALL hooks declared FIRST
+    const { theme, hydrated } = useTheme();
     const [ready, setReady] = useState(false);
     const [authed, setAuthed] = useState(false);
 
@@ -147,29 +159,46 @@ export default function App() {
         ensureExpoGoTestCredits();
     };
 
-    // ✅ Conditional render AFTER hooks
-    if (!ready) {
+    // ✅ Conditional render AFTER hooks.
+    // `hydrated` gates on the stored appearance preference so the first paint
+    // is already in the right palette instead of flashing light then swapping.
+    if (!ready || !hydrated) {
         return <BootScreen />;
     }
 
+    // Hand the palette to React Navigation too, so the container background,
+    // headers and card transitions match the app rather than staying white.
+    const navTheme = {
+        ...(theme.isDark ? DarkTheme : DefaultTheme),
+        colors: {
+            ...(theme.isDark ? DarkTheme : DefaultTheme).colors,
+            primary: theme.colors.primary,
+            background: theme.colors.background,
+            card: theme.colors.headerBg,
+            text: theme.colors.textPrimary,
+            border: theme.colors.separator,
+        },
+    };
+
     return (
         <ErrorBoundary>
-        <NavigationContainer>
+        <NavigationContainer theme={navTheme}>
             <Stack.Navigator
                 screenOptions={{
                     headerStyle: {
-                        backgroundColor: "#F5F7FB", // light app background
+                        backgroundColor: theme.colors.headerBg,
                     },
                     headerTitleAlign: "center",
 
-                    headerTintColor: "#111111", // back arrow + title
+                    headerTintColor: theme.colors.textPrimary, // back arrow + title
                     headerTitleStyle: {
                         fontWeight: "700",
                         fontSize: 16,
                     },
                     headerShadowVisible: false, // removes bottom border
                     contentStyle: {
-                        backgroundColor: "#F5F7FB", // PREVENTS dark flash
+                        // PREVENTS a light flash between screen transitions
+                        backgroundColor: theme.colors.background,
                     },
                 }}
             >

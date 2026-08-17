@@ -3,7 +3,11 @@ import { ScrollView, Text, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import GradientScreen from "../ui/GradientScreen";
 
+import { useTheme } from "../ui/ThemeProvider";
+import useThemedStyles from "../ui/useThemedStyles";
 export default function DocumentDetailScreen({ route, navigation }) {
+    const { theme } = useTheme();
+    const styles = useThemedStyles(makeStyles);
     const { result, title } = route.params || {};
 
     function Section({ title, children }) {
@@ -87,37 +91,38 @@ export default function DocumentDetailScreen({ route, navigation }) {
     );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t) =>
+    StyleSheet.create({
     container: {
         padding: 18,
         gap: 16,
     },
     header: {
-        color: "#111111",
+        color: t.colors.textPrimary,
         fontSize: 22,
         fontWeight: "800",
     },
     section: {
-        backgroundColor: "rgba(255,255,255,0.74)",
+        backgroundColor: t.colors.glass,
         padding: 16,
         borderRadius: 18,
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.90)",
-        shadowColor: "#4F8CFF", shadowOffset: { width: 0, height: 8 },
+        borderColor: t.colors.glassBorder,
+        shadowColor: t.colors.primary, shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.1, shadowRadius: 18, elevation: 4,
     },
     sectionTitle: {
-        color: "#2563EB",
+        color: t.colors.accentText,
         fontWeight: "800",
         marginBottom: 8,
     },
     text: {
-        color: "#374151",
+        color: t.colors.textSecondary,
         fontWeight: "500",
         lineHeight: 22,
     },
     bullet: {
-        color: "#374151",
+        color: t.colors.textSecondary,
         fontWeight: "500",
         marginBottom: 6,
     },

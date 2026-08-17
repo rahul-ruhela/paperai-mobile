@@ -15,10 +15,14 @@ import CreditConfirmModal from "../ui/CreditConfirmModal";
 import { processDocumentWithTransaction } from "../api/documents";
 import { getFeatureConfig, reserveCredits, completeTransaction, refundTransaction } from "../api/credits";
 
+import { useTheme } from "../ui/ThemeProvider";
+import useThemedStyles from "../ui/useThemedStyles";
 // document_scan_ai_ready covers the "save as AI-ready + analyze" action
 const FEATURE_KEY = "document_scan_ai_ready";
 
 export default function ProcessScreen({ route, navigation }) {
+    const { theme } = useTheme();
+    const styles = useThemedStyles(makeStyles);
     const { docId, title } = route.params;
 
     const [status, setStatus] = useState("IDLE"); // IDLE | QUEUED | PROCESSING | DONE
@@ -133,12 +137,12 @@ export default function ProcessScreen({ route, navigation }) {
 
                         {status === "IDLE" && (
                             <View style={styles.idleBox}>
-                                <Ionicons name="sparkles-outline" size={22} color="#2563EB" />
+                                <Ionicons name="sparkles-outline" size={22} color={theme.colors.accentText} />
                                 <Text style={styles.idleText}>
                                     Ready to analyze your document using AI.
                                 </Text>
                                 <View style={styles.costRow}>
-                                    <Ionicons name="flash-outline" size={13} color="#F59E0B" />
+                                    <Ionicons name="flash-outline" size={13} color={theme.colors.warning} />
                                     <Text style={styles.costText}>
                                         {creditCost} credits will be used
                                     </Text>
@@ -148,7 +152,7 @@ export default function ProcessScreen({ route, navigation }) {
 
                         {(status === "QUEUED" || status === "PROCESSING") && (
                             <View style={styles.loadingBox}>
-                                <ActivityIndicator size="large" color="#4F8CFF" />
+                                <ActivityIndicator size="large" color={theme.colors.primary} />
                                 <Text style={styles.loadingText}>
                                     {status === "QUEUED"
                                         ? `⏳ Waiting in queue${dots}`
@@ -208,17 +212,18 @@ export default function ProcessScreen({ route, navigation }) {
     );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t) =>
+    StyleSheet.create({
     container: { flex: 1, padding: 18, gap: 14 },
-    title: { color: "#111111", fontSize: 22, fontWeight: "800" },
-    cardTitle: { fontWeight: "800", color: "#2563EB", marginBottom: 8 },
+    title: { color: t.colors.textPrimary, fontSize: 22, fontWeight: "800" },
+    cardTitle: { fontWeight: "800", color: t.colors.accentText, marginBottom: 8 },
     idleBox: { alignItems: "flex-start", gap: 8 },
-    idleText: { color: "#374151", fontWeight: "600" },
+    idleText: { color: t.colors.textSecondary, fontWeight: "600" },
     costRow: { flexDirection: "row", alignItems: "center", gap: 5 },
-    costText: { color: "#B45309", fontWeight: "700", fontSize: 13 },
+    costText: { color: t.colors.warningText, fontWeight: "700", fontSize: 13 },
     loadingBox: { marginTop: 8, alignItems: "center", gap: 12 },
-    loadingText: { color: "#374151", fontWeight: "700", textAlign: "center" },
-    helper: { color: "#6B7280", fontSize: 12, fontWeight: "500", textAlign: "center" },
-    doneText: { marginTop: 8, color: "#15803D", fontWeight: "700" },
-    usage: { marginTop: 4, color: "#6B7280", fontWeight: "600" },
+    loadingText: { color: t.colors.textSecondary, fontWeight: "700", textAlign: "center" },
+    helper: { color: t.colors.textMuted, fontSize: 12, fontWeight: "500", textAlign: "center" },
+    doneText: { marginTop: 8, color: t.colors.successText, fontWeight: "700" },
+    usage: { marginTop: 4, color: t.colors.textMuted, fontWeight: "600" },
 });

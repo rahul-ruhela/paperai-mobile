@@ -5,6 +5,8 @@ import { Ionicons } from "@expo/vector-icons";
 import GradientScreen from "../ui/GradientScreen";
 import AppButton from "../ui/AppButton";
 
+import { useTheme } from "../ui/ThemeProvider";
+import useThemedStyles from "../ui/useThemedStyles";
 // Central support contact details.
 const SUPPORT_PHONE = "+1 833 374-3700";
 const SUPPORT_EMAIL = "info@bholeshankarenterprisesprivatelimited.com";
@@ -22,6 +24,8 @@ async function openLink(url) {
 }
 
 export default function ContactSupportScreen() {
+    const { theme } = useTheme();
+    const styles = useThemedStyles(makeStyles);
     const [message, setMessage] = useState("");
 
     function submit() {
@@ -41,50 +45,49 @@ export default function ContactSupportScreen() {
                     </Text>
 
                     <TouchableOpacity style={styles.row} onPress={() => openLink(`tel:${SUPPORT_PHONE.replace(/[^+\d]/g, "")}`)}>
-                        <View style={styles.icon}><Ionicons name="call-outline" size={22} color="#2563EB" /></View>
+                        <View style={styles.icon}><Ionicons name="call-outline" size={22} color={theme.colors.accentText} /></View>
                         <View style={styles.rowText}>
                             <Text style={styles.rowTitle}>Call us</Text>
                             <Text style={styles.rowValue}>{SUPPORT_PHONE}</Text>
                         </View>
-                        <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+                        <Ionicons name="chevron-forward" size={20} color={theme.colors.placeholder} />
                     </TouchableOpacity>
 
                     <TouchableOpacity style={styles.row} onPress={() => openLink(`mailto:${SUPPORT_EMAIL}`)}>
-                        <View style={styles.icon}><Ionicons name="mail-outline" size={22} color="#2563EB" /></View>
+                        <View style={styles.icon}><Ionicons name="mail-outline" size={22} color={theme.colors.accentText} /></View>
                         <View style={styles.rowText}>
                             <Text style={styles.rowTitle}>Email us</Text>
                             <Text style={styles.rowValue}>{SUPPORT_EMAIL}</Text>
                         </View>
-                        <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+                        <Ionicons name="chevron-forward" size={20} color={theme.colors.placeholder} />
                     </TouchableOpacity>
 
                     <TouchableOpacity style={styles.row} onPress={() => openLink(SUPPORT_URL)}>
-                        <View style={styles.icon}><Ionicons name="globe-outline" size={22} color="#2563EB" /></View>
+                        <View style={styles.icon}><Ionicons name="globe-outline" size={22} color={theme.colors.accentText} /></View>
                         <View style={styles.rowText}>
                             <Text style={styles.rowTitle}>Help & support site</Text>
                             <Text style={styles.rowValue}>{SUPPORT_URL}</Text>
                         </View>
-                        <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+                        <Ionicons name="chevron-forward" size={20} color={theme.colors.placeholder} />
                     </TouchableOpacity>
 
                     <TouchableOpacity style={styles.row} onPress={() => openLink(MANAGE_SUBSCRIPTION_URL)}>
-                        <View style={styles.icon}><Ionicons name="card-outline" size={22} color="#2563EB" /></View>
+                        <View style={styles.icon}><Ionicons name="card-outline" size={22} color={theme.colors.accentText} /></View>
                         <View style={styles.rowText}>
                             <Text style={styles.rowTitle}>Manage subscription</Text>
                             <Text style={styles.rowValue}>App Store › Subscriptions</Text>
                         </View>
-                        <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+                        <Ionicons name="chevron-forward" size={20} color={theme.colors.placeholder} />
                     </TouchableOpacity>
 
                     <Text style={styles.formLabel}>Send us a message</Text>
                     <TextInput
                         placeholder="Describe your issue"
-                        placeholderTextColor="#6B7280"
+                        placeholderTextColor={theme.colors.textMuted}
                         multiline
                         value={message}
                         onChangeText={setMessage}
-                        style={styles.input}
-                    />
+                        style={styles.input} keyboardAppearance={theme.keyboardAppearance} />
 
                     <AppButton title="Submit Enquiry" onPress={submit} />
                 </ScrollView>
@@ -93,39 +96,40 @@ export default function ContactSupportScreen() {
     );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t) =>
+    StyleSheet.create({
     container: { padding: 18, gap: 14 },
-    title: { color: "#111111", fontSize: 24, fontWeight: "900" },
-    subtitle: { color: "#6B7280", fontWeight: "700", lineHeight: 20 },
+    title: { color: t.colors.textPrimary, fontSize: 24, fontWeight: "900" },
+    subtitle: { color: t.colors.textMuted, fontWeight: "700", lineHeight: 20 },
 
     row: {
         flexDirection: "row",
         alignItems: "center",
         gap: 12,
-        backgroundColor: "rgba(255,255,255,0.74)",
+        backgroundColor: t.colors.glass,
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.90)",
+        borderColor: t.colors.glassBorder,
         borderRadius: 16,
         padding: 14,
     },
     icon: {
         width: 40, height: 40, borderRadius: 12,
         alignItems: "center", justifyContent: "center",
-        backgroundColor: "rgba(79,140,255,0.12)",
+        backgroundColor: t.colors.infoBg,
     },
     rowText: { flex: 1 },
-    rowTitle: { color: "#111111", fontWeight: "900", fontSize: 15 },
-    rowValue: { color: "#2563EB", fontWeight: "700", fontSize: 13, marginTop: 2 },
+    rowTitle: { color: t.colors.textPrimary, fontWeight: "900", fontSize: 15 },
+    rowValue: { color: t.colors.accentText, fontWeight: "700", fontSize: 13, marginTop: 2 },
 
-    formLabel: { color: "#6B7280", fontWeight: "700", marginTop: 6 },
+    formLabel: { color: t.colors.textMuted, fontWeight: "700", marginTop: 6 },
     input: {
         minHeight: 120,
-        backgroundColor: "rgba(255,255,255,0.82)",
+        backgroundColor: t.colors.inputBg,
         borderWidth: 1,
-        borderColor: "#D1D5DB",
+        borderColor: t.colors.inputBorder,
         borderRadius: 14,
         padding: 14,
-        color: "#111111",
+        color: t.colors.textPrimary,
         fontWeight: "500",
         textAlignVertical: "top",
     },

@@ -18,10 +18,14 @@ import AiHeader from "../ui/AiHeader";
 import AppButton from "../ui/AppButton";
 import { api } from "../api/client";
 import { listTasks } from "../api/tasks";
+import { useTheme } from "../ui/ThemeProvider";
+import useThemedStyles from "../ui/useThemedStyles";
 import { useFocusEffect } from "@react-navigation/native"; // 🔹 NEW
 
 
 export default function AnalysisScreen({ route, navigation }) {
+    const { theme } = useTheme();
+    const styles = useThemedStyles(makeStyles);
     const { docId, title } = route.params;
 
     const [loading, setLoading] = useState(true);
@@ -128,7 +132,7 @@ export default function AnalysisScreen({ route, navigation }) {
                                 <View style={styles.centerBox}>
                                     <ActivityIndicator
                                         size="large"
-                                        color="#2563EB"
+                                        color={theme.colors.accentText}
                                     />
                                     <Text style={styles.inProgressTitle}>
                                         {doc.status === "QUEUED"
@@ -261,7 +265,7 @@ export default function AnalysisScreen({ route, navigation }) {
                         <View style={styles.overlay}>
                             <ActivityIndicator
                                 size="large"
-                                color="#2563EB"
+                                color={theme.colors.accentText}
                             />
                             <Text style={styles.overlayText}>
                                 {rerunning
@@ -276,7 +280,8 @@ export default function AnalysisScreen({ route, navigation }) {
     );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t) =>
+    StyleSheet.create({
     container: {
         padding: 18,
         paddingBottom: 80,
@@ -284,7 +289,7 @@ const styles = StyleSheet.create({
 
     card: {
         marginBottom: 16,
-        backgroundColor: "rgba(255,255,255,0.94)",
+        backgroundColor: t.colors.surface,
         borderColor: "rgba(0,0,0,0.06)",
     },
 
@@ -315,7 +320,7 @@ const styles = StyleSheet.create({
 
     timestamp: {
         marginBottom: 10,
-        color: "#6B7280",
+        color: t.colors.textMuted,
         fontWeight: "600",
         fontSize: 12,
     },

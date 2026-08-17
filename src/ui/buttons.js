@@ -1,14 +1,8 @@
 import React, { useRef } from "react";
 import { Text, View, ActivityIndicator, Pressable, StyleSheet, Animated } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import {
-    AppColors,
-    AppGradients,
-    Radius,
-    Shadows,
-    Motion,
-    MIN_TOUCH,
-} from "./tokens";
+import { Radius, Motion, MIN_TOUCH } from "./tokens";
+import { useTheme } from "./ThemeProvider";
 import AppIcon from "./AppIcon";
 import useReduceMotion from "./useReduceMotion";
 
@@ -49,6 +43,7 @@ function PressScale({ children, onPress, disabled, style, accessibilityLabel, ac
     );
 }
 
+// Layout only — every colour comes from the active theme at render time.
 const base = StyleSheet.create({
     root: {
         minHeight: 52,
@@ -80,7 +75,10 @@ function Inner({ icon, title, textColor, loading, iconSize = 20 }) {
    Primary — blue gradient
 ======================= */
 export function PrimaryButton({ title, onPress, disabled, loading, icon, style, fullWidth = true }) {
+    const { theme } = useTheme();
+    const c = theme.colors;
     const isDisabled = disabled || loading;
+
     return (
         <PressScale
             onPress={onPress}
@@ -88,22 +86,22 @@ export function PrimaryButton({ title, onPress, disabled, loading, icon, style, 
             accessibilityLabel={title}
             style={[
                 fullWidth && { alignSelf: "stretch" },
-                !isDisabled && Shadows.button,
+                !isDisabled && theme.shadows.button,
                 style,
             ]}
         >
             {isDisabled ? (
-                <View style={[base.root, { backgroundColor: AppColors.disabled }]}>
-                    <Inner icon={icon} title={title} textColor={AppColors.disabledText} loading={loading} />
+                <View style={[base.root, { backgroundColor: c.disabled }]}>
+                    <Inner icon={icon} title={title} textColor={c.disabledText} loading={loading} />
                 </View>
             ) : (
                 <LinearGradient
-                    colors={AppGradients.primary}
+                    colors={theme.gradients.primary}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
                     style={base.root}
                 >
-                    <Inner icon={icon} title={title} textColor={AppColors.white} />
+                    <Inner icon={icon} title={title} textColor={c.white} />
                 </LinearGradient>
             )}
         </PressScale>
@@ -114,7 +112,10 @@ export function PrimaryButton({ title, onPress, disabled, loading, icon, style, 
    Secondary — glass w/ blue border
 ======================= */
 export function SecondaryButton({ title, onPress, disabled, loading, icon, style, fullWidth = true }) {
+    const { theme } = useTheme();
+    const c = theme.colors;
     const isDisabled = disabled || loading;
+
     return (
         <PressScale
             onPress={onPress}
@@ -126,16 +127,24 @@ export function SecondaryButton({ title, onPress, disabled, loading, icon, style
                 style={[
                     base.root,
                     {
-                        backgroundColor: isDisabled ? AppColors.disabled : "rgba(255,255,255,0.72)",
+                        backgroundColor: isDisabled
+                            ? c.disabled
+                            : theme.isDark
+                            ? "rgba(255,255,255,0.06)"
+                            : "rgba(255,255,255,0.72)",
                         borderWidth: 1,
-                        borderColor: isDisabled ? AppColors.inputBorder : AppColors.primary,
+                        borderColor: isDisabled ? c.inputBorder : c.primary,
                     },
                 ]}
             >
                 <Inner
                     icon={icon}
                     title={title}
-                    textColor={isDisabled ? AppColors.disabledText : AppColors.primaryDark}
+                    // On dark the "dark blue" label would disappear, so the
+                    // lighter end of the primary ramp carries the text.
+                    textColor={
+                        isDisabled ? c.disabledText : theme.isDark ? c.primaryLight : c.primaryDark
+                    }
                     loading={loading}
                 />
             </View>
@@ -147,26 +156,29 @@ export function SecondaryButton({ title, onPress, disabled, loading, icon, style
    Danger — red gradient (destructive only)
 ======================= */
 export function DangerButton({ title, onPress, disabled, loading, icon, style, fullWidth = true }) {
+    const { theme } = useTheme();
+    const c = theme.colors;
     const isDisabled = disabled || loading;
+
     return (
         <PressScale
             onPress={onPress}
             disabled={isDisabled}
             accessibilityLabel={title}
-            style={[fullWidth && { alignSelf: "stretch" }, !isDisabled && Shadows.button, style]}
+            style={[fullWidth && { alignSelf: "stretch" }, !isDisabled && theme.shadows.button, style]}
         >
             {isDisabled ? (
-                <View style={[base.root, { backgroundColor: AppColors.disabled }]}>
-                    <Inner icon={icon} title={title} textColor={AppColors.disabledText} loading={loading} />
+                <View style={[base.root, { backgroundColor: c.disabled }]}>
+                    <Inner icon={icon} title={title} textColor={c.disabledText} loading={loading} />
                 </View>
             ) : (
                 <LinearGradient
-                    colors={AppGradients.danger}
+                    colors={theme.gradients.danger}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
                     style={base.root}
                 >
-                    <Inner icon={icon} title={title} textColor={AppColors.white} />
+                    <Inner icon={icon} title={title} textColor={c.white} />
                 </LinearGradient>
             )}
         </PressScale>

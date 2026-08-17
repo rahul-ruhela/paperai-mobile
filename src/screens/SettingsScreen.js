@@ -16,7 +16,11 @@ import { Ionicons } from "@expo/vector-icons";
 import GradientScreen from "../ui/GradientScreen";
 import { logout, deleteAccount } from "../api/auth";
 
+import { useTheme } from "../ui/ThemeProvider";
+import useThemedStyles from "../ui/useThemedStyles";
 export default function SettingsScreen({ navigation, onLoggedOut }) {
+    const { theme, preference, setPreference } = useTheme();
+    const styles = useThemedStyles(makeStyles);
     async function onLogout() {
         Alert.alert("Log out", "Are you sure you want to log out?", [
             { text: "Cancel", style: "cancel" },
@@ -78,14 +82,49 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
     function Row({ icon, title, subtitle, onPress, danger }) {
         return (
             <Pressable onPress={onPress} style={({ pressed }) => [styles.row, pressed && { opacity: 0.75 }]}>
-                <View style={[styles.rowIcon, danger && { backgroundColor: "rgba(255,90,95,0.12)", borderColor: "rgba(255,90,95,0.30)" }]}>
-                    <Ionicons name={icon} size={18} color={danger ? "#DC2626" : "#2563EB"} />
+                <View style={[styles.rowIcon, danger && { backgroundColor: theme.colors.dangerBg, borderColor: theme.colors.dangerBorder }]}>
+                    <Ionicons
+                        name={icon}
+                        size={18}
+                        color={danger ? theme.colors.dangerText : theme.colors.accentText}
+                    />
                 </View>
                 <View style={{ flex: 1 }}>
-                    <Text style={[styles.rowTitle, danger && { color: "#DC2626" }]}>{title}</Text>
+                    <Text style={[styles.rowTitle, danger && { color: theme.colors.dangerText }]}>{title}</Text>
                     {!!subtitle && <Text style={styles.rowSub}>{subtitle}</Text>}
                 </View>
-                <Ionicons name="chevron-forward" size={18} color="#6B7280" />
+                <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
+            </Pressable>
+        );
+    }
+
+    function AppearanceOption({ value, label, icon, hint }) {
+        const selected = preference === value;
+        return (
+            <Pressable
+                onPress={() => setPreference(value)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected }}
+                accessibilityLabel={`${label}. ${hint}`}
+                style={({ pressed }) => [
+                    styles.appearanceOption,
+                    selected && styles.appearanceOptionActive,
+                    pressed && { opacity: 0.8 },
+                ]}
+            >
+                <Ionicons
+                    name={icon}
+                    size={20}
+                    color={selected ? theme.colors.accentText : theme.colors.textMuted}
+                />
+                <Text style={[styles.appearanceLabel, selected && styles.appearanceLabelActive]}>
+                    {label}
+                </Text>
+                {/* Selection is shown by a check as well as colour, so it does
+                    not rely on colour alone. */}
+                {selected ? (
+                    <Ionicons name="checkmark-circle" size={16} color={theme.colors.accentText} />
+                ) : null}
             </Pressable>
         );
     }
@@ -147,6 +186,35 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
                     </View>
 
                     <View style={styles.card}>
+                        <Text style={styles.section}>Appearance</Text>
+                        <Text style={styles.sectionHint}>
+                            Choose how PaperAI looks. “System” follows your{" "}
+                            {Platform.OS === "ios" ? "iOS" : "device"} Display setting.
+                        </Text>
+
+                        <View style={styles.appearanceRow} accessibilityRole="radiogroup">
+                            <AppearanceOption
+                                value="system"
+                                label="System"
+                                icon="phone-portrait-outline"
+                                hint="Follow the device appearance setting"
+                            />
+                            <AppearanceOption
+                                value="light"
+                                label="Light"
+                                icon="sunny-outline"
+                                hint="Always use the light theme"
+                            />
+                            <AppearanceOption
+                                value="dark"
+                                label="Dark"
+                                icon="moon-outline"
+                                hint="Always use the dark theme"
+                            />
+                        </View>
+                    </View>
+
+                    <View style={styles.card}>
                         <Text style={styles.section}>Support</Text>
 
                         <Row
@@ -196,26 +264,59 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
     );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t) =>
+    StyleSheet.create({
 
     container: {
         padding: 18,
         paddingBottom: 60, // ✅ ensures logout is visible
         gap: 16,
     },
-    title: { color: "#111111", fontSize: 26, fontWeight: "800" },
+    title: { color: t.colors.textPrimary, fontSize: 26, fontWeight: "800" },
 
     card: {
-        backgroundColor: "rgba(255,255,255,0.74)",
+        backgroundColor: t.colors.glass,
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.90)",
+        borderColor: t.colors.glassBorder,
         borderRadius: 20,
         padding: 14,
         gap: 6,
-        shadowColor: "#4F8CFF", shadowOffset: { width: 0, height: 8 },
+        shadowColor: t.colors.primary, shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.1, shadowRadius: 18, elevation: 4,
     },
-    section: { color: "#6B7280", fontSize: 15, fontWeight: "700", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.4 },
+    section: { color: t.colors.textMuted, fontSize: 15, fontWeight: "700", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.4 },
+    sectionHint: {
+        color: t.colors.textMuted,
+        fontSize: 12,
+        fontWeight: "500",
+        lineHeight: 17,
+        marginBottom: 10,
+    },
+
+    appearanceRow: { flexDirection: "row", gap: 8 },
+    appearanceOption: {
+        flex: 1,
+        minHeight: 44,
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 4,
+        paddingVertical: 10,
+        paddingHorizontal: 6,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: t.colors.border,
+        backgroundColor: t.colors.glassSoft,
+    },
+    appearanceOptionActive: {
+        borderColor: t.colors.primary,
+        backgroundColor: t.colors.infoBg,
+    },
+    appearanceLabel: {
+        color: t.colors.textSecondary,
+        fontSize: 12,
+        fontWeight: "700",
+    },
+    appearanceLabelActive: { color: t.colors.accentText },
 
     row: {
         flexDirection: "row",
@@ -229,14 +330,14 @@ const styles = StyleSheet.create({
         width: 38,
         height: 38,
         borderRadius: 14,
-        backgroundColor: "rgba(79,140,255,0.12)",
+        backgroundColor: t.colors.infoBg,
         borderWidth: 1,
-        borderColor: "rgba(79,140,255,0.20)",
+        borderColor: t.colors.infoBorder,
         alignItems: "center",
         justifyContent: "center",
     },
-    rowTitle: { color: "#111111", fontWeight: "700" },
-    rowSub: { marginTop: 2, color: "#6B7280", fontWeight: "500", fontSize: 12 },
+    rowTitle: { color: t.colors.textPrimary, fontWeight: "700" },
+    rowSub: { marginTop: 2, color: t.colors.textMuted, fontWeight: "500", fontSize: 12 },
 
-    footer: { marginTop: "auto", textAlign: "center", color: "#6B7280", fontWeight: "600" },
+    footer: { marginTop: "auto", textAlign: "center", color: t.colors.textMuted, fontWeight: "600" },
 });

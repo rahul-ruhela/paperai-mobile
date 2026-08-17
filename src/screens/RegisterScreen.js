@@ -13,7 +13,11 @@ import GradientScreen from "../ui/GradientScreen";
 import AppButton from "../ui/AppButton";
 import { sendEmailOtp,register } from "../api/auth";
 
+import { useTheme } from "../ui/ThemeProvider";
+import useThemedStyles from "../ui/useThemedStyles";
 export default function RegisterScreen({ navigation }) {
+    const { theme } = useTheme();
+    const styles = useThemedStyles(makeStyles);
     const [name, setName] = useState("");
     const [email, setEmail] = useState("");
     const [phone, setPhone] = useState("");
@@ -105,66 +109,68 @@ export default function RegisterScreen({ navigation }) {
 }
 
 function Field({ icon, ...props }) {
+    const { theme } = useTheme();
+    const styles = useThemedStyles(makeStyles);
     return (
         <View style={styles.inputWrap}>
-            <Ionicons name={icon} size={18} color="#6B7280" />
+            <Ionicons name={icon} size={18} color={theme.colors.textMuted} />
             <TextInput
-                placeholderTextColor="#6B7280"
+                placeholderTextColor={theme.colors.textMuted}
                 style={styles.input}
-                {...props}
-            />
+                {...props} keyboardAppearance={theme.keyboardAppearance} />
         </View>
     );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t) =>
+    StyleSheet.create({
     container: { flex: 1, padding: 18, justifyContent: "center" },
     brandWrap: { alignItems: "center", marginBottom: 14 },
     logoRing: {
         width: 74,
         height: 74,
         borderRadius: 22,
-        backgroundColor: "rgba(255,255,255,0.74)",
+        backgroundColor: t.colors.glass,
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.90)",
+        borderColor: t.colors.glassBorder,
         alignItems: "center",
         justifyContent: "center",
         marginBottom: 12,
-        shadowColor: "#4F8CFF", shadowOffset: { width: 0, height: 8 },
+        shadowColor: t.colors.primary, shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.1, shadowRadius: 18, elevation: 4,
     },
     logo: { width: 50, height: 50 },
-    title: { fontSize: 22, fontWeight: "800", color: "#111111" },
+    title: { fontSize: 22, fontWeight: "800", color: t.colors.textPrimary },
     subtitle: {
         marginTop: 6,
-        color: "#6B7280",
+        color: t.colors.textMuted,
         textAlign: "center",
     },
     card: {
-        backgroundColor: "rgba(255,255,255,0.74)",
+        backgroundColor: t.colors.glass,
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.90)",
+        borderColor: t.colors.glassBorder,
         borderRadius: 22,
         padding: 16,
-        shadowColor: "#4F8CFF", shadowOffset: { width: 0, height: 8 },
+        shadowColor: t.colors.primary, shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.1, shadowRadius: 18, elevation: 4,
     },
     inputWrap: {
         flexDirection: "row",
         alignItems: "center",
         gap: 10,
-        backgroundColor: "rgba(255,255,255,0.82)",
+        backgroundColor: t.colors.inputBg,
         borderWidth: 1,
-        borderColor: "#D1D5DB",
+        borderColor: t.colors.inputBorder,
         borderRadius: 14,
         paddingHorizontal: 12,
         paddingVertical: 14,
         marginBottom: 10,
     },
-    input: { flex: 1, color: "#111111", fontSize: 15 },
+    input: { flex: 1, color: t.colors.textPrimary, fontSize: 15 },
     link: {
         marginTop: 14,
-        color: "#2563EB",
+        color: t.colors.accentText,
         fontWeight: "800",
         textAlign: "center",
     },

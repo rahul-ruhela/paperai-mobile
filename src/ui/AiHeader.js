@@ -1,12 +1,15 @@
 import React, { useEffect, useRef } from "react";
 import { View, Text, StyleSheet, Animated } from "react-native";
 import AppIcon from "./AppIcon";
-import { AppColors } from "./tokens";
+import { useTheme } from "./ThemeProvider";
+import useThemedStyles from "./useThemedStyles";
 import useReduceMotion from "./useReduceMotion";
 
 export default function AiHeader({ title, subtitle }) {
     const float = useRef(new Animated.Value(0)).current;
     const reduceMotion = useReduceMotion();
+    const { colors } = useTheme();
+    const styles = useThemedStyles(makeStyles);
 
     useEffect(() => {
         if (reduceMotion) {
@@ -26,7 +29,7 @@ export default function AiHeader({ title, subtitle }) {
     return (
         <View style={styles.wrap}>
             <Animated.View style={{ transform: [{ translateY: float }] }}>
-                <AppIcon name="sparkle" size={42} color={AppColors.primary} />
+                <AppIcon name="sparkle" size={42} color={colors.primary} />
             </Animated.View>
             <Text style={styles.title}>{title}</Text>
             {subtitle ? <Text style={styles.sub}>{subtitle}</Text> : null}
@@ -34,18 +37,19 @@ export default function AiHeader({ title, subtitle }) {
     );
 }
 
-const styles = StyleSheet.create({
-    wrap: { alignItems: "center", marginBottom: 16 },
-    title: {
-        marginTop: 8,
-        fontSize: 26,
-        fontWeight: "800",
-        color: AppColors.textPrimary,
-    },
-    sub: {
-        marginTop: 4,
-        color: AppColors.textMuted,
-        fontWeight: "500",
-        textAlign: "center",
-    },
-});
+const makeStyles = (t) =>
+    StyleSheet.create({
+        wrap: { alignItems: "center", marginBottom: 16 },
+        title: {
+            marginTop: 8,
+            fontSize: 26,
+            fontWeight: "800",
+            color: t.colors.textPrimary,
+        },
+        sub: {
+            marginTop: 4,
+            color: t.colors.textMuted,
+            fontWeight: "500",
+            textAlign: "center",
+        },
+    });
