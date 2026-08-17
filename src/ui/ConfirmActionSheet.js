@@ -102,7 +102,7 @@ export default function ConfirmActionSheet({
                                 destructive && styles.iconWrapDestructive,
                             ]}
                         >
-                            <Ionicons name={icon} size={18} color="#fff" />
+                            <Ionicons name={icon} size={18} color={destructive ? "#DC2626" : "#2563EB"} />
                         </View>
 
                         <View style={{ flex: 1 }}>
@@ -130,7 +130,7 @@ export default function ConfirmActionSheet({
                     </Pressable>
 
                     <Text style={styles.legal}>
-                        This action can’t be undone.
+                        This action cannot be undone.
                     </Text>
                 </Animated.View>
             </View>
@@ -142,11 +142,11 @@ const styles = StyleSheet.create({
     root: { flex: 1, justifyContent: "flex-end" },
     backdrop: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: "rgba(0,0,0,0.70)", // darker (your request)
+        backgroundColor: "rgba(17,17,17,0.45)",
     },
 
     sheet: {
-        backgroundColor: "rgba(13,20,38,0.98)",
+        backgroundColor: "#FFFFFF",
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
         borderWidth: 1,
@@ -164,7 +164,7 @@ const styles = StyleSheet.create({
         width: 46,
         height: 5,
         borderRadius: 999,
-        backgroundColor: "rgba(255,255,255,0.18)",
+        backgroundColor: "#D1D5DB",
     },
     closeBtn: {
         position: "absolute",
@@ -175,9 +175,9 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "rgba(255,255,255,0.06)",
+        backgroundColor: "rgba(0,0,0,0.04)",
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.10)",
+        borderColor: "#E5E7EB",
     },
 
     header: { flexDirection: "row", gap: 12, alignItems: "flex-start", marginTop: 12, marginBottom: 12 },
@@ -185,18 +185,18 @@ const styles = StyleSheet.create({
         width: 38,
         height: 38,
         borderRadius: 14,
-        backgroundColor: "rgba(255,255,255,0.08)",
+        backgroundColor: "rgba(79,140,255,0.12)",
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.12)",
+        borderColor: "rgba(79,140,255,0.25)",
         alignItems: "center",
         justifyContent: "center",
     },
     iconWrapDestructive: {
-        backgroundColor: "rgba(239,68,68,0.22)",
-        borderColor: "rgba(239,68,68,0.28)",
+        backgroundColor: "rgba(255,90,95,0.12)",
+        borderColor: "rgba(255,90,95,0.30)",
     },
 
-    title: { color: "#fff", fontSize: 16, fontWeight: "900" },
+    title: { color: "#111111", fontSize: 16, fontWeight: "800" },
     message: { marginTop: 4, color: Theme.colors.text2, fontWeight: "700", lineHeight: 18 },
 
     confirmBtn: {
@@ -207,31 +207,31 @@ const styles = StyleSheet.create({
         borderWidth: 1,
     },
     confirmBtnDestructive: {
-        backgroundColor: "rgba(239,68,68,0.92)",
-        borderColor: "rgba(239,68,68,0.25)",
+        backgroundColor: "#FF5A5F",
+        borderColor: "rgba(255,90,95,0.4)",
     },
     confirmBtnNormal: {
-        backgroundColor: "rgba(165,180,252,0.25)",
-        borderColor: "rgba(165,180,252,0.28)",
+        backgroundColor: "#4F8CFF",
+        borderColor: "rgba(79,140,255,0.4)",
     },
-    confirmText: { color: "#fff", fontWeight: "900" },
+    confirmText: { color: "#FFFFFF", fontWeight: "700" },
 
     cancelBtn: {
         marginTop: 10,
         borderRadius: 18,
         paddingVertical: 14,
         alignItems: "center",
-        backgroundColor: "rgba(255,255,255,0.06)",
+        backgroundColor: "rgba(255,255,255,0.72)",
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.10)",
+        borderColor: "#4F8CFF",
     },
-    cancelText: { color: "rgba(255,255,255,0.85)", fontWeight: "900" },
+    cancelText: { color: "#2563EB", fontWeight: "700" },
 
     legal: {
         marginTop: 10,
-        color: "rgba(255,255,255,0.45)",
+        color: "#6B7280",
         fontSize: 12,
         textAlign: "center",
-        fontWeight: "700",
+        fontWeight: "500",
     },
 });

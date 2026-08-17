@@ -88,7 +88,7 @@ function FAQ({ q, a }) {
         <TouchableOpacity style={styles.card} activeOpacity={0.85} onPress={() => setOpen((v) => !v)}>
             <View style={styles.qRow}>
                 <Text style={styles.q}>{q}</Text>
-                <Ionicons name={open ? "chevron-up" : "chevron-down"} size={18} color="#A5B4FC" />
+                <Ionicons name={open ? "chevron-up" : "chevron-down"} size={18} color="#2563EB" />
             </View>
             {open && <Text style={styles.a}>{a}</Text>}
         </TouchableOpacity>
@@ -110,9 +110,9 @@ export default function HelpCenterScreen() {
                     <Text style={styles.sectionTitle}>Quick links</Text>
                     {LINKS.map((l) => (
                         <TouchableOpacity key={l.label} style={styles.linkRow} onPress={() => openLink(l.url)}>
-                            <Ionicons name={l.icon} size={20} color="#A5B4FC" />
+                            <Ionicons name={l.icon} size={20} color="#2563EB" />
                             <Text style={styles.linkText}>{l.label}</Text>
-                            <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.4)" />
+                            <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
                         </TouchableOpacity>
                     ))}
                 </ScrollView>
@@ -123,29 +123,29 @@ export default function HelpCenterScreen() {
 
 const styles = StyleSheet.create({
     container: { padding: 18, gap: 12, paddingBottom: 40 },
-    title: { color: "#fff", fontSize: 24, fontWeight: "900" },
-    subtitle: { color: "rgba(255,255,255,0.7)", fontWeight: "700", marginBottom: 4 },
+    title: { color: "#111111", fontSize: 24, fontWeight: "900" },
+    subtitle: { color: "#6B7280", fontWeight: "700", marginBottom: 4 },
     card: {
-        backgroundColor: "rgba(255,255,255,0.06)",
+        backgroundColor: "rgba(255,255,255,0.74)",
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.10)",
+        borderColor: "rgba(255,255,255,0.90)",
         padding: 14,
         borderRadius: 16,
     },
     qRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
-    q: { color: "#fff", fontWeight: "900", flex: 1 },
-    a: { marginTop: 8, color: "rgba(255,255,255,0.8)", fontWeight: "600", lineHeight: 20 },
+    q: { color: "#111111", fontWeight: "900", flex: 1 },
+    a: { marginTop: 8, color: "#374151", fontWeight: "600", lineHeight: 20 },
 
-    sectionTitle: { color: "#fff", fontSize: 18, fontWeight: "900", marginTop: 18 },
+    sectionTitle: { color: "#111111", fontSize: 18, fontWeight: "900", marginTop: 18 },
     linkRow: {
         flexDirection: "row",
         alignItems: "center",
         gap: 12,
-        backgroundColor: "rgba(255,255,255,0.06)",
+        backgroundColor: "rgba(255,255,255,0.74)",
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.10)",
+        borderColor: "rgba(255,255,255,0.90)",
         borderRadius: 16,
         padding: 14,
     },
-    linkText: { color: "#fff", fontWeight: "800", flex: 1 },
+    linkText: { color: "#111111", fontWeight: "800", flex: 1 },
 });

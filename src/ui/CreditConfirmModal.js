@@ -98,20 +98,20 @@ export default function CreditConfirmModal({
                             hitSlop={12}
                             style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.7 }]}
                         >
-                            <Ionicons name="close" size={17} color="rgba(255,255,255,0.7)" />
+                            <Ionicons name="close" size={17} color="#6B7280" />
                         </Pressable>
                     </View>
 
                     {/* Header row */}
                     <View style={styles.headerRow}>
                         <View style={styles.iconWrap}>
-                            <Ionicons name="flash" size={20} color="#A5B4FC" />
+                            <Ionicons name="flash" size={20} color="#2563EB" />
                         </View>
                         <View style={{ flex: 1 }}>
                             <Text style={styles.title}>{title}</Text>
                             {creditCost > 0 && (
                                 <View style={styles.costRow}>
-                                    <Ionicons name="flash-outline" size={13} color="#FBBF24" />
+                                    <Ionicons name="flash-outline" size={13} color="#F59E0B" />
                                     <Text style={styles.costText}>{creditCost} credits will be used</Text>
                                 </View>
                             )}
@@ -125,7 +125,7 @@ export default function CreditConfirmModal({
 
                     {/* Safety notice */}
                     <View style={styles.safetyBox}>
-                        <Ionicons name="shield-checkmark-outline" size={14} color="#34D399" />
+                        <Ionicons name="shield-checkmark-outline" size={14} color="#4F8CFF" />
                         <Text style={styles.safetyText}>{resolvedSafetyNote}</Text>
                     </View>
 
@@ -166,14 +166,14 @@ const styles = StyleSheet.create({
     root: { flex: 1, justifyContent: "flex-end" },
     backdrop: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: "rgba(0,0,0,0.72)",
+        backgroundColor: "rgba(17,17,17,0.45)",
     },
     sheet: {
-        backgroundColor: "rgba(13,20,38,0.98)",
+        backgroundColor: "#FFFFFF",
         borderTopLeftRadius: 26,
         borderTopRightRadius: 26,
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.10)",
+        borderColor: "#E5E7EB",
         padding: 18,
         paddingBottom: Platform.OS === "ios" ? 32 : 20,
         gap: 12,
@@ -190,7 +190,7 @@ const styles = StyleSheet.create({
         width: 44,
         height: 5,
         borderRadius: 999,
-        backgroundColor: "rgba(255,255,255,0.18)",
+        backgroundColor: "#D1D5DB",
     },
     closeBtn: {
         position: "absolute",
@@ -201,9 +201,9 @@ const styles = StyleSheet.create({
         borderRadius: 10,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "rgba(255,255,255,0.07)",
+        backgroundColor: "rgba(0,0,0,0.04)",
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.10)",
+        borderColor: "#E5E7EB",
     },
     headerRow: {
         flexDirection: "row",
@@ -215,16 +215,16 @@ const styles = StyleSheet.create({
         width: 42,
         height: 42,
         borderRadius: 14,
-        backgroundColor: "rgba(99,102,241,0.22)",
+        backgroundColor: "rgba(79,140,255,0.12)",
         borderWidth: 1,
-        borderColor: "rgba(165,180,252,0.30)",
+        borderColor: "rgba(79,140,255,0.25)",
         alignItems: "center",
         justifyContent: "center",
     },
     title: {
-        color: "#fff",
+        color: "#111111",
         fontSize: 17,
-        fontWeight: "900",
+        fontWeight: "800",
     },
     costRow: {
         flexDirection: "row",
@@ -233,13 +233,13 @@ const styles = StyleSheet.create({
         marginTop: 3,
     },
     costText: {
-        color: "#FBBF24",
-        fontWeight: "800",
+        color: "#B45309",
+        fontWeight: "700",
         fontSize: 13,
     },
     message: {
-        color: "rgba(255,255,255,0.75)",
-        fontWeight: "700",
+        color: "#374151",
+        fontWeight: "500",
         lineHeight: 20,
         fontSize: 14,
     },
@@ -247,17 +247,17 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "flex-start",
         gap: 8,
-        backgroundColor: "rgba(52,211,153,0.08)",
+        backgroundColor: "rgba(79,140,255,0.08)",
         borderWidth: 1,
-        borderColor: "rgba(52,211,153,0.20)",
+        borderColor: "rgba(79,140,255,0.20)",
         borderRadius: 12,
         padding: 10,
     },
     safetyText: {
         flex: 1,
-        color: "rgba(255,255,255,0.65)",
+        color: "#6B7280",
         fontSize: 12,
-        fontWeight: "700",
+        fontWeight: "500",
         lineHeight: 17,
     },
     confirmBtn: {
@@ -265,29 +265,31 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "center",
         gap: 8,
-        backgroundColor: "rgba(99,102,241,0.85)",
-        borderRadius: 18,
-        paddingVertical: 15,
+        backgroundColor: "#4F8CFF",
+        borderRadius: 14,
+        paddingVertical: 16,
+        minHeight: 52,
         borderWidth: 1,
-        borderColor: "rgba(165,180,252,0.30)",
+        borderColor: "rgba(79,140,255,0.4)",
     },
     confirmText: {
-        color: "#fff",
-        fontWeight: "900",
+        color: "#FFFFFF",
+        fontWeight: "700",
         fontSize: 15,
     },
     cancelBtn: {
         alignItems: "center",
         justifyContent: "center",
-        paddingVertical: 13,
-        borderRadius: 18,
-        backgroundColor: "rgba(255,255,255,0.06)",
+        paddingVertical: 15,
+        borderRadius: 14,
+        minHeight: 52,
+        backgroundColor: "rgba(255,255,255,0.72)",
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.10)",
+        borderColor: "#4F8CFF",
     },
     cancelText: {
-        color: "rgba(255,255,255,0.80)",
-        fontWeight: "900",
+        color: "#2563EB",
+        fontWeight: "700",
         fontSize: 15,
     },
 });

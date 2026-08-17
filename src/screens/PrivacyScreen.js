@@ -111,10 +111,10 @@ export default function PrivacyScreen() {
 
 const styles = StyleSheet.create({
     container: { padding: 18, paddingBottom: 40 },
-    title: { color: "#fff", fontSize: 24, fontWeight: "900" },
-    updated: { color: "rgba(255,255,255,0.5)", fontWeight: "700", fontSize: 12, marginTop: 4, marginBottom: 12 },
-    intro: { color: "rgba(255,255,255,0.82)", lineHeight: 22, fontWeight: "600" },
+    title: { color: "#111111", fontSize: 24, fontWeight: "900" },
+    updated: { color: "#9CA3AF", fontWeight: "700", fontSize: 12, marginTop: 4, marginBottom: 12 },
+    intro: { color: "#374151", lineHeight: 22, fontWeight: "600" },
     section: { marginTop: 16 },
-    heading: { color: "#A5B4FC", fontWeight: "900", fontSize: 15, marginBottom: 6 },
-    text: { color: "rgba(255,255,255,0.82)", lineHeight: 22, fontWeight: "600" },
+    heading: { color: "#2563EB", fontWeight: "900", fontSize: 15, marginBottom: 6 },
+    text: { color: "#374151", lineHeight: 22, fontWeight: "600" },
 });

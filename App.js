@@ -5,6 +5,7 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 
 import { getAccessToken } from "./src/storage/tokenStore";
+import { ensureExpoGoTestCredits } from "./src/api/dev";
 import ErrorBoundary from "./src/components/ErrorBoundary";
 
 /* =======================
@@ -38,6 +39,7 @@ import HelpCenterScreen from "./src/screens/HelpCenterScreen";
 import ContactSupportScreen from "./src/screens/ContactSupportScreen";
 import JunkWiperScanScreen from "./src/screens/JunkWiperScanScreen";
 import CameraDocumentScanScreen from "./src/screens/CameraDocumentScanScreen";
+import CodeScannerScreen from "./src/screens/CodeScannerScreen";
 import BootScreen from "./src/screens/BootScreen";
 
 const Stack = createNativeStackNavigator();
@@ -51,11 +53,12 @@ function Tabs({ onLoggedOut }) {
         <Tab.Navigator
             screenOptions={({ route }) => ({
                 headerShown: false,
-                tabBarActiveTintColor: "#A5B4FC",
-                tabBarInactiveTintColor: "rgba(255,255,255,0.55)",
+                tabBarActiveTintColor: "#2563EB",
+                tabBarInactiveTintColor: "#6B7280",
+                tabBarLabelStyle: { fontWeight: "600", fontSize: 11 },
                 tabBarStyle: {
-                    backgroundColor: "rgba(13,20,38,0.92)",
-                    borderTopColor: "rgba(255,255,255,0.08)",
+                    backgroundColor: "rgba(255,255,255,0.96)",
+                    borderTopColor: "#E5E7EB",
                     height: 90,
                     paddingBottom: 12,
                     paddingTop: 4,
@@ -118,6 +121,8 @@ export default function App() {
                 if (mounted) {
                     setAuthed(!!token);
                 }
+                // Expo Go only: give fresh tester accounts dummy credits.
+                if (token) ensureExpoGoTestCredits();
             } catch {
                 if (mounted) {
                     setAuthed(false);
@@ -135,6 +140,13 @@ export default function App() {
         };
     }, []);
 
+    // Called by every auth screen on successful sign-in / registration.
+    // In Expo Go this also tops up brand-new accounts with dummy test credits.
+    const handleAuthed = () => {
+        setAuthed(true);
+        ensureExpoGoTestCredits();
+    };
+
     // ✅ Conditional render AFTER hooks
     if (!ready) {
         return <BootScreen />;
@@ -146,18 +158,18 @@ export default function App() {
             <Stack.Navigator
                 screenOptions={{
                     headerStyle: {
-                        backgroundColor: "#020617", // dark app background
+                        backgroundColor: "#F5F7FB", // light app background
                     },
                     headerTitleAlign: "center",
 
-                    headerTintColor: "#FFFFFF", // back arrow + title
+                    headerTintColor: "#111111", // back arrow + title
                     headerTitleStyle: {
                         fontWeight: "700",
                         fontSize: 16,
                     },
-                    headerShadowVisible: false, // removes white bottom border
+                    headerShadowVisible: false, // removes bottom border
                     contentStyle: {
-                        backgroundColor: "#020617", // PREVENTS white flash
+                        backgroundColor: "#F5F7FB", // PREVENTS dark flash
                     },
                 }}
             >
@@ -170,7 +182,7 @@ export default function App() {
                             {(props) => (
                                 <LoginScreen
                                     {...props}
-                                    onAuthed={() => setAuthed(true)}
+                                    onAuthed={handleAuthed}
                                 />
                             )}
                         </Stack.Screen>
@@ -182,7 +194,7 @@ export default function App() {
                             {(props) => (
                                 <RegisterScreen
                                     {...props}
-                                    onAuthed={() => setAuthed(true)}
+                                    onAuthed={handleAuthed}
                                 />
                             )}
                         </Stack.Screen>
@@ -194,7 +206,7 @@ export default function App() {
                             {(props) => (
                                 <OtpLoginScreen
                                     {...props}
-                                    onAuthed={() => setAuthed(true)}
+                                    onAuthed={handleAuthed}
                                 />
                             )}
                         </Stack.Screen>
@@ -206,7 +218,7 @@ export default function App() {
                             {(props) => (
                                 <EmailOtpVerifyScreen
                                     {...props}
-                                    onAuthed={() => setAuthed(true)}
+                                    onAuthed={handleAuthed}
                                 />
                             )}
                         </Stack.Screen>
@@ -246,6 +258,11 @@ export default function App() {
                         <Stack.Screen
                             name="CameraScanner"
                             component={CameraDocumentScanScreen}
+                            options={{ headerShown: false }}
+                        />
+                        <Stack.Screen
+                            name="CodeScanner"
+                            component={CodeScannerScreen}
                             options={{ headerShown: false }}
                         />
                     </>

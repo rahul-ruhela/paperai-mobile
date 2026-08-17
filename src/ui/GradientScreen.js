@@ -1,14 +1,18 @@
 import React from "react";
 import { View, StyleSheet, StatusBar } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { Theme } from "./theme";
+import { AppGradients } from "./tokens";
 
+/**
+ * Full-bleed light background with two soft blue accent glows.
+ * (The pink glow was removed to keep the palette on-brand: blue + accent.)
+ */
 export default function GradientScreen({ children }) {
     return (
         <View style={styles.root}>
-            <StatusBar barStyle="light-content" />
+            <StatusBar barStyle="dark-content" />
             <LinearGradient
-                colors={[Theme.colors.bg0, Theme.colors.bg1, Theme.colors.bg2]}
+                colors={AppGradients.background}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={StyleSheet.absoluteFill}
@@ -29,7 +33,7 @@ const styles = StyleSheet.create({
         width: 260,
         height: 260,
         borderRadius: 260,
-        backgroundColor: "rgba(99,102,241,0.26)",
+        backgroundColor: "rgba(79,140,255,0.16)",
     },
     glowBottom: {
         position: "absolute",
@@ -38,6 +42,6 @@ const styles = StyleSheet.create({
         width: 320,
         height: 320,
         borderRadius: 320,
-        backgroundColor: "rgba(236,72,153,0.18)",
+        backgroundColor: "rgba(255,213,74,0.14)",
     },
 });

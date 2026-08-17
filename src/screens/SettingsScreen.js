@@ -78,14 +78,14 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
     function Row({ icon, title, subtitle, onPress, danger }) {
         return (
             <Pressable onPress={onPress} style={({ pressed }) => [styles.row, pressed && { opacity: 0.75 }]}>
-                <View style={[styles.rowIcon, danger && { backgroundColor: "rgba(239,68,68,0.16)", borderColor: "rgba(239,68,68,0.25)" }]}>
-                    <Ionicons name={icon} size={18} color={danger ? "#FCA5A5" : "#E0E7FF"} />
+                <View style={[styles.rowIcon, danger && { backgroundColor: "rgba(255,90,95,0.12)", borderColor: "rgba(255,90,95,0.30)" }]}>
+                    <Ionicons name={icon} size={18} color={danger ? "#DC2626" : "#2563EB"} />
                 </View>
                 <View style={{ flex: 1 }}>
-                    <Text style={[styles.rowTitle, danger && { color: "#FCA5A5" }]}>{title}</Text>
+                    <Text style={[styles.rowTitle, danger && { color: "#DC2626" }]}>{title}</Text>
                     {!!subtitle && <Text style={styles.rowSub}>{subtitle}</Text>}
                 </View>
-                <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.55)" />
+                <Ionicons name="chevron-forward" size={18} color="#6B7280" />
             </Pressable>
         );
     }
@@ -203,37 +203,40 @@ const styles = StyleSheet.create({
         paddingBottom: 60, // ✅ ensures logout is visible
         gap: 16,
     },
-    title: { color: "#fff", fontSize: 26, fontWeight: "900" },
+    title: { color: "#111111", fontSize: 26, fontWeight: "800" },
 
     card: {
-        backgroundColor: "rgba(255,255,255,0.06)",
+        backgroundColor: "rgba(255,255,255,0.74)",
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.10)",
-        borderRadius: 22,
+        borderColor: "rgba(255,255,255,0.90)",
+        borderRadius: 20,
         padding: 14,
         gap: 6,
+        shadowColor: "#4F8CFF", shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.1, shadowRadius: 18, elevation: 4,
     },
-    section: { color: "rgba(255,255,255,0.65)", fontSize: 19, fontWeight: "900", marginBottom: 6 },
+    section: { color: "#6B7280", fontSize: 15, fontWeight: "700", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.4 },
 
     row: {
         flexDirection: "row",
         alignItems: "center",
         gap: 12,
         paddingVertical: 10,
+        minHeight: 44,
         borderRadius: 16,
     },
     rowIcon: {
         width: 38,
         height: 38,
         borderRadius: 14,
-        backgroundColor: "rgba(99,102,241,0.16)",
+        backgroundColor: "rgba(79,140,255,0.12)",
         borderWidth: 1,
-        borderColor: "rgba(165,180,252,0.18)",
+        borderColor: "rgba(79,140,255,0.20)",
         alignItems: "center",
         justifyContent: "center",
     },
-    rowTitle: { color: "#fff", fontWeight: "900" },
-    rowSub: { marginTop: 2, color: "rgba(255,255,255,0.62)", fontWeight: "700", fontSize: 12 },
+    rowTitle: { color: "#111111", fontWeight: "700" },
+    rowSub: { marginTop: 2, color: "#6B7280", fontWeight: "500", fontSize: 12 },
 
-    footer: { marginTop: "auto", textAlign: "center", color: "rgba(255,255,255,0.45)", fontWeight: "700" },
+    footer: { marginTop: "auto", textAlign: "center", color: "#6B7280", fontWeight: "600" },
 });

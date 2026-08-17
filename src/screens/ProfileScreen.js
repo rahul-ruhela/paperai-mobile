@@ -48,7 +48,7 @@ export default function ProfileScreen() {
                     <Card title="Account">
                         {data.isAppleUser && (
                             <View style={styles.appleBadge}>
-                                <Ionicons name="logo-apple" size={16} color="#fff" />
+                                <Ionicons name="logo-apple" size={16} color="#fff" accessibilityLabel="Apple" />
                                 <Text style={styles.appleBadgeText}>Signed in with Apple</Text>
                             </View>
                         )}
@@ -101,7 +101,7 @@ function Input({ label, k, data, setData }) {
                 value={data[k] || ""}
                 onChangeText={v => setData({ ...data, [k]: v })}
                 style={styles.input}
-                placeholderTextColor="rgba(255,255,255,0.4)"
+                placeholderTextColor="#6B7280"
             />
         </>
     );
@@ -120,42 +120,49 @@ function ReadOnly({ label, value }) {
 
 const styles = StyleSheet.create({
     container: { padding: 18, gap: 16 },
-    title: { color: "#fff", fontSize: 26, fontWeight: "900" },
-    subtitle: { color: "rgba(255,255,255,0.65)", fontWeight: "700" },
+    title: { color: "#111111", fontSize: 26, fontWeight: "800" },
+    subtitle: { color: "#6B7280", fontWeight: "600" },
 
     card: {
-        backgroundColor: "rgba(255,255,255,0.06)",
+        backgroundColor: "rgba(255,255,255,0.74)",
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.10)",
-        borderRadius: 22,
+        borderColor: "rgba(255,255,255,0.90)",
+        borderRadius: 20,
         padding: 16,
         gap: 10,
+        shadowColor: "#4F8CFF", shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.1, shadowRadius: 18, elevation: 4,
     },
-    section: { color: "#A5B4FC", fontSize: 18, fontWeight: "900" },
-    label: { color: "#A5B4FC", fontWeight: "900" },
+    section: { color: "#2563EB", fontSize: 18, fontWeight: "800" },
+    label: { color: "#374151", fontWeight: "700" },
 
     input: {
-        backgroundColor: "rgba(0,0,0,0.2)",
+        backgroundColor: "rgba(255,255,255,0.82)",
+        borderWidth: 1,
+        borderColor: "#D1D5DB",
         borderRadius: 14,
-        padding: 12,
-        color: "#fff",
-        fontWeight: "700",
+        padding: 14,
+        color: "#111111",
+        fontWeight: "600",
+        minHeight: 52,
     },
 
     readOnly: {
-        backgroundColor: "rgba(255,255,255,0.08)",
+        backgroundColor: "rgba(255,255,255,0.6)",
+        borderWidth: 1,
+        borderColor: "#E5E7EB",
         borderRadius: 14,
-        padding: 12,
+        padding: 14,
     },
     readOnlyText: {
-        color: "rgba(255,255,255,0.8)",
-        fontWeight: "700",
+        color: "#374151",
+        fontWeight: "600",
     },
     appleBadge: {
         flexDirection: "row",
         alignItems: "center",
         gap: 6,
-        backgroundColor: "rgba(0,0,0,0.35)",
+        backgroundColor: "#111111",
         borderRadius: 10,
         paddingHorizontal: 10,
         paddingVertical: 6,

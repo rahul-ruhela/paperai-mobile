@@ -70,6 +70,48 @@ function resolvePending(error, token = null) {
     pending = [];
 }
 
+// ---------------------------------------------------------------------------
+// authedFetch — for multipart uploads that must use the native `fetch` API
+// (FormData file bodies) instead of axios. Mirrors the axios interceptor's
+// silent token-refresh: attaches the access token, and on a 401 refreshes once
+// and retries. Without this, uploads fail with 401 the moment the 30-minute
+// access token expires, even though every axios call keeps working.
+// Returns the raw Response so callers parse the body themselves.
+// ---------------------------------------------------------------------------
+export async function authedFetch(path, options = {}) {
+    const url = path.startsWith("http") ? path : `${API.BASE_URL}${path}`;
+
+    const doFetch = async (token) => {
+        const headers = { ...(options.headers || {}) };
+        if (token) headers.Authorization = `Bearer ${token}`;
+        return fetch(url, { ...options, headers });
+    };
+
+    let token = await getAccessToken();
+    let res = await doFetch(token);
+
+    if (res.status !== 401) return res;
+
+    // Access token likely expired — refresh once and retry.
+    try {
+        const refreshToken = await getRefreshToken();
+        if (!refreshToken) throw new Error("no_refresh_token");
+
+        const resp = await axios.post(`${API.BASE_URL}/api/auth/refresh`, { refreshToken });
+        const { accessToken, refreshToken: newRefresh } = resp.data;
+        await setTokens(accessToken, newRefresh);
+
+        res = await doFetch(accessToken);
+    } catch (refreshErr) {
+        await clearTokens();
+        const e = new Error("Session expired. Please log in again.");
+        e.userMessage = "Session expired. Please log in again.";
+        throw e;
+    }
+
+    return res;
+}
+
 api.interceptors.response.use(
     (res) => res,
     async (err) => {

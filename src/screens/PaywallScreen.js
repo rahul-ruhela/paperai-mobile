@@ -24,6 +24,7 @@ import {
     ScrollView,
 } from "react-native";
 import Constants from "expo-constants";
+import { LinearGradient } from "expo-linear-gradient";
 
 import { verifyIosTransactionAutoWithRetry, getEntitlement } from "../api/billing";
 import {
@@ -427,28 +428,18 @@ function PaywallView({
                                 )}
                                 <Text style={styles.credits}>{product.credits} credits / cycle</Text>
 
-                                <TouchableOpacity
+                                <GradientCTA
                                     onPress={() => onSubscribe(product.sku)}
+                                    busy={isBusyThis}
                                     disabled={isActive || isBusyAny || priceUnavailable}
-                                    activeOpacity={0.9}
-                                    style={[
-                                        styles.cta,
-                                        tier.highlight && styles.ctaHighlight,
-                                        (isActive || isBusyAny || priceUnavailable) && styles.ctaDisabled,
-                                    ]}
-                                >
-                                    {isBusyThis ? (
-                                        <ActivityIndicator color="#fff" />
-                                    ) : (
-                                        <Text style={styles.ctaText}>
-                                            {isActive
-                                                ? "ACTIVE PLAN"
-                                                : priceUnavailable
-                                                ? "UNAVAILABLE"
-                                                : "Subscribe"}
-                                        </Text>
-                                    )}
-                                </TouchableOpacity>
+                                    label={
+                                        isActive
+                                            ? "ACTIVE PLAN"
+                                            : priceUnavailable
+                                            ? "UNAVAILABLE"
+                                            : "Subscribe"
+                                    }
+                                />
                             </View>
                         </Wrapper>
                     );
@@ -484,81 +475,146 @@ function PaywallView({
     );
 }
 
+// ── Subscription CTA — PaperAI blue gradient with gentle press animation ──────
+function GradientCTA({ onPress, busy, disabled, label }) {
+    const scale = useRef(new Animated.Value(1)).current;
+
+    const pressIn = () =>
+        Animated.spring(scale, { toValue: 0.96, useNativeDriver: true, speed: 45, bounciness: 0 }).start();
+    const pressOut = () =>
+        Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 45, bounciness: 6 }).start();
+
+    // Disabled (active plan / unavailable) → flat muted button, no glow.
+    if (disabled && !busy) {
+        return (
+            <View
+                style={[styles.cta, styles.ctaDisabled]}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: true }}
+                accessibilityLabel={label}
+            >
+                <Text style={styles.ctaText}>{label}</Text>
+            </View>
+        );
+    }
+
+    return (
+        <Animated.View style={[styles.ctaGlow, { transform: [{ scale }] }]}>
+            <TouchableOpacity
+                onPress={onPress}
+                onPressIn={pressIn}
+                onPressOut={pressOut}
+                disabled={busy}
+                activeOpacity={0.92}
+                accessibilityRole="button"
+                accessibilityLabel={label}
+            >
+                <LinearGradient
+                    colors={["#1D4ED8", "#2563EB", "#38BDF8"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.cta}
+                >
+                    {busy ? (
+                        <ActivityIndicator color="#FFFFFF" />
+                    ) : (
+                        <Text style={styles.ctaText}>{label}</Text>
+                    )}
+                </LinearGradient>
+            </TouchableOpacity>
+        </Animated.View>
+    );
+}
+
 const styles = StyleSheet.create({
-    container: { flexGrow: 1, padding: 24, backgroundColor: "#020617" },
-    header: { color: "#fff", fontSize: 28, fontWeight: "900", marginBottom: 6 },
-    subHeader: { color: "#94a3b8", fontSize: 14, marginBottom: 18 },
+    container: { flexGrow: 1, padding: 24 },
+    header: { color: "#111111", fontSize: 28, fontWeight: "800", marginBottom: 6 },
+    subHeader: { color: "#6B7280", fontSize: 14, marginBottom: 18 },
     notice: {
-        color: "#fbbf24",
-        backgroundColor: "rgba(251,191,36,0.10)",
-        borderColor: "rgba(251,191,36,0.35)",
+        color: "#B45309",
+        backgroundColor: "rgba(245,158,11,0.12)",
+        borderColor: "rgba(245,158,11,0.4)",
         borderWidth: 1,
         borderRadius: 12,
         padding: 12,
         fontSize: 12,
-        fontWeight: "700",
+        fontWeight: "600",
         marginBottom: 18,
     },
 
     tabs: {
         flexDirection: "row",
-        backgroundColor: "rgba(255,255,255,0.06)",
+        backgroundColor: "rgba(255,255,255,0.72)",
+        borderColor: "#E5E7EB",
+        borderWidth: 1,
         borderRadius: 14,
         padding: 4,
         marginBottom: 20,
     },
-    tab: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: "center" },
-    tabActive: { backgroundColor: "#6366f1" },
-    tabText: { color: "#94a3b8", fontWeight: "800", fontSize: 13 },
-    tabTextActive: { color: "#fff" },
+    tab: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: "center", minHeight: 44, justifyContent: "center" },
+    tabActive: { backgroundColor: "#4F8CFF" },
+    tabText: { color: "#374151", fontWeight: "700", fontSize: 13 },
+    tabTextActive: { color: "#FFFFFF" },
 
     card: {
-        backgroundColor: "rgba(255,255,255,0.05)",
-        borderColor: "rgba(255,255,255,0.10)",
+        backgroundColor: "rgba(255,255,255,0.74)",
+        borderColor: "rgba(255,255,255,0.90)",
         borderWidth: 1,
         borderRadius: 20,
         padding: 18,
         marginBottom: 16,
+        shadowColor: "#4F8CFF", shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.1, shadowRadius: 18, elevation: 4,
     },
-    cardHighlight: { borderColor: "#6366f1", backgroundColor: "rgba(99,102,241,0.10)" },
-    cardActive: { borderColor: "#22c55e" },
+    cardHighlight: { borderColor: "#4F8CFF", backgroundColor: "rgba(79,140,255,0.08)" },
+    cardActive: { borderColor: "#22C55E" },
     popular: {
         alignSelf: "flex-start",
-        backgroundColor: "#6366f1",
+        backgroundColor: "#FFD54A",
         borderRadius: 999,
         paddingHorizontal: 10,
         paddingVertical: 3,
         marginBottom: 8,
     },
-    popularText: { color: "#fff", fontSize: 10, fontWeight: "900", letterSpacing: 0.5 },
+    popularText: { color: "#111111", fontSize: 10, fontWeight: "800", letterSpacing: 0.5 },
 
-    tierName: { color: "#fff", fontSize: 22, fontWeight: "900" },
-    tierTagline: { color: "#94a3b8", fontSize: 13, marginTop: 2, marginBottom: 12 },
-    price: { color: "#fff", fontSize: 26, fontWeight: "900" },
-    priceUnavailable: { color: "#64748b", fontSize: 20, fontWeight: "800", fontStyle: "italic" },
-    per: { color: "#94a3b8", fontSize: 14, fontWeight: "700" },
-    credits: { color: "#A5B4FC", fontSize: 14, fontWeight: "700", marginTop: 4, marginBottom: 14 },
+    tierName: { color: "#111111", fontSize: 22, fontWeight: "800" },
+    tierTagline: { color: "#6B7280", fontSize: 13, marginTop: 2, marginBottom: 12 },
+    price: { color: "#111111", fontSize: 26, fontWeight: "800" },
+    priceUnavailable: { color: "#6B7280", fontSize: 20, fontWeight: "700", fontStyle: "italic" },
+    per: { color: "#6B7280", fontSize: 14, fontWeight: "600" },
+    credits: { color: "#2563EB", fontSize: 14, fontWeight: "700", marginTop: 4, marginBottom: 14 },
 
     cta: {
-        backgroundColor: "rgba(255,255,255,0.12)",
         borderRadius: 14,
-        paddingVertical: 14,
+        paddingVertical: 16,
+        minHeight: 52,
         alignItems: "center",
+        justifyContent: "center",
     },
-    ctaHighlight: { backgroundColor: "#6366f1" },
-    ctaDisabled: { opacity: 0.55 },
-    ctaText: { color: "#fff", fontWeight: "900", fontSize: 15 },
+    // Wrapper carries the rounded corners + subtle blue glow around the gradient.
+    ctaGlow: {
+        borderRadius: 14,
+        shadowColor: "#2563EB",
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.45,
+        shadowRadius: 14,
+        elevation: 6,
+    },
+    ctaDisabled: { backgroundColor: "#D1D5DB" },
+    ctaText: { color: "#FFFFFF", fontWeight: "800", fontSize: 15, letterSpacing: 0.3 },
 
     restore: {
         marginTop: 10,
-        color: "#94a3b8",
+        color: "#2563EB",
         textAlign: "center",
         textDecorationLine: "underline",
         fontSize: 14,
+        fontWeight: "600",
     },
     legal: {
         marginTop: 20,
-        color: "#475569",
+        color: "#6B7280",
         fontSize: 11,
         textAlign: "center",
         lineHeight: 16,
@@ -572,35 +628,35 @@ const styles = StyleSheet.create({
         gap: 8,
     },
     legalLink: {
-        color: "#94a3b8",
+        color: "#2563EB",
         fontSize: 12,
-        fontWeight: "700",
+        fontWeight: "600",
         textDecorationLine: "underline",
     },
-    legalLinkDot: { color: "#475569", fontSize: 12 },
+    legalLinkDot: { color: "#6B7280", fontSize: 12 },
 
     productsBanner: {
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
-        backgroundColor: "rgba(239,68,68,0.10)",
-        borderColor: "rgba(239,68,68,0.35)",
+        backgroundColor: "rgba(255,90,95,0.10)",
+        borderColor: "rgba(255,90,95,0.4)",
         borderWidth: 1,
         borderRadius: 12,
         padding: 12,
         marginBottom: 18,
     },
     productsBannerText: {
-        color: "#fca5a5",
+        color: "#DC2626",
         fontSize: 12,
-        fontWeight: "700",
+        fontWeight: "600",
         flex: 1,
         marginRight: 10,
     },
     productsBannerRetry: {
-        color: "#fff",
+        color: "#DC2626",
         fontSize: 12,
-        fontWeight: "900",
+        fontWeight: "800",
         textDecorationLine: "underline",
     },
 });
