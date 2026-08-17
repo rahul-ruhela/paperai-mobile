@@ -7,7 +7,7 @@ function resolveBaseUrl(): string {
     // Default to the LIVE API in every environment so the app never silently
     // hits a stale LAN IP. To use a local backend, set EXPO_PUBLIC_API_BASE_URL
     // (e.g. in .env.local) to your machine's LAN IP.
-    return "http://192.168.29.223:5263";
+    return "https://apis.bseptechnologies.com";
 }
 
 export const API = {

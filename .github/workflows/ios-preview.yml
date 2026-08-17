@@ -44,7 +44,9 @@ jobs:
 
       - name: EAS Build — preview profile (internal TestFlight)
         run: eas build --platform ios --profile preview --non-interactive
+        # NOTE: do NOT set EXPO_PUBLIC_* here — it would be silently ignored.
+        # `eas build` only queues the job; the compile runs on EAS servers, which
+        # never see this runner's environment. The values baked into the binary
+        # come from the matching profile's `env` block in eas.json. Change them there.
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          EXPO_PUBLIC_API_BASE_URL: ${{ secrets.API_BASE_URL_STAGING }}
-          EXPO_PUBLIC_APP_ENV: staging
