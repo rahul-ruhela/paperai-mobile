@@ -266,7 +266,7 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
                         <Row
                             icon="star-outline"
                             title="Upgrade to AI Pro"
-                            subtitle="Unlock unlimited AI features"
+                            subtitle="More credits for AI features"
                             onPress={() => navigation.navigate("Paywall")}
                         />
 

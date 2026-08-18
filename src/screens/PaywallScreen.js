@@ -396,50 +396,50 @@ function PaywallExpoGo({ navigation }) {
    Shared presentational view (duration tabs + 3 tier cards).
 ========================================================================= */
 /**
- * The genuine saving a longer billing period gives you, worked out from the
- * LIVE App Store prices of the same tier.
+ * The genuine saving a longer billing period gives you, expressed as PRICE PER
+ * CREDIT and computed from the LIVE App Store prices of the same tier.
  *
- * The struck-through figure is never invented: it is what the customer would
- * actually pay over the same span on the shorter plan that is on sale right
- * now (12 x monthly, or 52 x weekly). Apple rejects reference pricing that was
- * never charged (guideline 3.1.1), so nothing here is a fabricated "was" price.
- * Returns null whenever the comparison can't be made honestly.
+ * Per-credit is the only honest comparison here: a yearly plan costs less than
+ * twelve monthly ones but also carries fewer credits, so comparing headline
+ * prices would overstate the discount badly. Comparing the rate a customer
+ * actually pays for a credit is like-for-like, and Apple rejects reference
+ * pricing that overstates a saving (guideline 3.1.1).
+ *
+ * Returns null whenever the comparison cannot be made honestly.
  */
-const PERIODS_PER_YEAR = { weekly: 52, monthly: 12, yearly: 1 };
-
 function savingFor(tier, duration, numericPriceForSku, currencyForSku) {
     if (!numericPriceForSku || duration === "weekly") return null;
 
     const baseline = duration === "yearly" ? "monthly" : "weekly";
-    const thisSku = tier.products[duration]?.sku;
-    const baseSku = tier.products[baseline]?.sku;
-    if (!thisSku || !baseSku) return null;
+    const here = tier.products[duration];
+    const base = tier.products[baseline];
+    if (!here?.sku || !base?.sku || !here.credits || !base.credits) return null;
 
-    const thisPrice = numericPriceForSku(thisSku);
-    const basePrice = numericPriceForSku(baseSku);
-    if (!thisPrice || !basePrice) return null;
+    const herePrice = numericPriceForSku(here.sku);
+    const basePrice = numericPriceForSku(base.sku);
+    if (!herePrice || !basePrice) return null;
 
-    const thisAnnual = thisPrice * PERIODS_PER_YEAR[duration];
-    const baseAnnual = basePrice * PERIODS_PER_YEAR[baseline];
-    if (baseAnnual <= thisAnnual) return null;
+    const hereRate = herePrice / here.credits;
+    const baseRate = basePrice / base.credits;
+    if (baseRate <= hereRate) return null;
 
-    const percent = Math.round((1 - thisAnnual / baseAnnual) * 100);
-    if (percent < 5) return null; // not worth shouting about
+    const percent = Math.round((1 - hereRate / baseRate) * 100);
+    if (percent < 5) return null; // not worth a badge
 
-    // Format in the customer's own currency. Intl handles the symbol, its
-    // position and the decimal separator, which a string-splice cannot.
-    const currency = currencyForSku?.(baseSku);
-    let wasLabel;
-    try {
-        wasLabel = currency
-            ? new Intl.NumberFormat(undefined, { style: "currency", currency }).format(baseAnnual)
-            : baseAnnual.toFixed(2);
-    } catch {
-        // Unknown currency code, or an engine without full ICU data.
-        wasLabel = baseAnnual.toFixed(2);
-    }
+    // Format both rates in the customer's own currency.
+    const currency = currencyForSku?.(base.sku);
+    const money = (n) => {
+        try {
+            return currency
+                ? new Intl.NumberFormat(undefined, { style: "currency", currency }).format(n)
+                : n.toFixed(2);
+        } catch {
+            // Unknown currency code, or an engine without full ICU data.
+            return n.toFixed(2);
+        }
+    };
 
-    return { percent, wasLabel, baseline };
+    return { percent, wasLabel: money(baseRate), nowLabel: money(hereRate), baseline };
 }
 
 function PaywallView({
@@ -565,15 +565,14 @@ function PaywallView({
                                             </View>
                                         )}
                                         <Text style={styles.price}>
-                                            {saving && (
-                                                <Text style={styles.priceWas}>{saving.wasLabel} </Text>
-                                            )}
                                             {livePrice}
                                             <Text style={styles.per}> / {duration.replace("ly", "")}</Text>
                                         </Text>
                                         {saving && (
                                             <Text style={styles.saveNote}>
-                                                vs paying {saving.baseline} over the same period
+                                                <Text style={styles.priceWas}>{saving.wasLabel}</Text>
+                                                {"  "}
+                                                {saving.nowLabel} per credit vs {saving.baseline}
                                             </Text>
                                         )}
                                     </>

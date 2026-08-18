@@ -41,7 +41,7 @@ export default function ProcessScreen({ route, navigation }) {
                 // Fallback: allow processing with generic copy
                 setFeatureCfg({
                     featureKey: FEATURE_KEY,
-                    creditCost: 2,
+                    creditCost: 1,
                     userNoticeTitle: "Credits Required",
                     userNoticeMessage: "Running AI analysis on this document will use credits. Your document is processed securely.",
                     isEnabled: true,

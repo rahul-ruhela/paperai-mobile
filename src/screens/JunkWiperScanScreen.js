@@ -114,7 +114,7 @@ export default function JunkWiperScanScreen({ navigation }) {
     const [accessLevel, setAccessLevel] = useState(null); // null | 'all' | 'limited'
     const [confirmModal, setConfirmModal] = useState({ visible: false, loading: false });
     const [featureCfg, setFeatureCfg] = useState({
-        creditCost: 6,
+        creditCost: 3,
         userNoticeTitle: "Start Duplicate Scan",
         userNoticeMessage:
             "Junk Wiper scans the photos, videos and PaperAI documents you allow, and reports duplicate copies. Nothing is deleted automatically — you review and confirm before anything is removed.",

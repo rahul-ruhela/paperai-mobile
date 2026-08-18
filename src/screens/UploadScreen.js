@@ -253,7 +253,63 @@ export default function UploadScreen({ navigation }) {
                         </Pressable>
                     </View>
 
-                    {/* 1. Upload Document (PDF) */}
+                    {/* Free, on-device tools first — nothing here costs a credit. */}
+
+                    {/* ── FREE TOOLS ── */}
+                    <View style={styles.sectionDivider}>
+                        <View style={styles.dividerLine} />
+                        <Text style={styles.sectionLabel}>FREE TOOLS</Text>
+                        <View style={styles.dividerLine} />
+                    </View>
+
+                    {/* 1. Scan Document — FREE (scan + save/PDF; AI optional) */}
+                    <View style={styles.card}>
+                        <View style={styles.cardHeader}>
+                            <View style={[styles.cardIcon, { backgroundColor: theme.colors.infoBg }]}>
+                                <Ionicons name="camera-outline" size={20} color={theme.colors.primary} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.cardTitle}>Scan Document</Text>
+                                <Text style={styles.cardSubtitle}>
+                                    Capture pages with your camera, then save to Photos or export as PDF
+                                </Text>
+                            </View>
+                            <FreeBadge />
+                        </View>
+                        <ActionBtn icon="camera-outline" label="Open Document Scanner"
+                            onPress={openCameraScanner} color={theme.colors.primary} full />
+                    </View>
+
+
+                    {/* 2. Scan QR & Codes — FREE general utility */}
+                    <View style={styles.card}>
+                        <View style={styles.cardHeader}>
+                            <View style={[styles.cardIcon, { backgroundColor: theme.colors.infoBg }]}>
+                                <Ionicons name="qr-code-outline" size={20} color={theme.colors.accentText} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.cardTitle}>Scan QR &amp; Codes</Text>
+                                <Text style={styles.cardSubtitle}>
+                                    Read QR codes and barcodes — view, copy, and open links instantly
+                                </Text>
+                            </View>
+                            <FreeBadge />
+                        </View>
+                        <ActionBtn icon="scan-outline" label="Open Code Scanner"
+                            onPress={openCodeScanner} color={theme.colors.accentText} full />
+                    </View>
+
+
+                    {/* ── AI FEATURES ── */}
+                    <View style={styles.sectionDivider}>
+                        <View style={styles.dividerLine} />
+                        <Text style={styles.sectionLabel}>AI FEATURES</Text>
+                        <View style={styles.dividerLine} />
+                    </View>
+
+                    {/* Everything below spends credits. */}
+
+                    {/* 3. Upload Document (PDF) — costs credits */}
                     <SectionCard
                         icon="document-text-outline"
                         title="Upload Document"
@@ -264,7 +320,8 @@ export default function UploadScreen({ navigation }) {
                         actionIcon="cloud-upload-outline"
                     />
 
-                    {/* 2. Extract Text from Image (OCR) */}
+
+                    {/* 4. Extract Text from Image (OCR) — costs credits */}
                     <View style={styles.card}>
                         <View style={styles.cardHeader}>
                             <View style={[styles.cardIcon, { backgroundColor: theme.colors.warningBg }]}>
@@ -347,42 +404,6 @@ export default function UploadScreen({ navigation }) {
                                 </View> */}
                             </View>
                         )}
-                    </View>
-
-                    {/* 3. Scan Document — FREE (scan + save/PDF; AI optional) */}
-                    <View style={styles.card}>
-                        <View style={styles.cardHeader}>
-                            <View style={[styles.cardIcon, { backgroundColor: theme.colors.infoBg }]}>
-                                <Ionicons name="camera-outline" size={20} color={theme.colors.primary} />
-                            </View>
-                            <View style={{ flex: 1 }}>
-                                <Text style={styles.cardTitle}>Scan Document</Text>
-                                <Text style={styles.cardSubtitle}>
-                                    Capture pages with your camera, then save to Photos or export as PDF
-                                </Text>
-                            </View>
-                            <FreeBadge />
-                        </View>
-                        <ActionBtn icon="camera-outline" label="Open Document Scanner"
-                            onPress={openCameraScanner} color={theme.colors.primary} full />
-                    </View>
-
-                    {/* 4. Scan QR & Codes — FREE general utility */}
-                    <View style={styles.card}>
-                        <View style={styles.cardHeader}>
-                            <View style={[styles.cardIcon, { backgroundColor: theme.colors.infoBg }]}>
-                                <Ionicons name="qr-code-outline" size={20} color={theme.colors.accentText} />
-                            </View>
-                            <View style={{ flex: 1 }}>
-                                <Text style={styles.cardTitle}>Scan QR &amp; Codes</Text>
-                                <Text style={styles.cardSubtitle}>
-                                    Read QR codes and barcodes — view, copy, and open links instantly
-                                </Text>
-                            </View>
-                            <FreeBadge />
-                        </View>
-                        <ActionBtn icon="scan-outline" label="Open Code Scanner"
-                            onPress={openCodeScanner} color={theme.colors.accentText} full />
                     </View>
 
                     {/* ── Advanced ── */}
