@@ -265,3 +265,66 @@ Expected review time: **24–48 hours** for first submission.
 - [ ] Paywall with backend down → paywall renders, subscribe fails gracefully
 - [ ] Token expired → auto-refresh happens silently
 - [ ] Token expired and refresh fails → user redirected to login gracefully
+
+---
+
+## Rejection Audit — 2026-08-18 (new-design merge + dark theme)
+
+Findings from auditing the `future-features-prod-app-with-new-design-26-7`
+merge against the review guidelines. All four are fixed in code; the notes
+exist so the same patterns don't come back.
+
+### 1. Fabricated scan results — guideline 2.3.1 / 5.6 (was the biggest risk)
+
+`JunkWiperScanScreen` generated **fake junk files** whenever a real scan found
+no duplicates: invented Apple-system-looking filenames
+(`com.apple.mediaserverd_*.log`, `apple_hck_cache_*.tmp`), invented sizes of
+2–90 MB, and a "Your device storage has been freed up" confirmation — while
+`deleteAssetsAsync` was deliberately skipped for those rows, so **nothing was
+deleted**. The scan also charges credits, so users paid for invented findings.
+
+Apple reliably rejects and removes "storage cleaner / booster" apps that
+fabricate scan results. Fixed by reporting only real duplicate groups; the
+honest empty state ("No duplicates found!") that already existed in the file is
+now reachable.
+
+- [ ] Never reintroduce placeholder findings to make a scan "look productive"
+
+### 2. "Coming soon" features — guideline 2.1 (App Completeness)
+
+`UploadScreen` showed Summarize / Explain / Ask AI buttons with a "soon" badge
+that answered with a "This AI action is coming soon" alert. Placeholder
+features are an explicit 2.1 rejection. The block is commented out with a note
+and can be restored once the endpoints ship.
+
+- [ ] No "soon" / "beta" / "coming soon" strings reachable in a review build
+
+### 3. API base URL fell back to a LAN IP — guideline 2.1
+
+`src/constants/api.ts` documented "default to the LIVE API" but actually
+returned `http://192.168.29.223:5263`. The production EAS profile does set
+`EXPO_PUBLIC_API_BASE_URL`, so shipped builds were fine — but any build missing
+that env var silently pointed at an unreachable private address over cleartext
+HTTP (also an ATS violation), which a reviewer experiences as a dead app. The
+fallback is now the production URL.
+
+- [ ] `EXPO_PUBLIC_API_BASE_URL` set on the build profile; fallback is https
+
+### 4. Dark mode — HIG / guideline 4.0
+
+The app forced `userInterfaceStyle: "light"`, so it ignored the system
+appearance entirely. It now ships both appearances with a
+**Settings › Appearance** control (System / Light / Dark), persisted across
+launches, and `userInterfaceStyle` is `"automatic"`.
+
+- [ ] Review both appearances before submitting (see below)
+
+### Dark mode QA pass
+
+- [ ] Toggle Settings › Appearance through System / Light / Dark — no relaunch needed
+- [ ] Flip iOS Settings › Display & Brightness while "System" is selected — app follows live
+- [ ] Kill and relaunch — the chosen appearance is restored, no light flash on boot
+- [ ] Bottom sheets, modals and action sheets are readable in dark
+- [ ] Paywall, Junk Wiper report and Upload cards are readable in dark
+- [ ] Keyboard appearance matches the theme on text inputs
+- [ ] Camera / code-scanner screens stay dark in both appearances (intentional)

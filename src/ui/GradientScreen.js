@@ -1,14 +1,23 @@
 import React from "react";
-import { View, StyleSheet, StatusBar } from "react-native";
+import { View, StyleSheet } from "react-native";
+import { StatusBar } from "expo-status-bar";
 import { LinearGradient } from "expo-linear-gradient";
-import { Theme } from "./theme";
+import { useTheme } from "./ThemeProvider";
+import useThemedStyles from "./useThemedStyles";
 
+/**
+ * Full-bleed background with two soft accent glows.
+ * Light: soft blue-grey wash. Dark: the original near-black ramp.
+ */
 export default function GradientScreen({ children }) {
+    const { theme } = useTheme();
+    const styles = useThemedStyles(makeStyles);
+
     return (
         <View style={styles.root}>
-            <StatusBar barStyle="light-content" />
+            <StatusBar style={theme.statusBarStyle} />
             <LinearGradient
-                colors={[Theme.colors.bg0, Theme.colors.bg1, Theme.colors.bg2]}
+                colors={theme.gradients.background}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={StyleSheet.absoluteFill}
@@ -20,24 +29,26 @@ export default function GradientScreen({ children }) {
     );
 }
 
-const styles = StyleSheet.create({
-    root: { flex: 1 },
-    glowTop: {
-        position: "absolute",
-        top: -120,
-        left: -80,
-        width: 260,
-        height: 260,
-        borderRadius: 260,
-        backgroundColor: "rgba(99,102,241,0.26)",
-    },
-    glowBottom: {
-        position: "absolute",
-        bottom: -150,
-        right: -100,
-        width: 320,
-        height: 320,
-        borderRadius: 320,
-        backgroundColor: "rgba(236,72,153,0.18)",
-    },
-});
+const makeStyles = (t) =>
+    StyleSheet.create({
+        root: { flex: 1, backgroundColor: t.colors.background },
+        glowTop: {
+            position: "absolute",
+            top: -120,
+            left: -80,
+            width: 260,
+            height: 260,
+            borderRadius: 260,
+            // Dark mode needs a dimmer glow or it blooms into a grey fog.
+            backgroundColor: t.isDark ? "rgba(79,140,255,0.10)" : "rgba(79,140,255,0.16)",
+        },
+        glowBottom: {
+            position: "absolute",
+            bottom: -150,
+            right: -100,
+            width: 320,
+            height: 320,
+            borderRadius: 320,
+            backgroundColor: t.isDark ? "rgba(255,213,74,0.07)" : "rgba(255,213,74,0.14)",
+        },
+    });

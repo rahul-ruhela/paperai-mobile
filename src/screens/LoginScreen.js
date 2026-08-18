@@ -17,6 +17,8 @@ import GradientScreen from "../ui/GradientScreen";
 import AppButton from "../ui/AppButton";
 import { login, appleLogin } from "../api/auth";
 
+import { useTheme } from "../ui/ThemeProvider";
+import useThemedStyles from "../ui/useThemedStyles";
 // Apple Sign In is only available on iOS native builds (not Expo Go / web)
 let AppleAuthentication = null;
 try {
@@ -34,6 +36,8 @@ const isExpoGo =
     Constants.executionEnvironment === "storeClient";
 
 export default function LoginScreen({ navigation, onAuthed }) {
+    const { theme } = useTheme();
+    const styles = useThemedStyles(makeStyles);
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [busy, setBusy] = useState(false);
@@ -106,6 +110,25 @@ export default function LoginScreen({ navigation, onAuthed }) {
             onAuthed();
         } catch (e) {
             if (e?.code === "ERR_REQUEST_CANCELED") return; // user dismissed the sheet
+
+            // The backend validates the identity token's audience against its
+            // Apple:ClientId setting. When that key is absent it answers
+            // apple_token_invalid with the raw config error, which must never be
+            // shown to a user (and would read as a broken app in review).
+            const serverError = e?.response?.data;
+            const isServerMisconfigured =
+                serverError?.error === "apple_token_invalid" &&
+                /missing in configuration/i.test(serverError?.reason ?? "");
+
+            if (isServerMisconfigured) {
+                console.warn("[AppleSignIn] server misconfigured:", serverError?.reason);
+                Alert.alert(
+                    "Apple Sign In unavailable",
+                    "Sign in with Apple is temporarily unavailable. Please sign in with your email and password, or try again later."
+                );
+                return;
+            }
+
             Alert.alert("Apple Sign In failed", e?.userMessage ?? e?.message ?? "Something went wrong.");
         } finally {
             setBusy(false);
@@ -128,33 +151,31 @@ export default function LoginScreen({ navigation, onAuthed }) {
                         <Text style={styles.cardTitle}>Sign in</Text>
 
                         <View style={styles.inputWrap}>
-                            <Ionicons name="mail-outline" size={18} color="rgba(255,255,255,0.7)" />
+                            <Ionicons name="mail-outline" size={18} color={theme.colors.textMuted} />
                             <TextInput
                                 placeholder="Email address"
-                                placeholderTextColor="rgba(255,255,255,0.45)"
+                                placeholderTextColor={theme.colors.textMuted}
                                 keyboardType="email-address"
                                 autoCapitalize="none"
                                 value={email}
                                 onChangeText={setEmail}
-                                style={styles.input}
-                            />
+                                style={styles.input} keyboardAppearance={theme.keyboardAppearance} />
                         </View>
 
                         <View style={styles.inputWrap}>
-                            <Ionicons name="lock-closed-outline" size={18} color="rgba(255,255,255,0.7)" />
+                            <Ionicons name="lock-closed-outline" size={18} color={theme.colors.textMuted} />
                             <TextInput
                                 placeholder="Password"
-                                placeholderTextColor="rgba(255,255,255,0.45)"
+                                placeholderTextColor={theme.colors.textMuted}
                                 secureTextEntry={!showPw}
                                 value={password}
                                 onChangeText={setPassword}
-                                style={styles.input}
-                            />
+                                style={styles.input} keyboardAppearance={theme.keyboardAppearance} />
                             <Pressable onPress={() => setShowPw(s => !s)} hitSlop={10}>
                                 <Ionicons
                                     name={showPw ? "eye-off-outline" : "eye-outline"}
                                     size={18}
-                                    color="rgba(255,255,255,0.7)"
+                                    color={theme.colors.textMuted}
                                 />
                             </Pressable>
                         </View>
@@ -181,7 +202,7 @@ export default function LoginScreen({ navigation, onAuthed }) {
                                 onPress={onAppleSignIn}
                                 disabled={busy}
                             >
-                                <Ionicons name="logo-apple" size={20} color="#000" />
+                                <Ionicons name="logo-apple" size={20} color={theme.colors.textPrimary} />
                                 <Text style={styles.socialBtnText}>Continue with Apple</Text>
                             </Pressable>
                         )}
@@ -196,7 +217,7 @@ export default function LoginScreen({ navigation, onAuthed }) {
                             onPress={() => navigation.navigate("OtpLogin")}
                             disabled={busy}
                         >
-                            <Ionicons name="phone-portrait-outline" size={20} color="#A5B4FC" />
+                            <Ionicons name="phone-portrait-outline" size={20} color={theme.colors.accentText} />
                             <Text style={styles.socialBtnOutlineText}>Continue with Phone OTP</Text>
                         </Pressable>
                         */}
@@ -220,55 +241,62 @@ export default function LoginScreen({ navigation, onAuthed }) {
     );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t) =>
+    StyleSheet.create({
     container: { flex: 1, padding: 18, justifyContent: "center" },
     brandWrap: { alignItems: "center", marginBottom: 18 },
     logoRing: {
         width: 84, height: 84, borderRadius: 24,
-        backgroundColor: "rgba(255,255,255,0.06)",
-        borderWidth: 1, borderColor: "rgba(255,255,255,0.10)",
+        backgroundColor: t.colors.glass,
+        borderWidth: 1, borderColor: t.colors.glassBorder,
         alignItems: "center", justifyContent: "center", marginBottom: 12,
+        shadowColor: t.colors.primary, shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.1, shadowRadius: 18, elevation: 4,
     },
     logo: { width: 56, height: 56 },
-    brand: { fontSize: 30, fontWeight: "900", color: "#fff", letterSpacing: 0.2 },
-    tagline: { marginTop: 6, color: "rgba(255,255,255,0.72)", textAlign: "center" },
+    brand: { fontSize: 30, fontWeight: "800", color: t.colors.textPrimary, letterSpacing: 0.2 },
+    tagline: { marginTop: 6, color: t.colors.textMuted, textAlign: "center" },
 
     card: {
-        backgroundColor: "rgba(255,255,255,0.06)",
-        borderWidth: 1, borderColor: "rgba(255,255,255,0.10)",
+        backgroundColor: t.colors.glass,
+        borderWidth: 1, borderColor: t.colors.glassBorder,
         borderRadius: 22, padding: 16,
+        shadowColor: t.colors.primary, shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.1, shadowRadius: 18, elevation: 4,
     },
-    cardTitle: { color: "#fff", fontSize: 18, fontWeight: "800", marginBottom: 10 },
+    cardTitle: { color: t.colors.textPrimary, fontSize: 18, fontWeight: "800", marginBottom: 10 },
     inputWrap: {
         flexDirection: "row", alignItems: "center", gap: 10,
-        backgroundColor: "rgba(0,0,0,0.18)",
-        borderWidth: 1, borderColor: "rgba(255,255,255,0.10)",
-        borderRadius: 16, paddingHorizontal: 12, paddingVertical: 12, marginBottom: 10,
+        backgroundColor: t.colors.inputBg,
+        borderWidth: 1, borderColor: t.colors.inputBorder,
+        borderRadius: 14, paddingHorizontal: 12, paddingVertical: 14, marginBottom: 10,
     },
-    input: { flex: 1, color: "#fff", fontSize: 15 },
+    input: { flex: 1, color: t.colors.textPrimary, fontSize: 15 },
 
     dividerRow: { flexDirection: "row", alignItems: "center", marginVertical: 14, gap: 8 },
-    dividerLine: { flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.12)" },
-    dividerText: { color: "rgba(255,255,255,0.45)", fontSize: 13 },
+    dividerLine: { flex: 1, height: 1, backgroundColor: t.colors.separator },
+    dividerText: { color: t.colors.textMuted, fontSize: 13 },
 
     socialBtn: {
         flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
-        backgroundColor: "#fff", borderRadius: 16, paddingVertical: 13, marginBottom: 10,
+        backgroundColor: t.colors.sheet, borderRadius: 14, paddingVertical: 15, marginBottom: 10,
+        borderWidth: 1, borderColor: t.colors.border,
     },
-    socialBtnText: { color: "#000", fontWeight: "700", fontSize: 15 },
+    socialBtnText: { color: t.colors.textPrimary, fontWeight: "700", fontSize: 15 },
 
     socialBtnOutline: {
         flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
-        borderWidth: 1, borderColor: "rgba(165,180,252,0.4)",
-        borderRadius: 16, paddingVertical: 13, marginBottom: 4,
+        backgroundColor: t.colors.glassButton,
+        borderWidth: 1, borderColor: t.colors.primary,
+        borderRadius: 14, paddingVertical: 15, marginBottom: 4,
     },
-    socialBtnOutlineText: { color: "#A5B4FC", fontWeight: "700", fontSize: 15 },
+    socialBtnOutlineText: { color: t.colors.accentText, fontWeight: "700", fontSize: 15 },
 
     rowLinks: { marginTop: 14, alignItems: "center" },
-    linkStrong: { color: "#A5B4FC", fontWeight: "900" },
+    linkStrong: { color: t.colors.accentText, fontWeight: "800" },
 
     footerNote: {
         marginTop: 16, textAlign: "center",
-        color: "rgba(255,255,255,0.55)", fontSize: 12,
+        color: t.colors.textMuted, fontSize: 12,
     },
 });

@@ -1,4 +1,4 @@
-﻿import React from "react";
+﻿import React, { useCallback, useEffect, useState } from "react";
 
 import {
     View,
@@ -15,8 +15,38 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import GradientScreen from "../ui/GradientScreen";
 import { logout, deleteAccount } from "../api/auth";
+import { fetchEntitlements, invalidateEntitlements } from "../services/entitlementService";
+import { productInfoForSku } from "../constants/api";
 
+const DURATION_TITLE = { weekly: "Weekly", monthly: "Monthly", yearly: "Yearly" };
+
+import { useTheme } from "../ui/ThemeProvider";
+import useThemedStyles from "../ui/useThemedStyles";
 export default function SettingsScreen({ navigation, onLoggedOut }) {
+    const { theme, preference, setPreference } = useTheme();
+    const styles = useThemedStyles(makeStyles);
+
+    const [entitlement, setEntitlement] = useState(null);
+    const [loadingPlan, setLoadingPlan] = useState(true);
+
+    // Re-read on every focus, and force past the service's 30s cache: coming
+    // back from the paywall after subscribing must show the new plan straight
+    // away rather than a stale "Free".
+    const refreshPlan = useCallback(async (force = false) => {
+        if (force) invalidateEntitlements();
+        try {
+            const snap = await fetchEntitlements({ force });
+            setEntitlement(snap);
+        } finally {
+            setLoadingPlan(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        refreshPlan();
+        const unsub = navigation.addListener("focus", () => refreshPlan(true));
+        return unsub;
+    }, [navigation, refreshPlan]);
     async function onLogout() {
         Alert.alert("Log out", "Are you sure you want to log out?", [
             { text: "Cancel", style: "cancel" },
@@ -78,17 +108,72 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
     function Row({ icon, title, subtitle, onPress, danger }) {
         return (
             <Pressable onPress={onPress} style={({ pressed }) => [styles.row, pressed && { opacity: 0.75 }]}>
-                <View style={[styles.rowIcon, danger && { backgroundColor: "rgba(239,68,68,0.16)", borderColor: "rgba(239,68,68,0.25)" }]}>
-                    <Ionicons name={icon} size={18} color={danger ? "#FCA5A5" : "#E0E7FF"} />
+                <View style={[styles.rowIcon, danger && { backgroundColor: theme.colors.dangerBg, borderColor: theme.colors.dangerBorder }]}>
+                    <Ionicons
+                        name={icon}
+                        size={18}
+                        color={danger ? theme.colors.dangerText : theme.colors.accentText}
+                    />
                 </View>
                 <View style={{ flex: 1 }}>
-                    <Text style={[styles.rowTitle, danger && { color: "#FCA5A5" }]}>{title}</Text>
+                    <Text style={[styles.rowTitle, danger && { color: theme.colors.dangerText }]}>{title}</Text>
                     {!!subtitle && <Text style={styles.rowSub}>{subtitle}</Text>}
                 </View>
-                <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.55)" />
+                <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
             </Pressable>
         );
     }
+
+    function AppearanceOption({ value, label, icon, hint }) {
+        const selected = preference === value;
+        return (
+            <Pressable
+                onPress={() => setPreference(value)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected }}
+                accessibilityLabel={`${label}. ${hint}`}
+                style={({ pressed }) => [
+                    styles.appearanceOption,
+                    selected && styles.appearanceOptionActive,
+                    pressed && { opacity: 0.8 },
+                ]}
+            >
+                <Ionicons
+                    name={icon}
+                    size={20}
+                    color={selected ? theme.colors.accentText : theme.colors.textMuted}
+                />
+                <Text style={[styles.appearanceLabel, selected && styles.appearanceLabelActive]}>
+                    {label}
+                </Text>
+                {/* Selection is shown by a check as well as colour, so it does
+                    not rely on colour alone. */}
+                {selected ? (
+                    <Ionicons name="checkmark-circle" size={16} color={theme.colors.accentText} />
+                ) : null}
+            </Pressable>
+        );
+    }
+
+    const isSubscribed = !!entitlement?.active;
+    // Prefer the exact product's marketing name; fall back to the tier so a
+    // plan the app doesn't recognise still reads sensibly.
+    const skuInfo = entitlement?.productId ? productInfoForSku(entitlement.productId) : null;
+    const planName = skuInfo
+        ? `${skuInfo.tier.name} · ${DURATION_TITLE[skuInfo.duration] ?? skuInfo.duration}`
+        : entitlement?.tier
+        ? entitlement.tier.charAt(0).toUpperCase() + entitlement.tier.slice(1)
+        : "Active plan";
+
+    const renewalDate = entitlement?.expiresAtUtc ? new Date(entitlement.expiresAtUtc) : null;
+    const renewalLine =
+        renewalDate && !Number.isNaN(renewalDate.getTime())
+            ? `Renews ${renewalDate.toLocaleDateString(undefined, {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+              })}`
+            : null;
 
     return (
         <GradientScreen>
@@ -106,6 +191,60 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
 
                {/* <View style={styles.container}>*/}
                     <Text style={styles.title}>Settings</Text>
+
+                    <View style={styles.card}>
+                        <Text style={styles.section}>Subscription</Text>
+                        {loadingPlan ? (
+                            <Text style={styles.planLoading}>Checking your plan…</Text>
+                        ) : isSubscribed ? (
+                            <>
+                                <View style={styles.planRow}>
+                                    <View style={styles.planBadge}>
+                                        <Ionicons name="checkmark-circle" size={16} color={theme.colors.successText} />
+                                        <Text style={styles.planBadgeText}>ACTIVE</Text>
+                                    </View>
+                                    <Text style={styles.planName}>{planName}</Text>
+                                </View>
+                                {!!renewalLine && <Text style={styles.planMeta}>{renewalLine}</Text>}
+                                <Text style={styles.planMeta}>
+                                    {entitlement?.credits ?? 0} credits remaining
+                                </Text>
+
+                                <Row
+                                    icon="swap-horizontal-outline"
+                                    title="Change plan"
+                                    subtitle="Upgrade, downgrade or switch billing period"
+                                    onPress={() => navigation.navigate("Paywall")}
+                                />
+                                <Row
+                                    icon="card-outline"
+                                    title="Manage in App Store"
+                                    subtitle="Cancel or change renewal — handled by Apple"
+                                    onPress={() =>
+                                        Linking.openURL("https://apps.apple.com/account/subscriptions")
+                                    }
+                                />
+                            </>
+                        ) : (
+                            <>
+                                <View style={styles.planRow}>
+                                    <View style={[styles.planBadge, styles.planBadgeFree]}>
+                                        <Text style={styles.planBadgeFreeText}>FREE</Text>
+                                    </View>
+                                    <Text style={styles.planName}>No active subscription</Text>
+                                </View>
+                                <Text style={styles.planMeta}>
+                                    {entitlement?.credits ?? 0} credits remaining
+                                </Text>
+                                <Row
+                                    icon="star-outline"
+                                    title="See plans"
+                                    subtitle="Subscribe to get credits every cycle"
+                                    onPress={() => navigation.navigate("Paywall")}
+                                />
+                            </>
+                        )}
+                    </View>
 
                     <View style={styles.card}>
                         <Text style={styles.section}>Account</Text>
@@ -127,7 +266,7 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
                         <Row
                             icon="star-outline"
                             title="Upgrade to AI Pro"
-                            subtitle="Unlock unlimited AI features"
+                            subtitle="More credits for AI features"
                             onPress={() => navigation.navigate("Paywall")}
                         />
 
@@ -144,6 +283,35 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
                             subtitle="User agreement and subscription terms"
                             onPress={() => navigation.navigate("Terms")}
                         />
+                    </View>
+
+                    <View style={styles.card}>
+                        <Text style={styles.section}>Appearance</Text>
+                        <Text style={styles.sectionHint}>
+                            Choose how PaperAI looks. “System” follows your{" "}
+                            {Platform.OS === "ios" ? "iOS" : "device"} Display setting.
+                        </Text>
+
+                        <View style={styles.appearanceRow} accessibilityRole="radiogroup">
+                            <AppearanceOption
+                                value="system"
+                                label="System"
+                                icon="phone-portrait-outline"
+                                hint="Follow the device appearance setting"
+                            />
+                            <AppearanceOption
+                                value="light"
+                                label="Light"
+                                icon="sunny-outline"
+                                hint="Always use the light theme"
+                            />
+                            <AppearanceOption
+                                value="dark"
+                                label="Dark"
+                                icon="moon-outline"
+                                hint="Always use the dark theme"
+                            />
+                        </View>
                     </View>
 
                     <View style={styles.card}>
@@ -196,44 +364,99 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
     );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t) =>
+    StyleSheet.create({
 
     container: {
         padding: 18,
         paddingBottom: 60, // ✅ ensures logout is visible
         gap: 16,
     },
-    title: { color: "#fff", fontSize: 26, fontWeight: "900" },
+    title: { color: t.colors.textPrimary, fontSize: 26, fontWeight: "800" },
 
     card: {
-        backgroundColor: "rgba(255,255,255,0.06)",
+        backgroundColor: t.colors.glass,
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.10)",
-        borderRadius: 22,
+        borderColor: t.colors.glassBorder,
+        borderRadius: 20,
         padding: 14,
         gap: 6,
+        shadowColor: t.colors.primary, shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.1, shadowRadius: 18, elevation: 4,
     },
-    section: { color: "rgba(255,255,255,0.65)", fontSize: 19, fontWeight: "900", marginBottom: 6 },
+    section: { color: t.colors.textMuted, fontSize: 15, fontWeight: "700", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.4 },
+    sectionHint: {
+        color: t.colors.textMuted,
+        fontSize: 12,
+        fontWeight: "500",
+        lineHeight: 17,
+        marginBottom: 10,
+    },
+
+    planLoading: { color: t.colors.textMuted, fontWeight: "600", fontSize: 13, paddingVertical: 6 },
+    planRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 4 },
+    planBadge: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 999,
+        borderWidth: 1,
+        backgroundColor: t.colors.successBg,
+        borderColor: t.colors.successBorder,
+    },
+    planBadgeText: { color: t.colors.successText, fontWeight: "800", fontSize: 10 },
+    planBadgeFree: { backgroundColor: t.colors.glassSoft, borderColor: t.colors.border },
+    planBadgeFreeText: { color: t.colors.textMuted, fontWeight: "800", fontSize: 10 },
+    planName: { flex: 1, color: t.colors.textPrimary, fontWeight: "800", fontSize: 15 },
+    planMeta: { color: t.colors.textMuted, fontWeight: "600", fontSize: 12, marginBottom: 2 },
+
+    appearanceRow: { flexDirection: "row", gap: 8 },
+    appearanceOption: {
+        flex: 1,
+        minHeight: 44,
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 4,
+        paddingVertical: 10,
+        paddingHorizontal: 6,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: t.colors.border,
+        backgroundColor: t.colors.glassSoft,
+    },
+    appearanceOptionActive: {
+        borderColor: t.colors.primary,
+        backgroundColor: t.colors.infoBg,
+    },
+    appearanceLabel: {
+        color: t.colors.textSecondary,
+        fontSize: 12,
+        fontWeight: "700",
+    },
+    appearanceLabelActive: { color: t.colors.accentText },
 
     row: {
         flexDirection: "row",
         alignItems: "center",
         gap: 12,
         paddingVertical: 10,
+        minHeight: 44,
         borderRadius: 16,
     },
     rowIcon: {
         width: 38,
         height: 38,
         borderRadius: 14,
-        backgroundColor: "rgba(99,102,241,0.16)",
+        backgroundColor: t.colors.infoBg,
         borderWidth: 1,
-        borderColor: "rgba(165,180,252,0.18)",
+        borderColor: t.colors.infoBorder,
         alignItems: "center",
         justifyContent: "center",
     },
-    rowTitle: { color: "#fff", fontWeight: "900" },
-    rowSub: { marginTop: 2, color: "rgba(255,255,255,0.62)", fontWeight: "700", fontSize: 12 },
+    rowTitle: { color: t.colors.textPrimary, fontWeight: "700" },
+    rowSub: { marginTop: 2, color: t.colors.textMuted, fontWeight: "500", fontSize: 12 },
 
-    footer: { marginTop: "auto", textAlign: "center", color: "rgba(255,255,255,0.45)", fontWeight: "700" },
+    footer: { marginTop: "auto", textAlign: "center", color: t.colors.textMuted, fontWeight: "600" },
 });

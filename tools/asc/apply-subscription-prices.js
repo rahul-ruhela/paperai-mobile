@@ -14,7 +14,6 @@
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
-
 const KEY_PATH = path.join(__dirname, "..", "..", "src", "appstorekey", "AuthKey_LY4822XN6Q.p8");
 const KEY_ID = "LY4822XN6Q";
 const ISSUER_ID = "26a0c1c8-cc00-4398-abb6-b9093adcda60";
@@ -24,15 +23,15 @@ const DRY = process.argv.includes("--dry");
 
 // productId -> target USA price (must be an exact Apple price point)
 const TARGET_USA_PRICE = {
-  "com.bholeshankar.paperai.essential_weekly": 15.99,
-  "com.bholeshankar.paperai.essential_monthly": 57.90,
-  "com.bholeshankar.paperai.essential_yearly": 459.00,
-  "com.bholeshankar.paperai.plus_weekly": 42.49,
-  "com.bholeshankar.paperai.plus_monthly": 153.99,
-  "com.bholeshankar.paperai.plus_yearly": 699.00,
-  "com.bholeshankar.paperai.advance_weekly": 85.00,
-  "com.bholeshankar.paperai.advance_monthly": 309.00,
-  "com.bholeshankar.paperai.advance_yearly": 899.00,
+  "com.bholeshankar.paperai.essential_weekly": 12.99,
+  "com.bholeshankar.paperai.essential_monthly": 39.99,
+  "com.bholeshankar.paperai.essential_yearly": 299.99,
+  "com.bholeshankar.paperai.plus_weekly": 19.99,
+  "com.bholeshankar.paperai.plus_monthly": 59.99,
+  "com.bholeshankar.paperai.plus_yearly": 399.99,
+  "com.bholeshankar.paperai.advance_weekly": 29.99,
+  "com.bholeshankar.paperai.advance_monthly": 99.99,
+  "com.bholeshankar.paperai.advance_yearly": 599.99,
 };
 
 function b64url(b){return Buffer.from(b).toString("base64").replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");}

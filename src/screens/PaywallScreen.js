@@ -24,8 +24,10 @@ import {
     ScrollView,
 } from "react-native";
 import Constants from "expo-constants";
+import { LinearGradient } from "expo-linear-gradient";
 
 import { verifyIosTransactionAutoWithRetry, getEntitlement } from "../api/billing";
+import { invalidateEntitlements } from "../services/entitlementService";
 import {
     recordFailedVerification,
     clearFailedVerification,
@@ -38,10 +40,17 @@ import {
 } from "../constants/api";
 import ScreenContainer from "../ui/ScreenContainer";
 
+import { useTheme } from "../ui/ThemeProvider";
+import useThemedStyles from "../ui/useThemedStyles";
 // "storeClient" === running inside Expo Go, where native modules are unavailable.
 const IS_EXPO_GO = Constants.executionEnvironment === "storeClient";
 
 const DURATIONS = ["weekly", "monthly", "yearly"];
+
+// How often to ask the backend whether an in-flight purchase has activated,
+// and how long to keep asking before handing the user back control.
+const PURCHASE_POLL_MS = 2000;
+const PURCHASE_TIMEOUT_MS = 45000;
 
 // Backend may return either `active` or `isActive` — accept both.
 function entitlementIsActive(e) {
@@ -52,6 +61,8 @@ function entitlementIsActive(e) {
    Public component — picks the right implementation for the environment.
 ========================================================================= */
 export default function PaywallScreen(props) {
+    const { theme } = useTheme();
+    const styles = useThemedStyles(makeStyles);
     if (IS_EXPO_GO) return <PaywallExpoGo {...props} />;
     return <PaywallNative {...props} />;
 }
@@ -75,6 +86,9 @@ function PaywallNative({ navigation }) {
         try {
             const e = await getEntitlement();
             setEntitlement(e);
+            // Other screens (Settings, feature gates) read a cached snapshot
+            // from entitlementService — drop it so they don't show a stale plan.
+            invalidateEntitlements();
             return e;
         } catch {
             return null;
@@ -155,6 +169,54 @@ function PaywallNative({ navigation }) {
     useEffect(() => {
         loadEntitlement();
     }, []);
+
+    // Reconcile a purchase that is in flight against the server.
+    //
+    // A plan change inside the subscription group (e.g. moving to Weekly while
+    // another tier is active) can settle without onPurchaseSuccess firing the
+    // way a first-time purchase does. Nothing would then clear `loadingSku` and
+    // the tier button spins forever. Polling the entitlement both fixes that
+    // and makes activation feel immediate: the moment the backend reports the
+    // plan active we stop the spinner, rather than waiting on StoreKit.
+    useEffect(() => {
+        if (!loadingSku || loadingSku === "__restore__") return;
+
+        let cancelled = false;
+        let elapsed = 0;
+
+        const timer = setInterval(async () => {
+            elapsed += PURCHASE_POLL_MS;
+
+            const current = await loadEntitlement();
+            if (cancelled) return;
+
+            // Match on the product, not just "active": when switching plans the
+            // previous subscription is still active, so checking activity alone
+            // would stop the spinner before the new plan actually took effect.
+            const switchedToThisPlan =
+                entitlementIsActive(current) && current?.productId === loadingSku;
+
+            if (switchedToThisPlan) {
+                clearInterval(timer);
+                setLoadingSku(null);
+                return;
+            }
+
+            if (elapsed >= PURCHASE_TIMEOUT_MS) {
+                clearInterval(timer);
+                setLoadingSku(null);
+                Alert.alert(
+                    "Still processing",
+                    "Apple has not confirmed this purchase yet. If it completed, tap \"Restore Purchases\" in a moment — you will not be charged twice."
+                );
+            }
+        }, PURCHASE_POLL_MS);
+
+        return () => {
+            cancelled = true;
+            clearInterval(timer);
+        };
+    }, [loadingSku]);
 
     // NOTE: useIAP's fetchProducts resolves to `undefined` — it pushes its
     // results into the hook's `subscriptions` state instead of returning them.
@@ -251,6 +313,23 @@ function PaywallNative({ navigation }) {
         return product?.displayPrice ?? null;
     }
 
+    // Numeric price, used only to work out the genuine saving between this
+    // tier's billing periods. StoreKit exposes `price` as a number; some
+    // versions only populate `displayPrice`, so fall back to parsing that.
+    function numericPriceForSku(sku) {
+        const product = subscriptions?.find((p) => p.id === sku);
+        if (!product) return null;
+        if (typeof product.price === "number" && isFinite(product.price)) return product.price;
+        const parsed = parseFloat(String(product.displayPrice ?? "").replace(/[^0-9.]/g, ""));
+        return isFinite(parsed) ? parsed : null;
+    }
+
+    // ISO code (e.g. "USD", "INR") for the customer's storefront, so the
+    // comparison figure is formatted the way their currency is normally written.
+    function currencyForSku(sku) {
+        return subscriptions?.find((p) => p.id === sku)?.currency ?? null;
+    }
+
     return (
         <PaywallView
             duration={duration}
@@ -260,6 +339,8 @@ function PaywallNative({ navigation }) {
             productsStatus={productsStatus}
             onRetryProducts={loadProducts}
             priceForSku={priceForSku}
+            numericPriceForSku={numericPriceForSku}
+            currencyForSku={currencyForSku}
             onSubscribe={subscribe}
             onRestore={restore}
             onOpenTerms={() => navigation.navigate("Terms")}
@@ -301,6 +382,8 @@ function PaywallExpoGo({ navigation }) {
             notice="You're in Expo Go — purchasing is disabled here. Use a TestFlight / App Store build to subscribe."
             productsStatus="ready"
             priceForSku={(sku, fallback) => fallback ?? null}
+            numericPriceForSku={() => null}
+            currencyForSku={() => null}
             onSubscribe={notifyUnavailable}
             onRestore={notifyUnavailable}
             onOpenTerms={() => navigation.navigate("Terms")}
@@ -312,6 +395,53 @@ function PaywallExpoGo({ navigation }) {
 /* =========================================================================
    Shared presentational view (duration tabs + 3 tier cards).
 ========================================================================= */
+/**
+ * The genuine saving a longer billing period gives you, expressed as PRICE PER
+ * CREDIT and computed from the LIVE App Store prices of the same tier.
+ *
+ * Per-credit is the only honest comparison here: a yearly plan costs less than
+ * twelve monthly ones but also carries fewer credits, so comparing headline
+ * prices would overstate the discount badly. Comparing the rate a customer
+ * actually pays for a credit is like-for-like, and Apple rejects reference
+ * pricing that overstates a saving (guideline 3.1.1).
+ *
+ * Returns null whenever the comparison cannot be made honestly.
+ */
+function savingFor(tier, duration, numericPriceForSku, currencyForSku) {
+    if (!numericPriceForSku || duration === "weekly") return null;
+
+    const baseline = duration === "yearly" ? "monthly" : "weekly";
+    const here = tier.products[duration];
+    const base = tier.products[baseline];
+    if (!here?.sku || !base?.sku || !here.credits || !base.credits) return null;
+
+    const herePrice = numericPriceForSku(here.sku);
+    const basePrice = numericPriceForSku(base.sku);
+    if (!herePrice || !basePrice) return null;
+
+    const hereRate = herePrice / here.credits;
+    const baseRate = basePrice / base.credits;
+    if (baseRate <= hereRate) return null;
+
+    const percent = Math.round((1 - hereRate / baseRate) * 100);
+    if (percent < 5) return null; // not worth a badge
+
+    // Format both rates in the customer's own currency.
+    const currency = currencyForSku?.(base.sku);
+    const money = (n) => {
+        try {
+            return currency
+                ? new Intl.NumberFormat(undefined, { style: "currency", currency }).format(n)
+                : n.toFixed(2);
+        } catch {
+            // Unknown currency code, or an engine without full ICU data.
+            return n.toFixed(2);
+        }
+    };
+
+    return { percent, wasLabel: money(baseRate), nowLabel: money(hereRate), baseline };
+}
+
 function PaywallView({
     duration,
     setDuration,
@@ -321,11 +451,14 @@ function PaywallView({
     productsStatus = "ready",
     onRetryProducts,
     priceForSku,
+    numericPriceForSku,
+    currencyForSku,
     onSubscribe,
     onRestore,
     onOpenTerms,
     onOpenPrivacy,
 }) {
+    const styles = useThemedStyles(makeStyles);
     const scaleAnim = useRef(new Animated.Value(1)).current;
     const isBusyAny = !!loadingSku;
 
@@ -390,6 +523,9 @@ function PaywallView({
                     const product = tier.products[duration];
                     const livePrice = priceForSku(product.sku, product.fallbackPrice);
                     const priceUnavailable = livePrice == null;
+                    const saving = priceUnavailable
+                        ? null
+                        : savingFor(tier, duration, numericPriceForSku, currencyForSku);
                     const isActive =
                         entitlementIsActive(entitlement) &&
                         entitlement.productId === product.sku;
@@ -420,35 +556,41 @@ function PaywallView({
                                         {productsStatus === "loading" ? "Loading price…" : "Unavailable"}
                                     </Text>
                                 ) : (
-                                    <Text style={styles.price}>
-                                        {livePrice}
-                                        <Text style={styles.per}> / {duration.replace("ly", "")}</Text>
-                                    </Text>
+                                    <>
+                                        {saving && (
+                                            <View style={styles.saveBadge}>
+                                                <Text style={styles.saveBadgeText}>
+                                                    SAVE {saving.percent}%
+                                                </Text>
+                                            </View>
+                                        )}
+                                        <Text style={styles.price}>
+                                            {livePrice}
+                                            <Text style={styles.per}> / {duration.replace("ly", "")}</Text>
+                                        </Text>
+                                        {saving && (
+                                            <Text style={styles.saveNote}>
+                                                <Text style={styles.priceWas}>{saving.wasLabel}</Text>
+                                                {"  "}
+                                                {saving.nowLabel} per credit vs {saving.baseline}
+                                            </Text>
+                                        )}
+                                    </>
                                 )}
                                 <Text style={styles.credits}>{product.credits} credits / cycle</Text>
 
-                                <TouchableOpacity
+                                <GradientCTA
                                     onPress={() => onSubscribe(product.sku)}
+                                    busy={isBusyThis}
                                     disabled={isActive || isBusyAny || priceUnavailable}
-                                    activeOpacity={0.9}
-                                    style={[
-                                        styles.cta,
-                                        tier.highlight && styles.ctaHighlight,
-                                        (isActive || isBusyAny || priceUnavailable) && styles.ctaDisabled,
-                                    ]}
-                                >
-                                    {isBusyThis ? (
-                                        <ActivityIndicator color="#fff" />
-                                    ) : (
-                                        <Text style={styles.ctaText}>
-                                            {isActive
-                                                ? "ACTIVE PLAN"
-                                                : priceUnavailable
-                                                ? "UNAVAILABLE"
-                                                : "Subscribe"}
-                                        </Text>
-                                    )}
-                                </TouchableOpacity>
+                                    label={
+                                        isActive
+                                            ? "ACTIVE PLAN"
+                                            : priceUnavailable
+                                            ? "UNAVAILABLE"
+                                            : "Subscribe"
+                                    }
+                                />
                             </View>
                         </Wrapper>
                     );
@@ -484,81 +626,172 @@ function PaywallView({
     );
 }
 
-const styles = StyleSheet.create({
-    container: { flexGrow: 1, padding: 24, backgroundColor: "#020617" },
-    header: { color: "#fff", fontSize: 28, fontWeight: "900", marginBottom: 6 },
-    subHeader: { color: "#94a3b8", fontSize: 14, marginBottom: 18 },
+// ── Subscription CTA — PaperAI blue gradient with gentle press animation ──────
+function GradientCTA({ onPress, busy, disabled, label }) {
+    const { theme } = useTheme();
+    const styles = useThemedStyles(makeStyles);
+    const scale = useRef(new Animated.Value(1)).current;
+
+    const pressIn = () =>
+        Animated.spring(scale, { toValue: 0.96, useNativeDriver: true, speed: 45, bounciness: 0 }).start();
+    const pressOut = () =>
+        Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 45, bounciness: 6 }).start();
+
+    // Disabled (active plan / unavailable) → flat muted button, no glow.
+    if (disabled && !busy) {
+        return (
+            <View
+                style={[styles.cta, styles.ctaDisabled]}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: true }}
+                accessibilityLabel={label}
+            >
+                <Text style={styles.ctaText}>{label}</Text>
+            </View>
+        );
+    }
+
+    return (
+        <Animated.View style={[styles.ctaGlow, { transform: [{ scale }] }]}>
+            <TouchableOpacity
+                onPress={onPress}
+                onPressIn={pressIn}
+                onPressOut={pressOut}
+                disabled={busy}
+                activeOpacity={0.92}
+                accessibilityRole="button"
+                accessibilityLabel={label}
+            >
+                <LinearGradient
+                    colors={["#1D4ED8", "#2563EB", "#38BDF8"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.cta}
+                >
+                    {busy ? (
+                        <ActivityIndicator color={theme.colors.white} />
+                    ) : (
+                        <Text style={styles.ctaText}>{label}</Text>
+                    )}
+                </LinearGradient>
+            </TouchableOpacity>
+        </Animated.View>
+    );
+}
+
+const makeStyles = (t) =>
+    StyleSheet.create({
+    container: { flexGrow: 1, padding: 24 },
+    header: { color: t.colors.textPrimary, fontSize: 28, fontWeight: "800", marginBottom: 6 },
+    subHeader: { color: t.colors.textMuted, fontSize: 14, marginBottom: 18 },
     notice: {
-        color: "#fbbf24",
-        backgroundColor: "rgba(251,191,36,0.10)",
-        borderColor: "rgba(251,191,36,0.35)",
+        color: t.colors.warningText,
+        backgroundColor: t.colors.warningBg,
+        borderColor: t.colors.warningBorder,
         borderWidth: 1,
         borderRadius: 12,
         padding: 12,
         fontSize: 12,
-        fontWeight: "700",
+        fontWeight: "600",
         marginBottom: 18,
     },
 
     tabs: {
         flexDirection: "row",
-        backgroundColor: "rgba(255,255,255,0.06)",
+        backgroundColor: t.colors.glassButton,
+        borderColor: t.colors.border,
+        borderWidth: 1,
         borderRadius: 14,
         padding: 4,
         marginBottom: 20,
     },
-    tab: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: "center" },
-    tabActive: { backgroundColor: "#6366f1" },
-    tabText: { color: "#94a3b8", fontWeight: "800", fontSize: 13 },
-    tabTextActive: { color: "#fff" },
+    tab: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: "center", minHeight: 44, justifyContent: "center" },
+    tabActive: { backgroundColor: t.colors.primary },
+    tabText: { color: t.colors.textSecondary, fontWeight: "700", fontSize: 13 },
+    tabTextActive: { color: t.colors.white },
 
     card: {
-        backgroundColor: "rgba(255,255,255,0.05)",
-        borderColor: "rgba(255,255,255,0.10)",
+        backgroundColor: t.colors.glass,
+        borderColor: t.colors.glassBorder,
         borderWidth: 1,
         borderRadius: 20,
         padding: 18,
         marginBottom: 16,
+        shadowColor: t.colors.primary, shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.1, shadowRadius: 18, elevation: 4,
     },
-    cardHighlight: { borderColor: "#6366f1", backgroundColor: "rgba(99,102,241,0.10)" },
-    cardActive: { borderColor: "#22c55e" },
+    cardHighlight: { borderColor: t.colors.primary, backgroundColor: t.colors.infoBg },
+    cardActive: { borderColor: t.colors.success },
     popular: {
         alignSelf: "flex-start",
-        backgroundColor: "#6366f1",
+        backgroundColor: t.colors.accent,
         borderRadius: 999,
         paddingHorizontal: 10,
         paddingVertical: 3,
         marginBottom: 8,
     },
-    popularText: { color: "#fff", fontSize: 10, fontWeight: "900", letterSpacing: 0.5 },
+    popularText: { color: t.colors.textPrimary, fontSize: 10, fontWeight: "800", letterSpacing: 0.5 },
 
-    tierName: { color: "#fff", fontSize: 22, fontWeight: "900" },
-    tierTagline: { color: "#94a3b8", fontSize: 13, marginTop: 2, marginBottom: 12 },
-    price: { color: "#fff", fontSize: 26, fontWeight: "900" },
-    priceUnavailable: { color: "#64748b", fontSize: 20, fontWeight: "800", fontStyle: "italic" },
-    per: { color: "#94a3b8", fontSize: 14, fontWeight: "700" },
-    credits: { color: "#A5B4FC", fontSize: 14, fontWeight: "700", marginTop: 4, marginBottom: 14 },
+    tierName: { color: t.colors.textPrimary, fontSize: 22, fontWeight: "800" },
+    tierTagline: { color: t.colors.textMuted, fontSize: 13, marginTop: 2, marginBottom: 12 },
+    price: { color: t.colors.textPrimary, fontSize: 26, fontWeight: "800" },
+    // The struck-through figure is the real cost of the shorter plan over the
+    // same span — see savingFor(). Never a fabricated "was" price.
+    priceWas: {
+        color: t.colors.textMuted,
+        fontSize: 17,
+        fontWeight: "600",
+        textDecorationLine: "line-through",
+    },
+    saveBadge: {
+        alignSelf: "flex-start",
+        backgroundColor: t.colors.accentText,
+        borderRadius: 999,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        marginBottom: 6,
+    },
+    saveBadgeText: {
+        color: t.isDark ? "#0B1220" : "#FFFFFF",
+        fontSize: 11,
+        fontWeight: "900",
+        letterSpacing: 0.6,
+    },
+    saveNote: { color: t.colors.textMuted, fontSize: 12, fontWeight: "600", marginTop: 2 },
+    priceUnavailable: { color: t.colors.textMuted, fontSize: 20, fontWeight: "700", fontStyle: "italic" },
+    per: { color: t.colors.textMuted, fontSize: 14, fontWeight: "600" },
+    credits: { color: t.colors.accentText, fontSize: 14, fontWeight: "700", marginTop: 4, marginBottom: 14 },
 
     cta: {
-        backgroundColor: "rgba(255,255,255,0.12)",
         borderRadius: 14,
-        paddingVertical: 14,
+        paddingVertical: 16,
+        minHeight: 52,
         alignItems: "center",
+        justifyContent: "center",
     },
-    ctaHighlight: { backgroundColor: "#6366f1" },
-    ctaDisabled: { opacity: 0.55 },
-    ctaText: { color: "#fff", fontWeight: "900", fontSize: 15 },
+    // Wrapper carries the rounded corners + subtle blue glow around the gradient.
+    ctaGlow: {
+        borderRadius: 14,
+        shadowColor: t.colors.primary,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.45,
+        shadowRadius: 14,
+        elevation: 6,
+    },
+    ctaDisabled: { backgroundColor: t.colors.disabled },
+    ctaText: { color: t.colors.white, fontWeight: "800", fontSize: 15, letterSpacing: 0.3 },
 
     restore: {
         marginTop: 10,
-        color: "#94a3b8",
+        color: t.colors.accentText,
         textAlign: "center",
         textDecorationLine: "underline",
         fontSize: 14,
+        fontWeight: "600",
     },
     legal: {
         marginTop: 20,
-        color: "#475569",
+        color: t.colors.textMuted,
         fontSize: 11,
         textAlign: "center",
         lineHeight: 16,
@@ -572,35 +805,35 @@ const styles = StyleSheet.create({
         gap: 8,
     },
     legalLink: {
-        color: "#94a3b8",
+        color: t.colors.accentText,
         fontSize: 12,
-        fontWeight: "700",
+        fontWeight: "600",
         textDecorationLine: "underline",
     },
-    legalLinkDot: { color: "#475569", fontSize: 12 },
+    legalLinkDot: { color: t.colors.textMuted, fontSize: 12 },
 
     productsBanner: {
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
-        backgroundColor: "rgba(239,68,68,0.10)",
-        borderColor: "rgba(239,68,68,0.35)",
+        backgroundColor: t.colors.dangerBg,
+        borderColor: t.colors.dangerBorder,
         borderWidth: 1,
         borderRadius: 12,
         padding: 12,
         marginBottom: 18,
     },
     productsBannerText: {
-        color: "#fca5a5",
+        color: t.colors.dangerText,
         fontSize: 12,
-        fontWeight: "700",
+        fontWeight: "600",
         flex: 1,
         marginRight: 10,
     },
     productsBannerRetry: {
-        color: "#fff",
+        color: t.colors.dangerText,
         fontSize: 12,
-        fontWeight: "900",
+        fontWeight: "800",
         textDecorationLine: "underline",
     },
 });

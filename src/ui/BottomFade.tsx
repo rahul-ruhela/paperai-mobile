@@ -2,24 +2,19 @@ import React from "react";
 import { StyleSheet, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTheme } from "./ThemeProvider";
 
 export default function BottomFade() {
     const insets = useSafeAreaInsets();
+    const { theme } = useTheme();
 
     return (
         <View
             pointerEvents="none"
-            style={[
-                styles.container,
-                { height: 80 + insets.bottom },
-            ]}
+            style={[styles.container, { height: 80 + insets.bottom }]}
         >
             <LinearGradient
-                colors={[
-                    "rgba(2,6,23,0)",
-                    "rgba(2,6,23,0.6)",
-                    "rgba(2,6,23,1)",
-                ]}
+                colors={theme.fade as [string, string, string]}
                 style={StyleSheet.absoluteFill}
             />
         </View>

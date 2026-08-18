@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
 
     "ios": {
       "supportsTablet": true,
@@ -29,7 +29,12 @@
         {
           "image": "./assets/splash-icon.png",
           "resizeMode": "contain",
-          "backgroundColor": "#020617"
+          "backgroundColor": "#F5F7FB",
+          "dark": {
+            "image": "./assets/splash-icon.png",
+            "resizeMode": "contain",
+            "backgroundColor": "#050816"
+          }
         }
       ],
       [
@@ -42,7 +47,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Paper AI Assistant needs access to your photo library to let you select images for text extraction and document scanning."
+          "photosPermission": "Paper AI Assistant uses your photo library for two things: choosing images to extract text from, and — when you run Junk Wiper — scanning for duplicate photos and videos so you can remove the extra copies. Junk Wiper needs \"All Photos\" to find every duplicate."
         }
       ],
       [
@@ -55,7 +60,7 @@
       [
         "expo-media-library",
         {
-          "photosPermission": "Paper AI Assistant needs access to your full photo library to scan for duplicate photos and free up storage. Select \"All Photos\" so Junk Wiper can find all duplicates.",
+          "photosPermission": "Paper AI Assistant uses your photo library for two things: choosing images to extract text from, and — when you run Junk Wiper — scanning for duplicate photos and videos so you can remove the extra copies. Junk Wiper needs \"All Photos\" to find every duplicate.",
           "savePhotosPermission": "Paper AI Assistant needs permission to save scanned documents to your photo library.",
           "isAccessMediaLocationEnabled": true
         }
