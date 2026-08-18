@@ -57,9 +57,9 @@ export const SUBSCRIPTION_TIERS: SubscriptionTier[] = [
         name: "Essential",
         tagline: "For getting started",
         products: {
-            weekly:  { sku: `${BID}.essential_weekly`,  credits: 15,  fallbackPrice: "$15.99" },
-            monthly: { sku: `${BID}.essential_monthly`, credits: 60,  fallbackPrice: "$57.90" },
-            yearly:  { sku: `${BID}.essential_yearly`,  credits: 560, fallbackPrice: "$459.00" },
+            weekly:  { sku: `${BID}.essential_weekly`,  credits: 14,  fallbackPrice: "$6.99" },
+            monthly: { sku: `${BID}.essential_monthly`, credits: 60,  fallbackPrice: "$19.99" },
+            yearly:  { sku: `${BID}.essential_yearly`,  credits: 600, fallbackPrice: "$149.99" },
         },
     },
     {
@@ -68,9 +68,9 @@ export const SUBSCRIPTION_TIERS: SubscriptionTier[] = [
         tagline: "Most popular",
         highlight: true,
         products: {
-            weekly:  { sku: `${BID}.plus_weekly`,  credits: 40,  fallbackPrice: "$42.49" },
-            monthly: { sku: `${BID}.plus_monthly`, credits: 160, fallbackPrice: "$153.99" },
-            yearly:  { sku: `${BID}.plus_yearly`,  credits: 850, fallbackPrice: "$699.00" },
+            weekly:  { sku: `${BID}.plus_weekly`,  credits: 20,  fallbackPrice: "$9.99" },
+            monthly: { sku: `${BID}.plus_monthly`, credits: 90, fallbackPrice: "$29.99" },
+            yearly:  { sku: `${BID}.plus_yearly`,  credits: 800, fallbackPrice: "$199.99" },
         },
     },
     {
@@ -78,9 +78,9 @@ export const SUBSCRIPTION_TIERS: SubscriptionTier[] = [
         name: "Advance",
         tagline: "Maximum power",
         products: {
-            weekly:  { sku: `${BID}.advance_weekly`,  credits: 80,   fallbackPrice: "$85.00" },
-            monthly: { sku: `${BID}.advance_monthly`, credits: 320,  fallbackPrice: "$309.00" },
-            yearly:  { sku: `${BID}.advance_yearly`,  credits: 1100, fallbackPrice: "$899.00" },
+            weekly:  { sku: `${BID}.advance_weekly`,  credits: 30,   fallbackPrice: "$14.99" },
+            monthly: { sku: `${BID}.advance_monthly`, credits: 150,  fallbackPrice: "$49.99" },
+            yearly:  { sku: `${BID}.advance_yearly`,  credits: 1200, fallbackPrice: "$299.99" },
         },
     },
 ];

@@ -24,15 +24,15 @@ const DRY = process.argv.includes("--dry");
 
 // productId -> target USA price (must be an exact Apple price point)
 const TARGET_USA_PRICE = {
-  "com.bholeshankar.paperai.essential_weekly": 15.99,
-  "com.bholeshankar.paperai.essential_monthly": 57.90,
-  "com.bholeshankar.paperai.essential_yearly": 459.00,
-  "com.bholeshankar.paperai.plus_weekly": 42.49,
-  "com.bholeshankar.paperai.plus_monthly": 153.99,
-  "com.bholeshankar.paperai.plus_yearly": 699.00,
-  "com.bholeshankar.paperai.advance_weekly": 85.00,
-  "com.bholeshankar.paperai.advance_monthly": 309.00,
-  "com.bholeshankar.paperai.advance_yearly": 899.00,
+  "com.bholeshankar.paperai.essential_weekly": 6.99,
+  "com.bholeshankar.paperai.essential_monthly": 19.99,
+  "com.bholeshankar.paperai.essential_yearly": 149.99,
+  "com.bholeshankar.paperai.plus_weekly": 9.99,
+  "com.bholeshankar.paperai.plus_monthly": 29.99,
+  "com.bholeshankar.paperai.plus_yearly": 199.99,
+  "com.bholeshankar.paperai.advance_weekly": 14.99,
+  "com.bholeshankar.paperai.advance_monthly": 49.99,
+  "com.bholeshankar.paperai.advance_yearly": 299.99,
 };
 
 function b64url(b){return Buffer.from(b).toString("base64").replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");}
