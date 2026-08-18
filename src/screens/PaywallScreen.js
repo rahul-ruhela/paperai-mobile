@@ -313,6 +313,23 @@ function PaywallNative({ navigation }) {
         return product?.displayPrice ?? null;
     }
 
+    // Numeric price, used only to work out the genuine saving between this
+    // tier's billing periods. StoreKit exposes `price` as a number; some
+    // versions only populate `displayPrice`, so fall back to parsing that.
+    function numericPriceForSku(sku) {
+        const product = subscriptions?.find((p) => p.id === sku);
+        if (!product) return null;
+        if (typeof product.price === "number" && isFinite(product.price)) return product.price;
+        const parsed = parseFloat(String(product.displayPrice ?? "").replace(/[^0-9.]/g, ""));
+        return isFinite(parsed) ? parsed : null;
+    }
+
+    // ISO code (e.g. "USD", "INR") for the customer's storefront, so the
+    // comparison figure is formatted the way their currency is normally written.
+    function currencyForSku(sku) {
+        return subscriptions?.find((p) => p.id === sku)?.currency ?? null;
+    }
+
     return (
         <PaywallView
             duration={duration}
@@ -322,6 +339,8 @@ function PaywallNative({ navigation }) {
             productsStatus={productsStatus}
             onRetryProducts={loadProducts}
             priceForSku={priceForSku}
+            numericPriceForSku={numericPriceForSku}
+            currencyForSku={currencyForSku}
             onSubscribe={subscribe}
             onRestore={restore}
             onOpenTerms={() => navigation.navigate("Terms")}
@@ -363,6 +382,8 @@ function PaywallExpoGo({ navigation }) {
             notice="You're in Expo Go — purchasing is disabled here. Use a TestFlight / App Store build to subscribe."
             productsStatus="ready"
             priceForSku={(sku, fallback) => fallback ?? null}
+            numericPriceForSku={() => null}
+            currencyForSku={() => null}
             onSubscribe={notifyUnavailable}
             onRestore={notifyUnavailable}
             onOpenTerms={() => navigation.navigate("Terms")}
@@ -374,6 +395,53 @@ function PaywallExpoGo({ navigation }) {
 /* =========================================================================
    Shared presentational view (duration tabs + 3 tier cards).
 ========================================================================= */
+/**
+ * The genuine saving a longer billing period gives you, worked out from the
+ * LIVE App Store prices of the same tier.
+ *
+ * The struck-through figure is never invented: it is what the customer would
+ * actually pay over the same span on the shorter plan that is on sale right
+ * now (12 x monthly, or 52 x weekly). Apple rejects reference pricing that was
+ * never charged (guideline 3.1.1), so nothing here is a fabricated "was" price.
+ * Returns null whenever the comparison can't be made honestly.
+ */
+const PERIODS_PER_YEAR = { weekly: 52, monthly: 12, yearly: 1 };
+
+function savingFor(tier, duration, numericPriceForSku, currencyForSku) {
+    if (!numericPriceForSku || duration === "weekly") return null;
+
+    const baseline = duration === "yearly" ? "monthly" : "weekly";
+    const thisSku = tier.products[duration]?.sku;
+    const baseSku = tier.products[baseline]?.sku;
+    if (!thisSku || !baseSku) return null;
+
+    const thisPrice = numericPriceForSku(thisSku);
+    const basePrice = numericPriceForSku(baseSku);
+    if (!thisPrice || !basePrice) return null;
+
+    const thisAnnual = thisPrice * PERIODS_PER_YEAR[duration];
+    const baseAnnual = basePrice * PERIODS_PER_YEAR[baseline];
+    if (baseAnnual <= thisAnnual) return null;
+
+    const percent = Math.round((1 - thisAnnual / baseAnnual) * 100);
+    if (percent < 5) return null; // not worth shouting about
+
+    // Format in the customer's own currency. Intl handles the symbol, its
+    // position and the decimal separator, which a string-splice cannot.
+    const currency = currencyForSku?.(baseSku);
+    let wasLabel;
+    try {
+        wasLabel = currency
+            ? new Intl.NumberFormat(undefined, { style: "currency", currency }).format(baseAnnual)
+            : baseAnnual.toFixed(2);
+    } catch {
+        // Unknown currency code, or an engine without full ICU data.
+        wasLabel = baseAnnual.toFixed(2);
+    }
+
+    return { percent, wasLabel, baseline };
+}
+
 function PaywallView({
     duration,
     setDuration,
@@ -383,6 +451,8 @@ function PaywallView({
     productsStatus = "ready",
     onRetryProducts,
     priceForSku,
+    numericPriceForSku,
+    currencyForSku,
     onSubscribe,
     onRestore,
     onOpenTerms,
@@ -453,6 +523,9 @@ function PaywallView({
                     const product = tier.products[duration];
                     const livePrice = priceForSku(product.sku, product.fallbackPrice);
                     const priceUnavailable = livePrice == null;
+                    const saving = priceUnavailable
+                        ? null
+                        : savingFor(tier, duration, numericPriceForSku, currencyForSku);
                     const isActive =
                         entitlementIsActive(entitlement) &&
                         entitlement.productId === product.sku;
@@ -483,10 +556,27 @@ function PaywallView({
                                         {productsStatus === "loading" ? "Loading price…" : "Unavailable"}
                                     </Text>
                                 ) : (
-                                    <Text style={styles.price}>
-                                        {livePrice}
-                                        <Text style={styles.per}> / {duration.replace("ly", "")}</Text>
-                                    </Text>
+                                    <>
+                                        {saving && (
+                                            <View style={styles.saveBadge}>
+                                                <Text style={styles.saveBadgeText}>
+                                                    SAVE {saving.percent}%
+                                                </Text>
+                                            </View>
+                                        )}
+                                        <Text style={styles.price}>
+                                            {saving && (
+                                                <Text style={styles.priceWas}>{saving.wasLabel} </Text>
+                                            )}
+                                            {livePrice}
+                                            <Text style={styles.per}> / {duration.replace("ly", "")}</Text>
+                                        </Text>
+                                        {saving && (
+                                            <Text style={styles.saveNote}>
+                                                vs paying {saving.baseline} over the same period
+                                            </Text>
+                                        )}
+                                    </>
                                 )}
                                 <Text style={styles.credits}>{product.credits} credits / cycle</Text>
 
@@ -646,6 +736,29 @@ const makeStyles = (t) =>
     tierName: { color: t.colors.textPrimary, fontSize: 22, fontWeight: "800" },
     tierTagline: { color: t.colors.textMuted, fontSize: 13, marginTop: 2, marginBottom: 12 },
     price: { color: t.colors.textPrimary, fontSize: 26, fontWeight: "800" },
+    // The struck-through figure is the real cost of the shorter plan over the
+    // same span — see savingFor(). Never a fabricated "was" price.
+    priceWas: {
+        color: t.colors.textMuted,
+        fontSize: 17,
+        fontWeight: "600",
+        textDecorationLine: "line-through",
+    },
+    saveBadge: {
+        alignSelf: "flex-start",
+        backgroundColor: t.colors.accentText,
+        borderRadius: 999,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        marginBottom: 6,
+    },
+    saveBadgeText: {
+        color: t.isDark ? "#0B1220" : "#FFFFFF",
+        fontSize: 11,
+        fontWeight: "900",
+        letterSpacing: 0.6,
+    },
+    saveNote: { color: t.colors.textMuted, fontSize: 12, fontWeight: "600", marginTop: 2 },
     priceUnavailable: { color: t.colors.textMuted, fontSize: 20, fontWeight: "700", fontStyle: "italic" },
     per: { color: t.colors.textMuted, fontSize: 14, fontWeight: "600" },
     credits: { color: t.colors.accentText, fontSize: 14, fontWeight: "700", marginTop: 4, marginBottom: 14 },
