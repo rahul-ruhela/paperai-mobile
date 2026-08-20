@@ -39,6 +39,69 @@ export const makeCommon = (t) =>
 
 export const makeHomeStyles = (t) =>
     StyleSheet.create({
+        // ── Home hero (greeting, AI orb, quick actions, stat strip) ──────────
+        headerWrap: { paddingTop: 4 },
+
+        greetRow: {
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 12,
+            marginBottom: 6,
+        },
+        greetHi: { color: t.colors.textPrimary, fontWeight: "900", fontSize: 22 },
+        greetSub: { color: t.colors.textMuted, fontWeight: "700", fontSize: 12.5, marginTop: 2 },
+
+        creditPill: {
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 5,
+            paddingHorizontal: 12,
+            paddingVertical: 7,
+            borderRadius: 999,
+            borderWidth: 1,
+            borderColor: t.colors.border,
+            backgroundColor: t.colors.glassSoft,
+        },
+        creditPillText: { color: t.colors.textPrimary, fontWeight: "900", fontSize: 13 },
+
+        orb: { alignSelf: "center", marginTop: 6, marginBottom: 18 },
+
+        quickRow: { flexDirection: "row", gap: 10 },
+        quickTile: {
+            flex: 1,
+            alignItems: "center",
+            gap: 7,
+            paddingVertical: 14,
+            borderRadius: t.radius.lg,
+            borderWidth: 1,
+            borderColor: t.colors.border,
+            backgroundColor: t.colors.glassSoft,
+        },
+        quickIcon: {
+            width: 38,
+            height: 38,
+            borderRadius: 38,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: t.colors.infoBg,
+        },
+        quickLabel: { color: t.colors.textSecondary, fontWeight: "800", fontSize: 12 },
+
+        statStrip: {
+            flexDirection: "row",
+            alignItems: "center",
+            marginTop: 12,
+            paddingVertical: 12,
+            borderRadius: t.radius.lg,
+            borderWidth: 1,
+            borderColor: t.colors.border,
+            backgroundColor: t.colors.glassSoft,
+        },
+        statCell: { flex: 1, alignItems: "center", gap: 2 },
+        statValue: { color: t.colors.textPrimary, fontWeight: "900", fontSize: 17 },
+        statLabel: { color: t.colors.textMuted, fontWeight: "700", fontSize: 11 },
+        statDivider: { width: 1, height: 26, backgroundColor: t.colors.separator },
+
         searchBox: {
             flexDirection: "row",
             alignItems: "center",

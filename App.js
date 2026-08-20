@@ -41,6 +41,7 @@ import ContactSupportScreen from "./src/screens/ContactSupportScreen";
 import JunkWiperScanScreen from "./src/screens/JunkWiperScanScreen";
 import CameraDocumentScanScreen from "./src/screens/CameraDocumentScanScreen";
 import CodeScannerScreen from "./src/screens/CodeScannerScreen";
+import SignatureScreen from "./src/screens/SignatureScreen";
 import BootScreen from "./src/screens/BootScreen";
 
 const Stack = createNativeStackNavigator();
@@ -292,6 +293,11 @@ function AppShell() {
                         <Stack.Screen
                             name="CodeScanner"
                             component={CodeScannerScreen}
+                            options={{ headerShown: false }}
+                        />
+                        <Stack.Screen
+                            name="Signature"
+                            component={SignatureScreen}
                             options={{ headerShown: false }}
                         />
                     </>

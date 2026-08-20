@@ -17,6 +17,9 @@ export { default as StatusBadge } from "./StatusBadge";
 export { default as GlassModal } from "./GlassModal";
 export { default as AppButton } from "./AppButton";
 export { default as AiHeader } from "./AiHeader";
+export { default as AiOrb } from "./AiOrb";
+export { default as BrandLockup } from "./BrandLockup";
+export { default as SignaturePad, strokesToSvg } from "./SignaturePad";
 export { default as useReduceMotion } from "./useReduceMotion";
 
 export { PrimaryButton, SecondaryButton, DangerButton, PressScale } from "./buttons";

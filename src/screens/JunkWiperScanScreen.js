@@ -96,6 +96,9 @@ export default function JunkWiperScanScreen({ navigation }) {
     const [kindFilter, setKindFilter] = useState("all");
     const [selected, setSelected] = useState(new Set());
     const [deleteConfirm, setDeleteConfirm] = useState(false);
+    // True when a completed scan found nothing and we handed the credits back.
+    // Drives the "no credits used" line in the empty report.
+    const [refundedClean, setRefundedClean] = useState(false);
     const [deleting, setDeleting] = useState(false);
     // Rocket cleanup animation shown while junk is being wiped
     const [cleaning, setCleaning] = useState(false);
@@ -117,7 +120,7 @@ export default function JunkWiperScanScreen({ navigation }) {
         creditCost: 3,
         userNoticeTitle: "Start Duplicate Scan",
         userNoticeMessage:
-            "Junk Wiper scans the photos, videos and PaperAI documents you allow, and reports duplicate copies. Nothing is deleted automatically — you review and confirm before anything is removed.",
+            "Junk Wiper scans the photos, videos and PaperAI documents you allow, and reports duplicate copies. Nothing is deleted automatically — you review and confirm before anything is removed. If no duplicates are found, your credits are returned.",
     });
 
     // ── Jarvis animation refs ─────────────────────────────────────────────────
@@ -284,6 +287,7 @@ export default function JunkWiperScanScreen({ navigation }) {
         setConfirmModal({ visible: false, loading: false });
         setPhase("scanning");
         setProgress(0);
+        setRefundedClean(false);
         setLiveCount(0);
         setLiveFound(0);
         setLiveBytes(0);
@@ -349,12 +353,20 @@ export default function JunkWiperScanScreen({ navigation }) {
             });
             setDuplicates(finalGroups);
 
-            // The scan itself is the paid service, so it is charged whenever it
-            // runs to completion — including a clean library that legitimately
-            // returns zero groups. Credits come back only when the scan fails or
-            // the user cancels it (see the catch below and cancelScan).
+            // Charge only for a scan that actually found something to clean.
+            // A clean library legitimately returns zero groups, and billing for
+            // a report with nothing in it is what drives refunds and 1-star
+            // reviews — so the reservation is handed straight back instead.
+            // Credits also come back when the scan fails or is cancelled
+            // (see the catch below and cancelScan).
+            const foundSomething = finalGroups.length > 0;
+            setRefundedClean(!foundSomething);
             if (txnIdRef.current) {
-                await completeTransaction(txnIdRef.current).catch(() => {});
+                if (foundSomething) {
+                    await completeTransaction(txnIdRef.current).catch(() => {});
+                } else {
+                    await refundTransaction(txnIdRef.current, "No duplicates found").catch(() => {});
+                }
                 txnIdRef.current = null;
             }
             setPhase("done");
@@ -956,6 +968,18 @@ export default function JunkWiperScanScreen({ navigation }) {
                                     <Text style={styles.emptySub}>
                                         Your photos, videos and documents look clean.
                                     </Text>
+                                    {refundedClean && (
+                                        <View style={styles.refundPill}>
+                                            <Ionicons
+                                                name="wallet-outline"
+                                                size={14}
+                                                color={theme.colors.successText}
+                                            />
+                                            <Text style={styles.refundPillText}>
+                                                Nothing found — no credits used
+                                            </Text>
+                                        </View>
+                                    )}
                                 </View>
                             ) : (
                                 <>
@@ -1182,7 +1206,7 @@ export default function JunkWiperScanScreen({ navigation }) {
                 loading={confirmModal.loading}
                 onConfirm={startScan}
                 onCancel={() => setConfirmModal({ visible: false, loading: false })}
-                safetyNote="Nothing is deleted without your confirmation. The scan uses credits each time it runs, including when your library is already clean and no duplicates are found."
+                safetyNote="Nothing is deleted without your confirmation. You are only charged when the scan finds duplicates — if your library is already clean, your credits are returned automatically."
             />
         </GradientScreen>
     );
@@ -1541,6 +1565,19 @@ const makeStyles = (t) =>
     emptyBox: { alignItems: "center", gap: 10, paddingVertical: 24 },
     emptyTitle: { color: t.colors.accentText, fontWeight: "900", fontSize: 18 },
     emptySub: { color: t.colors.textMuted, fontWeight: "700", fontSize: 14 },
+    refundPill: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        marginTop: 4,
+        paddingVertical: 7,
+        paddingHorizontal: 12,
+        borderRadius: 999,
+        borderWidth: 1,
+        borderColor: t.colors.successBorder,
+        backgroundColor: t.colors.successBg,
+    },
+    refundPillText: { color: t.colors.successText, fontWeight: "800", fontSize: 12.5 },
 
     dupRow: {
         flexDirection: "row", alignItems: "center", gap: 12,

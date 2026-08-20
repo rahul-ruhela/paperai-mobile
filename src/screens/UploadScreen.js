@@ -236,6 +236,10 @@ export default function UploadScreen({ navigation }) {
         navigation.navigate("CodeScanner");
     }
 
+    function openSignature() {
+        navigation.navigate("Signature");
+    }
+
     return (
         <GradientScreen>
             <SafeAreaView style={{ flex: 1 }}>
@@ -297,6 +301,25 @@ export default function UploadScreen({ navigation }) {
                         </View>
                         <ActionBtn icon="scan-outline" label="Open Code Scanner"
                             onPress={openCodeScanner} color={theme.colors.accentText} full />
+                    </View>
+
+
+                    {/* 3. Sign & Fill — FREE, fully on-device */}
+                    <View style={styles.card}>
+                        <View style={styles.cardHeader}>
+                            <View style={[styles.cardIcon, { backgroundColor: theme.colors.successBg }]}>
+                                <Ionicons name="create-outline" size={20} color={theme.colors.successText} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.cardTitle}>Sign &amp; Fill</Text>
+                                <Text style={styles.cardSubtitle}>
+                                    Draw your signature, place it on a page, add text and export a PDF
+                                </Text>
+                            </View>
+                            <FreeBadge />
+                        </View>
+                        <ActionBtn icon="create-outline" label="Sign a Document"
+                            onPress={openSignature} color={theme.colors.successText} full />
                     </View>
 
 

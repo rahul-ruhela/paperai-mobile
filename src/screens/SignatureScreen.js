@@ -1,0 +1,824 @@
+/**
+ * SignatureScreen — draw a signature, place it on a page, add text boxes,
+ * export a PDF and share it.
+ *
+ * Entirely on-device: no credits, no network. Route params:
+ *   { imageUri?: string, title?: string }
+ * With no imageUri the user picks a page first.
+ *
+ * Export path: the page is embedded as a base64 <img>, the signature as an inline
+ * SVG <path>, and expo-print renders the HTML to PDF — so the signature stays
+ * vector-crisp at any zoom rather than being a screenshot of the editor.
+ *
+ * IMPORTANT: the copy here must never claim legal validity. This produces a
+ * signature *image* on a document, not a certified e-signature.
+ */
+
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import {
+    View,
+    Text,
+    Pressable,
+    Modal,
+    Alert,
+    Image,
+    TextInput,
+    ScrollView,
+    PanResponder,
+    ActivityIndicator,
+    StyleSheet,
+    Dimensions,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
+import * as Print from "expo-print";
+import * as Sharing from "expo-sharing";
+import * as FileSystem from "expo-file-system/legacy";
+
+import GradientScreen from "../ui/GradientScreen";
+import SignaturePad, { strokesToSvg } from "../ui/SignaturePad";
+import { listSignatures, saveSignature, deleteSignature } from "../services/signatureStore";
+import { useTheme } from "../ui/ThemeProvider";
+import useThemedStyles from "../ui/useThemedStyles";
+
+const SCREEN_W = Dimensions.get("window").width;
+const PAGE_W = SCREEN_W - 32;
+// A4 aspect — the page frame the user drags onto. Real page images are letterboxed
+// inside it with resizeMode="contain" so placement percentages stay meaningful.
+const PAGE_H = PAGE_W * 1.414;
+
+const MIN_SIG_W = 70;
+const MAX_SIG_W = PAGE_W;
+
+export default function SignatureScreen({ navigation, route }) {
+    const { theme } = useTheme();
+    const styles = useThemedStyles(makeStyles);
+
+    const [pageUri, setPageUri] = useState(route?.params?.imageUri || null);
+    const [saved, setSaved] = useState([]);
+    const [padOpen, setPadOpen] = useState(false);
+    const [exporting, setExporting] = useState(false);
+
+    // The signature currently placed on the page.
+    const [placed, setPlaced] = useState(null); // { strokes, x, y, width, aspect }
+    // Text boxes dropped on the page.
+    const [boxes, setBoxes] = useState([]); // { id, text, x, y }
+    const [editingBox, setEditingBox] = useState(null);
+
+    const padRef = useRef(null);
+    const [padStrokes, setPadStrokes] = useState([]);
+
+    const refreshSaved = useCallback(async () => {
+        setSaved(await listSignatures());
+    }, []);
+
+    useEffect(() => {
+        refreshSaved();
+    }, [refreshSaved]);
+
+    // ── Page selection ────────────────────────────────────────────────────────
+    async function pickPage() {
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!perm.granted) {
+            Alert.alert(
+                "Photo Access Needed",
+                "Allow photo access so you can choose the page you want to sign."
+            );
+            return;
+        }
+        const res = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ["images"],
+            quality: 0.9,
+        });
+        if (!res.canceled && res.assets?.[0]?.uri) setPageUri(res.assets[0].uri);
+    }
+
+    // ── Signature capture ─────────────────────────────────────────────────────
+    function openPad() {
+        setPadStrokes([]);
+        setPadOpen(true);
+    }
+
+    function placeStrokes(strokes) {
+        const svg = strokesToSvg(strokes);
+        if (!svg) return;
+        const width = Math.min(200, PAGE_W * 0.5);
+        setPlaced({
+            strokes,
+            x: (PAGE_W - width) / 2,
+            y: PAGE_H * 0.72,
+            width,
+            aspect: svg.aspect,
+        });
+    }
+
+    async function confirmPad(alsoSave) {
+        const strokes = padRef.current?.getStrokes?.() || [];
+        if (strokes.length === 0) {
+            Alert.alert("Nothing drawn", "Draw your signature first.");
+            return;
+        }
+        if (alsoSave) {
+            await saveSignature(strokes);
+            await refreshSaved();
+        }
+        placeStrokes(strokes);
+        setPadOpen(false);
+    }
+
+    function useSaved(sig) {
+        placeStrokes(sig.strokes);
+    }
+
+    function removeSaved(sig) {
+        Alert.alert("Delete signature?", "This saved signature will be removed.", [
+            { text: "Cancel", style: "cancel" },
+            {
+                text: "Delete",
+                style: "destructive",
+                onPress: async () => {
+                    await deleteSignature(sig.id);
+                    await refreshSaved();
+                },
+            },
+        ]);
+    }
+
+    // ── Text boxes ────────────────────────────────────────────────────────────
+    function addTextBox() {
+        const box = { id: `t_${Date.now()}`, text: "Text", x: PAGE_W * 0.15, y: PAGE_H * 0.3 };
+        setBoxes((b) => [...b, box]);
+        setEditingBox(box);
+    }
+
+    function updateBox(id, patch) {
+        setBoxes((b) => b.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+    }
+
+    function removeBox(id) {
+        setBoxes((b) => b.filter((x) => x.id !== id));
+    }
+
+    // ── Export ────────────────────────────────────────────────────────────────
+    async function exportPdf() {
+        if (!pageUri) {
+            Alert.alert("No page", "Choose the page you want to sign first.");
+            return;
+        }
+        if (!placed && boxes.length === 0) {
+            Alert.alert("Nothing to add", "Add your signature or a text box before exporting.");
+            return;
+        }
+
+        setExporting(true);
+        try {
+            const base64 = await FileSystem.readAsStringAsync(pageUri, {
+                encoding: FileSystem.EncodingType.Base64,
+            });
+
+            // Everything is positioned in percentages of the page frame, so the
+            // PDF matches what the user arranged on screen at any output size.
+            const pct = (v, total) => `${((v / total) * 100).toFixed(3)}%`;
+
+            let overlay = "";
+
+            if (placed) {
+                const sig = strokesToSvg(placed.strokes, { color: "#111111" });
+                if (sig) {
+                    const h = placed.width / placed.aspect;
+                    overlay += `<div style="position:absolute;left:${pct(placed.x, PAGE_W)};top:${pct(
+                        placed.y,
+                        PAGE_H
+                    )};width:${pct(placed.width, PAGE_W)};height:${pct(h, PAGE_H)};">${sig.svg}</div>`;
+                }
+            }
+
+            for (const b of boxes) {
+                overlay += `<div style="position:absolute;left:${pct(b.x, PAGE_W)};top:${pct(
+                    b.y,
+                    PAGE_H
+                )};font-family:-apple-system,Helvetica,Arial,sans-serif;font-size:13pt;color:#111;">${escapeHtml(
+                    b.text
+                )}</div>`;
+            }
+
+            const html = `<!doctype html><html><head><meta charset="utf-8">
+<style>
+  @page { margin: 0; }
+  html,body { margin:0; padding:0; }
+  .page { position:relative; width:100%; }
+  .page img { display:block; width:100%; }
+</style></head><body>
+  <div class="page">
+    <img src="data:image/jpeg;base64,${base64}" />
+    ${overlay}
+  </div>
+</body></html>`;
+
+            const { uri } = await Print.printToFileAsync({ html });
+
+            if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(uri, {
+                    mimeType: "application/pdf",
+                    dialogTitle: "Share signed document",
+                    UTI: "com.adobe.pdf",
+                });
+            } else {
+                Alert.alert("Saved", "The signed PDF was created but sharing is unavailable on this device.");
+            }
+        } catch (err) {
+            Alert.alert("Export Failed", err?.message || "Could not create the PDF. Please try again.");
+        } finally {
+            setExporting(false);
+        }
+    }
+
+    // ── Render ────────────────────────────────────────────────────────────────
+    return (
+        <GradientScreen>
+            <SafeAreaView style={styles.flex}>
+                {/* Header */}
+                <View style={styles.header}>
+                    <Pressable onPress={() => navigation.goBack()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Go back">
+                        <Ionicons name="chevron-back" size={24} color={theme.colors.textPrimary} />
+                    </Pressable>
+                    <View style={styles.flex1}>
+                        <Text style={styles.title} numberOfLines={1}>
+                            {route?.params?.title || "Sign Document"}
+                        </Text>
+                        <Text style={styles.subtitle}>Free · stays on your device</Text>
+                    </View>
+                    <Pressable
+                        onPress={exportPdf}
+                        disabled={exporting}
+                        style={[styles.exportBtn, exporting && { opacity: 0.6 }]}
+                        accessibilityRole="button"
+                        accessibilityLabel="Export as PDF and share"
+                    >
+                        {exporting ? (
+                            <ActivityIndicator size="small" color={theme.colors.white} />
+                        ) : (
+                            <>
+                                <Ionicons name="share-outline" size={15} color={theme.colors.white} />
+                                <Text style={styles.exportText}>Save</Text>
+                            </>
+                        )}
+                    </Pressable>
+                </View>
+
+                <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+                    {/* Page canvas */}
+                    <View style={styles.page}>
+                        {pageUri ? (
+                            <Image source={{ uri: pageUri }} style={styles.pageImg} resizeMode="contain" />
+                        ) : (
+                            <Pressable onPress={pickPage} style={styles.pagePlaceholder} accessibilityRole="button">
+                                <Ionicons name="image-outline" size={34} color={theme.colors.textMuted} />
+                                <Text style={styles.placeholderTitle}>Choose a page to sign</Text>
+                                <Text style={styles.placeholderSub}>Pick a photo or scan of your document</Text>
+                            </Pressable>
+                        )}
+
+                        {/* Placed signature */}
+                        {placed && (
+                            <DraggableSignature
+                                placed={placed}
+                                onChange={setPlaced}
+                                onRemove={() => setPlaced(null)}
+                                theme={theme}
+                            />
+                        )}
+
+                        {/* Text boxes */}
+                        {boxes.map((b) => (
+                            <DraggableBox
+                                key={b.id}
+                                box={b}
+                                onChange={(patch) => updateBox(b.id, patch)}
+                                onEdit={() => setEditingBox(b)}
+                                onRemove={() => removeBox(b.id)}
+                                theme={theme}
+                            />
+                        ))}
+                    </View>
+
+                    {/* Toolbar */}
+                    <View style={styles.toolbar}>
+                        <ToolButton icon="create-outline" label="Draw" onPress={openPad} />
+                        <ToolButton icon="text-outline" label="Add text" onPress={addTextBox} />
+                        <ToolButton icon="image-outline" label={pageUri ? "Change page" : "Pick page"} onPress={pickPage} />
+                    </View>
+
+                    {/* Saved signatures */}
+                    {saved.length > 0 && (
+                        <View style={styles.savedWrap}>
+                            <Text style={styles.sectionLabel}>Saved signatures</Text>
+                            <View style={styles.savedRow}>
+                                {saved.map((s) => (
+                                    <Pressable
+                                        key={s.id}
+                                        onPress={() => useSaved(s)}
+                                        onLongPress={() => removeSaved(s)}
+                                        style={styles.savedChip}
+                                        accessibilityRole="button"
+                                        accessibilityLabel="Use saved signature. Long press to delete."
+                                    >
+                                        <MiniSignature strokes={s.strokes} color={theme.colors.textPrimary} />
+                                    </Pressable>
+                                ))}
+                            </View>
+                            <Text style={styles.hint}>Tap to place · long-press to delete</Text>
+                        </View>
+                    )}
+
+                    {/* Legal honesty — this is a signature image, not a certified e-signature. */}
+                    <View style={styles.disclaimer}>
+                        <Ionicons name="information-circle-outline" size={15} color={theme.colors.textMuted} />
+                        <Text style={styles.disclaimerText}>
+                            This adds a signature image to your document. It is not a certified or
+                            legally binding e-signature.
+                        </Text>
+                    </View>
+                </ScrollView>
+            </SafeAreaView>
+
+            {/* Draw pad */}
+            <Modal visible={padOpen} animationType="slide" transparent onRequestClose={() => setPadOpen(false)}>
+                <View style={styles.padOverlay}>
+                    <View style={styles.padSheet}>
+                        <View style={styles.padHead}>
+                            <Text style={styles.padTitle}>Draw your signature</Text>
+                            <Pressable onPress={() => setPadOpen(false)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close">
+                                <Ionicons name="close" size={22} color={theme.colors.textPrimary} />
+                            </Pressable>
+                        </View>
+
+                        <View style={styles.padFrame}>
+                            <SignaturePad ref={padRef} onChange={setPadStrokes} style={styles.pad} />
+                            <View style={styles.padBaseline} pointerEvents="none" />
+                        </View>
+
+                        <View style={styles.padActions}>
+                            <Pressable onPress={() => padRef.current?.undo?.()} style={styles.padGhost} accessibilityRole="button">
+                                <Ionicons name="arrow-undo-outline" size={16} color={theme.colors.textSecondary} />
+                                <Text style={styles.padGhostText}>Undo</Text>
+                            </Pressable>
+                            <Pressable onPress={() => padRef.current?.clear?.()} style={styles.padGhost} accessibilityRole="button">
+                                <Ionicons name="trash-outline" size={16} color={theme.colors.textSecondary} />
+                                <Text style={styles.padGhostText}>Clear</Text>
+                            </Pressable>
+                        </View>
+
+                        <Pressable
+                            onPress={() => confirmPad(true)}
+                            disabled={padStrokes.length === 0}
+                            style={[styles.padPrimary, padStrokes.length === 0 && { opacity: 0.45 }]}
+                            accessibilityRole="button"
+                        >
+                            <Text style={styles.padPrimaryText}>Save & Place</Text>
+                        </Pressable>
+                        <Pressable onPress={() => confirmPad(false)} disabled={padStrokes.length === 0} accessibilityRole="button">
+                            <Text style={[styles.padSecondaryText, padStrokes.length === 0 && { opacity: 0.45 }]}>
+                                Use once, don't save
+                            </Text>
+                        </Pressable>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Text box editor */}
+            <Modal visible={!!editingBox} animationType="fade" transparent onRequestClose={() => setEditingBox(null)}>
+                <Pressable style={styles.padOverlay} onPress={() => setEditingBox(null)}>
+                    <Pressable style={styles.textSheet} onPress={() => {}}>
+                        <Text style={styles.padTitle}>Edit text</Text>
+                        <TextInput
+                            value={editingBox?.text ?? ""}
+                            onChangeText={(t) => {
+                                setEditingBox((b) => ({ ...b, text: t }));
+                                updateBox(editingBox.id, { text: t });
+                            }}
+                            autoFocus
+                            placeholder="Type here"
+                            placeholderTextColor={theme.colors.placeholder}
+                            keyboardAppearance={theme.keyboardAppearance}
+                            style={styles.textInput}
+                        />
+                        <Pressable onPress={() => setEditingBox(null)} style={styles.padPrimary} accessibilityRole="button">
+                            <Text style={styles.padPrimaryText}>Done</Text>
+                        </Pressable>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+        </GradientScreen>
+    );
+}
+
+/* ── Draggable + resizable signature ─────────────────────────────────────────*/
+
+function DraggableSignature({ placed, onChange, onRemove, theme }) {
+    const start = useRef({ x: 0, y: 0, width: 0 });
+
+    const drag = useRef(
+        PanResponder.create({
+            onStartShouldSetPanResponder: () => true,
+            onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 2 || Math.abs(g.dy) > 2,
+            onPanResponderGrant: () => {
+                start.current = { x: placed.x, y: placed.y, width: placed.width };
+            },
+            onPanResponderMove: (_, g) => {
+                const h = start.current.width / placed.aspect;
+                onChange({
+                    ...placed,
+                    x: clamp(start.current.x + g.dx, 0, PAGE_W - start.current.width),
+                    y: clamp(start.current.y + g.dy, 0, PAGE_H - h),
+                });
+            },
+        })
+    ).current;
+
+    const resize = useRef(
+        PanResponder.create({
+            onStartShouldSetPanResponder: () => true,
+            onPanResponderGrant: () => {
+                start.current = { x: placed.x, y: placed.y, width: placed.width };
+            },
+            onPanResponderMove: (_, g) => {
+                const width = clamp(start.current.width + g.dx, MIN_SIG_W, Math.min(MAX_SIG_W, PAGE_W - start.current.x));
+                onChange({ ...placed, width });
+            },
+        })
+    ).current;
+
+    const height = placed.width / placed.aspect;
+
+    return (
+        <View
+            style={{
+                position: "absolute",
+                left: placed.x,
+                top: placed.y,
+                width: placed.width,
+                height,
+            }}
+        >
+            <View
+                {...drag.panHandlers}
+                style={{
+                    flex: 1,
+                    borderWidth: 1,
+                    borderStyle: "dashed",
+                    borderColor: theme.colors.primary,
+                    borderRadius: 4,
+                }}
+            >
+                <MiniSignature strokes={placed.strokes} color={theme.colors.black} fill />
+            </View>
+
+            {/* Remove */}
+            <Pressable
+                onPress={onRemove}
+                hitSlop={8}
+                style={[handleStyle(theme), { left: -11, top: -11, backgroundColor: theme.colors.danger }]}
+                accessibilityRole="button"
+                accessibilityLabel="Remove signature"
+            >
+                <Ionicons name="close" size={13} color={theme.colors.white} />
+            </Pressable>
+
+            {/* Resize */}
+            <View
+                {...resize.panHandlers}
+                style={[handleStyle(theme), { right: -11, bottom: -11, backgroundColor: theme.colors.primary }]}
+                accessibilityLabel="Resize signature"
+            >
+                <Ionicons name="resize-outline" size={13} color={theme.colors.white} />
+            </View>
+        </View>
+    );
+}
+
+function DraggableBox({ box, onChange, onEdit, onRemove, theme }) {
+    const start = useRef({ x: 0, y: 0 });
+
+    const drag = useRef(
+        PanResponder.create({
+            onStartShouldSetPanResponder: () => true,
+            onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 2 || Math.abs(g.dy) > 2,
+            onPanResponderGrant: () => {
+                start.current = { x: box.x, y: box.y };
+            },
+            onPanResponderMove: (_, g) => {
+                onChange({
+                    x: clamp(start.current.x + g.dx, 0, PAGE_W - 40),
+                    y: clamp(start.current.y + g.dy, 0, PAGE_H - 20),
+                });
+            },
+        })
+    ).current;
+
+    return (
+        <View style={{ position: "absolute", left: box.x, top: box.y }}>
+            <Pressable
+                {...drag.panHandlers}
+                onLongPress={onRemove}
+                onPress={onEdit}
+                style={{
+                    paddingHorizontal: 6,
+                    paddingVertical: 3,
+                    borderWidth: 1,
+                    borderStyle: "dashed",
+                    borderColor: theme.colors.primary,
+                    borderRadius: 4,
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={`Text box: ${box.text}. Tap to edit, long press to remove.`}
+            >
+                <Text style={{ color: theme.colors.black, fontSize: 13, fontWeight: "600" }}>
+                    {box.text || "Text"}
+                </Text>
+            </Pressable>
+        </View>
+    );
+}
+
+/**
+ * MiniSignature — renders stroke data scaled into whatever box it is given,
+ * reusing the same rotated-segment technique as the pad.
+ */
+function MiniSignature({ strokes, color, fill }) {
+    const [size, setSize] = useState({ w: 0, h: 0 });
+
+    const bounds = React.useMemo(() => {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const s of strokes || []) {
+            for (const p of s) {
+                if (p.x < minX) minX = p.x;
+                if (p.y < minY) minY = p.y;
+                if (p.x > maxX) maxX = p.x;
+                if (p.y > maxY) maxY = p.y;
+            }
+        }
+        return isFinite(minX) ? { minX, minY, w: maxX - minX || 1, h: maxY - minY || 1 } : null;
+    }, [strokes]);
+
+    if (!bounds) return null;
+
+    const pad = 4;
+    const scale =
+        size.w && size.h
+            ? Math.min((size.w - pad * 2) / bounds.w, (size.h - pad * 2) / bounds.h)
+            : 0;
+    const offX = (size.w - bounds.w * scale) / 2;
+    const offY = (size.h - bounds.h * scale) / 2;
+    const sw = Math.max(1.5, 3 * scale);
+
+    return (
+        <View
+            style={{ flex: fill ? 1 : undefined, width: fill ? undefined : "100%", height: fill ? undefined : "100%" }}
+            onLayout={(e) => setSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
+        >
+            {scale > 0 &&
+                (strokes || []).map((stroke, si) =>
+                    stroke.slice(1).map((pt, i) => {
+                        const prev = stroke[i];
+                        const x1 = (prev.x - bounds.minX) * scale + offX;
+                        const y1 = (prev.y - bounds.minY) * scale + offY;
+                        const x2 = (pt.x - bounds.minX) * scale + offX;
+                        const y2 = (pt.y - bounds.minY) * scale + offY;
+                        const dx = x2 - x1;
+                        const dy = y2 - y1;
+                        const len = Math.sqrt(dx * dx + dy * dy);
+                        return (
+                            <View
+                                key={`${si}-${i}`}
+                                pointerEvents="none"
+                                style={{
+                                    position: "absolute",
+                                    left: x1,
+                                    top: y1 - sw / 2,
+                                    width: len + sw * 0.6,
+                                    height: sw,
+                                    borderRadius: sw,
+                                    backgroundColor: color,
+                                    transform: [
+                                        { translateX: -sw * 0.3 },
+                                        { rotateZ: `${Math.atan2(dy, dx)}rad` },
+                                    ],
+                                    transformOrigin: `${sw * 0.3}px ${sw / 2}px`,
+                                }}
+                            />
+                        );
+                    })
+                )}
+        </View>
+    );
+}
+
+function ToolButton({ icon, label, onPress }) {
+    const { theme } = useTheme();
+    const styles = useThemedStyles(makeStyles);
+    return (
+        <Pressable
+            onPress={onPress}
+            style={({ pressed }) => [styles.tool, pressed && { opacity: 0.85 }]}
+            accessibilityRole="button"
+            accessibilityLabel={label}
+        >
+            <Ionicons name={icon} size={18} color={theme.colors.accentText} />
+            <Text style={styles.toolText}>{label}</Text>
+        </Pressable>
+    );
+}
+
+/* ── helpers ────────────────────────────────────────────────────────────────*/
+
+function clamp(v, min, max) {
+    return Math.max(min, Math.min(max, v));
+}
+
+function escapeHtml(s) {
+    return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+}
+
+function handleStyle(theme) {
+    return {
+        position: "absolute",
+        width: 22,
+        height: 22,
+        borderRadius: 22,
+        alignItems: "center",
+        justifyContent: "center",
+        borderWidth: 2,
+        borderColor: theme.colors.white,
+    };
+}
+
+const makeStyles = (t) =>
+    StyleSheet.create({
+        flex: { flex: 1 },
+        flex1: { flex: 1, minWidth: 0 },
+
+        header: {
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 12,
+            paddingHorizontal: 16,
+            paddingVertical: 10,
+        },
+        title: { color: t.colors.textPrimary, fontWeight: "900", fontSize: 17 },
+        subtitle: { color: t.colors.textMuted, fontWeight: "700", fontSize: 11.5, marginTop: 1 },
+
+        exportBtn: {
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 6,
+            paddingHorizontal: 14,
+            paddingVertical: 9,
+            borderRadius: 999,
+            backgroundColor: t.colors.primary,
+            minWidth: 78,
+            justifyContent: "center",
+        },
+        exportText: { color: t.colors.white, fontWeight: "900", fontSize: 13 },
+
+        scroll: { paddingHorizontal: 16, paddingBottom: 40 },
+
+        page: {
+            width: PAGE_W,
+            height: PAGE_H,
+            borderRadius: t.radius.lg,
+            overflow: "hidden",
+            backgroundColor: t.colors.white,
+            borderWidth: 1,
+            borderColor: t.colors.border,
+        },
+        pageImg: { width: "100%", height: "100%" },
+        pagePlaceholder: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8 },
+        placeholderTitle: { color: t.colors.black, fontWeight: "800", fontSize: 15 },
+        placeholderSub: { color: t.colors.textMuted, fontWeight: "600", fontSize: 12 },
+
+        toolbar: { flexDirection: "row", gap: 10, marginTop: 14 },
+        tool: {
+            flex: 1,
+            alignItems: "center",
+            gap: 6,
+            paddingVertical: 13,
+            borderRadius: t.radius.lg,
+            borderWidth: 1,
+            borderColor: t.colors.border,
+            backgroundColor: t.colors.glassSoft,
+        },
+        toolText: { color: t.colors.textSecondary, fontWeight: "800", fontSize: 12 },
+
+        savedWrap: { marginTop: 20 },
+        sectionLabel: { color: t.colors.textPrimary, fontWeight: "900", fontSize: 13, marginBottom: 10 },
+        savedRow: { flexDirection: "row", gap: 10 },
+        savedChip: {
+            width: 96,
+            height: 54,
+            borderRadius: t.radius.md,
+            borderWidth: 1,
+            borderColor: t.colors.border,
+            backgroundColor: t.colors.glassSoft,
+            overflow: "hidden",
+        },
+        hint: { color: t.colors.textMuted, fontWeight: "600", fontSize: 11, marginTop: 8 },
+
+        disclaimer: {
+            flexDirection: "row",
+            gap: 8,
+            marginTop: 22,
+            padding: 12,
+            borderRadius: t.radius.md,
+            backgroundColor: t.colors.glassSoft,
+            borderWidth: 1,
+            borderColor: t.colors.border,
+        },
+        disclaimerText: { flex: 1, color: t.colors.textMuted, fontWeight: "600", fontSize: 11.5, lineHeight: 16 },
+
+        padOverlay: { flex: 1, backgroundColor: t.colors.overlay, justifyContent: "flex-end" },
+        padSheet: {
+            backgroundColor: t.colors.sheet,
+            borderTopLeftRadius: 22,
+            borderTopRightRadius: 22,
+            padding: 18,
+            paddingBottom: 34,
+            gap: 12,
+        },
+        padHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+        padTitle: { color: t.colors.textPrimary, fontWeight: "900", fontSize: 16 },
+
+        padFrame: {
+            height: 190,
+            borderRadius: t.radius.lg,
+            backgroundColor: t.colors.white,
+            borderWidth: 1,
+            borderColor: t.colors.border,
+            overflow: "hidden",
+        },
+        // The pad draws in black on white so it looks like ink on paper in both themes.
+        pad: { flex: 1 },
+        padBaseline: {
+            position: "absolute",
+            left: 24,
+            right: 24,
+            bottom: 46,
+            height: 1,
+            backgroundColor: "rgba(0,0,0,0.14)",
+        },
+
+        padActions: { flexDirection: "row", gap: 10 },
+        padGhost: {
+            flex: 1,
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 6,
+            paddingVertical: 11,
+            borderRadius: t.radius.md,
+            borderWidth: 1,
+            borderColor: t.colors.border,
+        },
+        padGhostText: { color: t.colors.textSecondary, fontWeight: "800", fontSize: 13 },
+
+        padPrimary: {
+            paddingVertical: 14,
+            borderRadius: t.radius.lg,
+            backgroundColor: t.colors.primary,
+            alignItems: "center",
+        },
+        padPrimaryText: { color: t.colors.white, fontWeight: "900", fontSize: 15 },
+        padSecondaryText: {
+            color: t.colors.textMuted,
+            fontWeight: "700",
+            fontSize: 13,
+            textAlign: "center",
+            paddingVertical: 4,
+        },
+
+        textSheet: {
+            margin: 24,
+            marginTop: "auto",
+            marginBottom: "auto",
+            backgroundColor: t.colors.sheet,
+            borderRadius: 18,
+            padding: 18,
+            gap: 14,
+        },
+        textInput: {
+            color: t.colors.textPrimary,
+            backgroundColor: t.colors.inputBg,
+            borderWidth: 1,
+            borderColor: t.colors.inputBorder,
+            borderRadius: t.radius.md,
+            paddingHorizontal: 12,
+            paddingVertical: 11,
+            fontSize: 15,
+            fontWeight: "600",
+        },
+    });

@@ -1,19 +1,18 @@
-import React, { useMemo, useRef, useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import {
     View,
     Text,
     TextInput,
     Alert,
     StyleSheet,
-    Image,
     Pressable,
-    Animated,
     Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import Constants from "expo-constants";
 import GradientScreen from "../ui/GradientScreen";
+import BrandLockup from "../ui/BrandLockup";
 import AppButton from "../ui/AppButton";
 import { login, appleLogin } from "../api/auth";
 
@@ -43,20 +42,6 @@ export default function LoginScreen({ navigation, onAuthed }) {
     const [busy, setBusy] = useState(false);
     const [appleAvailable, setAppleAvailable] = useState(false);
     const [showPw, setShowPw] = useState(false);
-
-    const logo = useMemo(() => require("../../assets/logo.png"), []);
-    const pulse = useRef(new Animated.Value(1)).current;
-
-    useEffect(() => {
-        const loop = Animated.loop(
-            Animated.sequence([
-                Animated.timing(pulse, { toValue: 1.03, duration: 1400, useNativeDriver: true }),
-                Animated.timing(pulse, { toValue: 1.0, duration: 1400, useNativeDriver: true }),
-            ])
-        );
-        loop.start();
-        return () => loop.stop();
-    }, [pulse]);
 
     useEffect(() => {
         if (Platform.OS === "ios" && AppleAuthentication?.isAvailableAsync) {
@@ -139,13 +124,11 @@ export default function LoginScreen({ navigation, onAuthed }) {
         <GradientScreen>
             <SafeAreaView style={{ flex: 1 }}>
                 <View style={styles.container}>
-                    <Animated.View style={[styles.brandWrap, { transform: [{ scale: pulse }] }]}>
-                        <View style={styles.logoRing}>
-                            <Image source={logo} style={styles.logo} resizeMode="contain" />
-                        </View>
-                        <Text style={styles.brand}>PaperAI</Text>
-                        <Text style={styles.tagline}>Upload documents. Get instant AI insights.</Text>
-                    </Animated.View>
+                    <BrandLockup
+                        size="md"
+                        state={busy ? "working" : "idle"}
+                        style={styles.brandWrap}
+                    />
 
                     <View style={styles.card}>
                         <Text style={styles.cardTitle}>Sign in</Text>
@@ -244,18 +227,7 @@ export default function LoginScreen({ navigation, onAuthed }) {
 const makeStyles = (t) =>
     StyleSheet.create({
     container: { flex: 1, padding: 18, justifyContent: "center" },
-    brandWrap: { alignItems: "center", marginBottom: 18 },
-    logoRing: {
-        width: 84, height: 84, borderRadius: 24,
-        backgroundColor: t.colors.glass,
-        borderWidth: 1, borderColor: t.colors.glassBorder,
-        alignItems: "center", justifyContent: "center", marginBottom: 12,
-        shadowColor: t.colors.primary, shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.1, shadowRadius: 18, elevation: 4,
-    },
-    logo: { width: 56, height: 56 },
-    brand: { fontSize: 30, fontWeight: "800", color: t.colors.textPrimary, letterSpacing: 0.2 },
-    tagline: { marginTop: 6, color: t.colors.textMuted, textAlign: "center" },
+    brandWrap: { marginBottom: 20 },
 
     card: {
         backgroundColor: t.colors.glass,
