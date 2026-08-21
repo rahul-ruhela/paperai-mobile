@@ -37,10 +37,10 @@ Update the Status column when you pick up or finish a spec.
 
 | # | Feature | Spec | Credits | Conflicts with | Status |
 |---|---|---|---|---|---|
-| 1.1 | AI Chat with your document | [tier-1/01-ai-chat.md](tier-1/01-ai-chat.md) | 1/msg | 1.4 (UploadScreen) | TODO |
-| 1.2 | Smart Reminders | [tier-1/02-smart-reminders.md](tier-1/02-smart-reminders.md) | free | — | TODO |
+| 1.1 | AI Chat with your document | [tier-1/01-ai-chat.md](tier-1/01-ai-chat.md) | 1/msg | 1.4 (UploadScreen) | **DONE** · backend-blocked |
+| 1.2 | Smart Reminders | [tier-1/02-smart-reminders.md](tier-1/02-smart-reminders.md) | free | — | **DONE** |
 | 1.3 | Signature & Fill | [tier-1/03-signature-fill.md](tier-1/03-signature-fill.md) | free | — | **DONE** |
-| 1.4 | Receipt → Expense | [tier-1/04-receipt-expense.md](tier-1/04-receipt-expense.md) | 1 | 1.1 (UploadScreen) | TODO |
+| 1.4 | Receipt → Expense | [tier-1/04-receipt-expense.md](tier-1/04-receipt-expense.md) | 1 | 1.1 (UploadScreen) | **DONE** · backend-blocked |
 
 ### Tier 2 — Storage Studio · your differentiator
 
@@ -116,6 +116,9 @@ Do not build more than one pack until the first one shows retention.
 | `<AiOrb />` + Home hero redesign | `src/ui/AiOrb.js`, `HomeScreen` |
 | **1.3 Signature & Fill** (draw, place, text boxes, PDF export) | `SignatureScreen`, `src/ui/SignaturePad.js` |
 | Brand identity lockup (boot + login) | `src/ui/BrandLockup.js` |
+| **1.1 AI Chat** (stubbed, entry point gated) | `AiChatScreen`, `src/api/chat.js` |
+| **1.2 Smart Reminders** | `src/services/reminderService.js`, `src/ui/ReminderCard.js` |
+| **1.4 Receipt → Expense** (stubbed extraction) | `ReceiptCaptureScreen`, `ExpensesScreen`, `src/services/expenseStore.js` |
 
 ---
 
@@ -127,6 +130,15 @@ Do not build more than one pack until the first one shows retention.
 3. **3.1, 3.8** — PDF toolkit drives daily use; cross-document search is the moat.
 4. **5.1, 5.3, 5.5** — cheap, and they compound.
 5. **Tier 4** last, once you know who is actually retaining.
+
+## ⚠️ Waiting on the backend — flip these when the endpoints ship
+
+| Flag | File | Unblocks | Endpoints needed |
+|---|---|---|---|
+| `USE_STUB = false` | `src/api/chat.js` | 1.1 AI Chat (also un-hides the "Ask AI" button on AnalysisScreen) | `POST/GET /api/documents/{id}/chat` + credit config row `document_ai_chat` |
+| `USE_STUB = false` | `src/api/receipts.js` | 1.4 real extraction | `POST /api/receipts/extract` + credit config row `receipt_extract` |
+
+Both features are fully built and navigable — only the data source is missing.
 
 ## Backend work this roadmap requires
 

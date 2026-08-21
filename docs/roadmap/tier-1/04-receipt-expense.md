@@ -1,6 +1,6 @@
 # 1.4 — Receipt → Expense
 
-**Status:** TODO
+**Status:** DONE (UI complete) — BLOCKED on backend. src/api/receipts.js runs with USE_STUB=true; fields are hand-editable so the flow is fully usable meanwhile.
 **Branch:** `feat/receipt-expense`
 **Tier gate:** `essential` (already declared as `receipt_extraction`)
 **Credits:** 1 per receipt (reuses `image_ocr_extract_text` unless a dedicated key is added)

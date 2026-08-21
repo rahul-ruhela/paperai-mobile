@@ -21,6 +21,7 @@ import useThemedStyles from "../ui/useThemedStyles";
 import { useTheme } from "../ui/ThemeProvider";
 
 import { listTasks, createTask, updateTask } from "../api/tasks";
+import { groupedReminders, cancelReminder, formatDate } from "../services/reminderService";
 
 export default function TasksScreen() {
     const { theme } = useTheme();
@@ -31,15 +32,36 @@ export default function TasksScreen() {
     const [title, setTitle] = useState("");
     const [expandedId, setExpandedId] = useState(null);
     const [streak, setStreak] = useState(0);
+    const [reminders, setReminders] = useState({ upcoming: [], past: [] });
+    const [showPast, setShowPast] = useState(false);
 
     async function load() {
         const data = await listTasks();
         setTasks(Array.isArray(data) ? data : []);
     }
 
+    async function loadReminders() {
+        setReminders(await groupedReminders());
+    }
+
     useEffect(() => {
         load();
+        loadReminders();
     }, []);
+
+    function removeReminder(r) {
+        Alert.alert("Cancel reminder?", `${r.label} · ${formatDate(r.dateUtc)}`, [
+            { text: "Keep", style: "cancel" },
+            {
+                text: "Cancel reminder",
+                style: "destructive",
+                onPress: async () => {
+                    await cancelReminder(r.id);
+                    await loadReminders();
+                },
+            },
+        ]);
+    }
 
     async function add() {
         try {
@@ -86,6 +108,59 @@ export default function TasksScreen() {
 
                     <FlatList
                         data={tasks}
+                        ListHeaderComponent={
+                            reminders.upcoming.length > 0 || reminders.past.length > 0 ? (
+                                <View style={{ marginBottom: 14 }}>
+                                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                                        <Ionicons name="alarm-outline" size={16} color={theme.colors.warningText} />
+                                        <Text style={{ flex: 1, color: theme.colors.textPrimary, fontWeight: "900", fontSize: 14 }}>
+                                            Reminders
+                                        </Text>
+                                        {reminders.past.length > 0 ? (
+                                            <Pressable onPress={() => setShowPast((v) => !v)} hitSlop={8} accessibilityRole="button">
+                                                <Text style={{ color: theme.colors.accentText, fontWeight: "800", fontSize: 12 }}>
+                                                    {showPast ? "Hide past" : `Past (${reminders.past.length})`}
+                                                </Text>
+                                            </Pressable>
+                                        ) : null}
+                                    </View>
+
+                                    {(showPast ? reminders.past : reminders.upcoming).map((r) => (
+                                        <Card key={r.id} style={{ marginBottom: 8 }}>
+                                            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                                                <Ionicons
+                                                    name={showPast ? "time-outline" : "notifications-outline"}
+                                                    size={18}
+                                                    color={showPast ? theme.colors.textMuted : theme.colors.warningText}
+                                                />
+                                                <View style={{ flex: 1, minWidth: 0 }}>
+                                                    <Text style={{ color: theme.colors.textPrimary, fontWeight: "800", fontSize: 13 }} numberOfLines={1}>
+                                                        {r.docTitle}
+                                                    </Text>
+                                                    <Text style={{ color: theme.colors.textMuted, fontWeight: "600", fontSize: 11.5, marginTop: 2 }}>
+                                                        {r.label} · {formatDate(r.dateUtc)}
+                                                    </Text>
+                                                </View>
+                                                <Pressable
+                                                    onPress={() => removeReminder(r)}
+                                                    hitSlop={8}
+                                                    accessibilityRole="button"
+                                                    accessibilityLabel="Cancel this reminder"
+                                                >
+                                                    <Ionicons name="close-circle-outline" size={19} color={theme.colors.textMuted} />
+                                                </Pressable>
+                                            </View>
+                                        </Card>
+                                    ))}
+
+                                    {showPast && reminders.past.length === 0 ? (
+                                        <Text style={{ color: theme.colors.textMuted, fontWeight: "600", fontSize: 12 }}>
+                                            No past reminders.
+                                        </Text>
+                                    ) : null}
+                                </View>
+                            ) : null
+                        }
                         keyExtractor={(x) => x.id}
                         contentContainerStyle={{ paddingBottom: 90 }}
                         ListEmptyComponent={

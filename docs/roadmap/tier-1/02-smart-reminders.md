@@ -1,6 +1,6 @@
 # 1.2 — Smart Reminders
 
-**Status:** TODO
+**Status:** DONE — client-side date extraction (backend `detectedDates` preferred automatically when it ships). Permission requested on tap, deep-link wired in App.js.
 **Branch:** `feat/smart-reminders`
 **Tier gate:** `essential` (already declared as `smart_reminders`)
 **Credits:** free — no charge. It is a retention feature, not a revenue feature.

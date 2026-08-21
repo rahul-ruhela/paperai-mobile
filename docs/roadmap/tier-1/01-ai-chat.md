@@ -1,6 +1,6 @@
 # 1.1 — AI Chat with your document
 
-**Status:** TODO
+**Status:** DONE (UI complete) — BLOCKED on backend. src/api/chat.js runs with USE_STUB=true; the Analysis entry point is hidden until the flag flips, so no placeholder feature ships (App Review 2.1).
 **Branch:** `feat/ai-chat`
 **Tier gate:** `plus` (already declared as `ai_chat` in `featureMatrix.ts`)
 **Credits:** 1 per user message. Free for the first message of each document (hook).

@@ -1,5 +1,6 @@
 ﻿import React, { useEffect, useState } from "react";
-import { NavigationContainer, DefaultTheme, DarkTheme } from "@react-navigation/native";
+import { NavigationContainer, DefaultTheme, DarkTheme, createNavigationContainerRef } from "@react-navigation/native";
+import * as Notifications from "expo-notifications";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
@@ -42,6 +43,12 @@ import JunkWiperScanScreen from "./src/screens/JunkWiperScanScreen";
 import CameraDocumentScanScreen from "./src/screens/CameraDocumentScanScreen";
 import CodeScannerScreen from "./src/screens/CodeScannerScreen";
 import SignatureScreen from "./src/screens/SignatureScreen";
+import AiChatScreen from "./src/screens/AiChatScreen";
+import ReceiptCaptureScreen from "./src/screens/ReceiptCaptureScreen";
+import ExpensesScreen from "./src/screens/ExpensesScreen";
+
+// Shared ref so a tapped notification can navigate without being inside a screen.
+const navigationRef = createNavigationContainerRef();
 import BootScreen from "./src/screens/BootScreen";
 
 const Stack = createNativeStackNavigator();
@@ -160,6 +167,20 @@ function AppShell() {
         ensureExpoGoTestCredits();
     };
 
+    // Smart Reminders (spec 1.2): tapping a reminder notification opens the
+    // document it belongs to. Registered once, and safe to run before the
+    // navigator mounts — isReady() gates the navigate call.
+    useEffect(() => {
+        const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+            const data = response?.notification?.request?.content?.data;
+            if (data?.type !== "reminder" || !data?.docId) return;
+            if (navigationRef.isReady()) {
+                navigationRef.navigate("Analysis", { docId: data.docId });
+            }
+        });
+        return () => sub.remove();
+    }, []);
+
     // ✅ Conditional render AFTER hooks.
     // `hydrated` gates on the stored appearance preference so the first paint
     // is already in the right palette instead of flashing light then swapping.
@@ -183,7 +204,7 @@ function AppShell() {
 
     return (
         <ErrorBoundary>
-        <NavigationContainer theme={navTheme}>
+        <NavigationContainer ref={navigationRef} theme={navTheme}>
             <Stack.Navigator
                 screenOptions={{
                     headerStyle: {
@@ -298,6 +319,21 @@ function AppShell() {
                         <Stack.Screen
                             name="Signature"
                             component={SignatureScreen}
+                            options={{ headerShown: false }}
+                        />
+                        <Stack.Screen
+                            name="AiChat"
+                            component={AiChatScreen}
+                            options={{ headerShown: false }}
+                        />
+                        <Stack.Screen
+                            name="ReceiptCapture"
+                            component={ReceiptCaptureScreen}
+                            options={{ headerShown: false }}
+                        />
+                        <Stack.Screen
+                            name="Expenses"
+                            component={ExpensesScreen}
                             options={{ headerShown: false }}
                         />
                     </>

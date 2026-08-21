@@ -19,6 +19,7 @@ export { default as AppButton } from "./AppButton";
 export { default as AiHeader } from "./AiHeader";
 export { default as AiOrb } from "./AiOrb";
 export { default as BrandLockup } from "./BrandLockup";
+export { default as ReminderCard } from "./ReminderCard";
 export { default as SignaturePad, strokesToSvg } from "./SignaturePad";
 export { default as useReduceMotion } from "./useReduceMotion";
 
