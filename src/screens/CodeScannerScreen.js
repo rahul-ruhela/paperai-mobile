@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CameraView, useCameraPermissions } from "expo-camera";
+import CameraPermissionGate from "../ui/CameraPermissionGate";
 import { Ionicons } from "@expo/vector-icons";
 
 // General-purpose code scanner — QR, barcodes, and other common symbologies.
@@ -33,40 +34,18 @@ export default function CodeScannerScreen({ navigation }) {
     const [result, setResult] = useState(null); // { type, data }
     const lockRef = useRef(false); // debounce repeated scans of the same frame
 
-    // ── Permission gates ───────────────────────────────────────────────────────
-    if (!permission) {
+    // ── Permission gate ────────────────────────────────────────────────────────
+    // Shared component — see CameraPermissionGate for the guideline 5.1.1(iv)
+    // rules this has to satisfy. Do not inline a custom pre-prompt here again.
+    if (!permission?.granted) {
         return (
-            <View style={styles.centeredContainer}>
-                <ActivityIndicator size="large" color="#A5B4FC" />
-            </View>
-        );
-    }
-
-    if (!permission.granted) {
-        const canAsk = permission.canAskAgain;
-        return (
-            <SafeAreaView style={styles.centeredContainer}>
-                <View style={styles.permissionBox}>
-                    <Ionicons name="qr-code-outline" size={52} color="#A5B4FC" />
-                    <Text style={styles.permissionTitle}>Camera Permission Required</Text>
-                    <Text style={styles.permissionSubtitle}>
-                        Paper AI needs camera access to scan QR codes and barcodes.
-                    </Text>
-                    {canAsk ? (
-                        <Pressable style={({ pressed }) => [styles.permBtn, pressed && { opacity: 0.75 }]} onPress={requestPermission}>
-                            <Text style={styles.permBtnText}>Grant Permission</Text>
-                        </Pressable>
-                    ) : (
-                        <Pressable style={({ pressed }) => [styles.permBtn, pressed && { opacity: 0.75 }]} onPress={() => Linking.openSettings()}>
-                            <Ionicons name="settings-outline" size={16} color="#020617" />
-                            <Text style={styles.permBtnText}>Open Settings</Text>
-                        </Pressable>
-                    )}
-                    <Pressable style={styles.permCancelBtn} onPress={() => navigation.goBack()}>
-                        <Text style={styles.permCancelText}>Go Back</Text>
-                    </Pressable>
-                </View>
-            </SafeAreaView>
+            <CameraPermissionGate
+                permission={permission}
+                requestPermission={requestPermission}
+                onGoBack={() => navigation.goBack()}
+                icon="qr-code-outline"
+                reason="Scanning a QR code or barcode uses the camera to read the code in front of you."
+            />
         );
     }
 

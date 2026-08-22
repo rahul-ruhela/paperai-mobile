@@ -148,9 +148,40 @@ function PaywallNative({ navigation }) {
                 // background so a recovering backend activates the plan quietly
                 // instead of greeting them with the same alert on every launch.
                 if (isFirstFailure && !isReplay) {
+                    // An alert with no action is a dead end — it is what App
+                    // Review saw and reported as "the purchase failed to
+                    // activate subscription". Offer the retry directly.
                     Alert.alert(
                         "Activation pending",
-                        "Your purchase went through and you have not been charged twice. We could not activate it just yet — we'll keep retrying automatically. If it hasn't activated shortly, tap \"Restore Purchases\" or contact support."
+                        "Your purchase went through and you have not been charged twice. We could not activate it just yet.",
+                        [
+                            { text: "Later", style: "cancel" },
+                            {
+                                text: "Retry now",
+                                onPress: async () => {
+                                    try {
+                                        setLoadingSku("__retry__");
+                                        await verifyIosTransactionAutoWithRetry(transactionId);
+                                        await finishTransaction({ purchase, isConsumable: false });
+                                        await clearFailedVerification(transactionId);
+                                        const e = await loadEntitlement();
+                                        Alert.alert(
+                                            entitlementIsActive(e) ? "Subscribed!" : "Still Activating",
+                                            entitlementIsActive(e)
+                                                ? "Your plan is now active. Thank you!"
+                                                : "Apple has not confirmed it yet. Tap \"Restore Purchases\" in a moment — you will not be charged twice."
+                                        );
+                                    } catch {
+                                        Alert.alert(
+                                            "Still Activating",
+                                            "Apple has not confirmed it yet. Tap \"Restore Purchases\" in a moment — you will not be charged twice."
+                                        );
+                                    } finally {
+                                        setLoadingSku(null);
+                                    }
+                                },
+                            },
+                        ]
                     );
                 }
             } finally {

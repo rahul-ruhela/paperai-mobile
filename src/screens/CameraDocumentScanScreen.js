@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CameraView, useCameraPermissions } from "expo-camera";
+import CameraPermissionGate from "../ui/CameraPermissionGate";
 import { Ionicons } from "@expo/vector-icons";
 import * as SecureStore from "expo-secure-store";
 import * as MediaLibrary from "expo-media-library";
@@ -73,37 +74,17 @@ export default function CameraDocumentScanScreen({ navigation }) {
         );
     }
 
-    if (!permission.granted) {
-        const canAsk = permission.canAskAgain;
+    // Shared component — see CameraPermissionGate for the guideline 5.1.1(iv)
+    // rules this has to satisfy. Do not inline a custom pre-prompt here again.
+    if (!permission?.granted) {
         return (
-            <SafeAreaView style={styles.centeredContainer}>
-                <View style={styles.permissionBox}>
-                    <Ionicons name="camera-outline" size={52} color="#A5B4FC" />
-                    <Text style={styles.permissionTitle}>Camera Permission Required</Text>
-                    <Text style={styles.permissionSubtitle}>
-                        Paper AI needs camera access to scan and capture documents.
-                    </Text>
-                    {canAsk ? (
-                        <Pressable
-                            style={({ pressed }) => [styles.permBtn, pressed && { opacity: 0.75 }]}
-                            onPress={requestPermission}
-                        >
-                            <Text style={styles.permBtnText}>Grant Permission</Text>
-                        </Pressable>
-                    ) : (
-                        <Pressable
-                            style={({ pressed }) => [styles.permBtn, pressed && { opacity: 0.75 }]}
-                            onPress={() => Linking.openSettings()}
-                        >
-                            <Ionicons name="settings-outline" size={16} color="#020617" />
-                            <Text style={styles.permBtnText}>Open Settings</Text>
-                        </Pressable>
-                    )}
-                    <Pressable style={styles.permCancelBtn} onPress={() => navigation.goBack()}>
-                        <Text style={styles.permCancelText}>Go Back</Text>
-                    </Pressable>
-                </View>
-            </SafeAreaView>
+            <CameraPermissionGate
+                permission={permission}
+                requestPermission={requestPermission}
+                onGoBack={() => navigation.goBack()}
+                icon="camera-outline"
+                reason="Scanning a document uses the camera to photograph the page in front of you."
+            />
         );
     }
 
