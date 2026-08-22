@@ -134,6 +134,10 @@ function PaywallNative({ navigation }) {
     // scheduled it for the renewal date" from "we are still verifying" — the
     // latter can legitimately run past the deferred-change grace window.
     const storeKitRespondedRef = useRef(false);
+    // The SKU the user actually tapped. `loadingSku` is state and is captured
+    // stale inside the useIAP callbacks, so the comparison that decides whether
+    // the purchase delivered the plan that was asked for has to read a ref.
+    const requestedSkuRef = useRef(null);
     // A fetch has finished (successfully or not) — until then we show "Loading…"
     // rather than "Unavailable", so a slow StoreKit call doesn't look like a failure.
     const [fetchSettled, setFetchSettled] = useState(false);
@@ -190,7 +194,41 @@ function PaywallNative({ navigation }) {
 
                 await finishTransaction({ purchase, isConsumable: false });
                 await clearFailedVerification(transactionId);
-                await loadEntitlement();
+                const current = await loadEntitlement();
+
+                // StoreKit answering "success" does NOT mean the user now has
+                // the plan they tapped. All nine products share one subscription
+                // group, so Apple applies a downgrade — or any move to a shorter
+                // billing period — at the next renewal date, and hands back the
+                // transaction for the plan that is STILL active. Verifying that
+                // transaction re-confirms the OLD plan, so the server correctly
+                // reports the old product and its credits. Announcing "your plan
+                // is now active" on top of that is what made buying Weekly look
+                // like it had granted the Yearly plan's credits: the purchase
+                // was fine, the sentence was about the wrong subscription.
+                const requestedSku = requestedSkuRef.current;
+                const activeSku = current?.productId ?? null;
+                const deferredToRenewal =
+                    !!requestedSku &&
+                    !!activeSku &&
+                    activeSku !== requestedSku &&
+                    entitlementIsActive(current);
+
+                if (deferredToRenewal) {
+                    const startsOn = formatPeriodEnd(current);
+                    setPendingChange({ sku: requestedSku, startsOn });
+                    Alert.alert(
+                        "Plan change scheduled",
+                        `${planLabelForSku(requestedSku)} is confirmed and will start ` +
+                        (startsOn
+                            ? `on ${startsOn}, when your current period ends.`
+                            : "when your current billing period ends.") +
+                        `\n\nUntil then you keep ${planLabelForSku(activeSku)} and its credits, ` +
+                        "and you have not been charged twice. Apple applies downgrades and " +
+                        "changes of billing period at the renewal date."
+                    );
+                    return;
+                }
 
                 Alert.alert("Subscribed!", "Your plan is now active. Thank you!", [
                     { text: "Continue", onPress: () => navigation.goBack() },
@@ -258,11 +296,13 @@ function PaywallNative({ navigation }) {
                     );
                 }
             } finally {
+                requestedSkuRef.current = null;
                 setLoadingSku(null);
             }
         },
         onPurchaseError: (error) => {
             storeKitRespondedRef.current = true;
+            requestedSkuRef.current = null;
             setLoadingSku(null);
             const code = error?.code ?? "";
             if (code === "user-cancelled" || code === "E_USER_CANCELLED") return;
@@ -426,6 +466,7 @@ function PaywallNative({ navigation }) {
             : null;
 
         storeKitRespondedRef.current = false;
+        requestedSkuRef.current = sku;
         setLoadingSku(sku);
         purchaseRequestedRef.current = true;
         try {
