@@ -75,6 +75,9 @@ function PaywallNative({ navigation }) {
     const { useIAP, getAvailablePurchases } = require("expo-iap");
 
     const [loadingSku, setLoadingSku] = useState(null);
+    // True once the user taps a plan in THIS session, so a failure that follows
+    // their own action is always reported, while launch-time replays stay quiet.
+    const purchaseRequestedRef = useRef(false);
     const [entitlement, setEntitlement] = useState(null);
     const [duration, setDuration] = useState("yearly");
     // A fetch has finished (successfully or not) — until then we show "Loading…"
@@ -144,10 +147,14 @@ function PaywallNative({ navigation }) {
 
                 const isFirstFailure = await recordFailedVerification(transactionId, productId);
 
-                // Only interrupt the user the first time. Later runs retry in the
-                // background so a recovering backend activates the plan quietly
-                // instead of greeting them with the same alert on every launch.
-                if (isFirstFailure && !isReplay) {
+                // Silence is only appropriate for a REPLAY the user did not ask
+                // for — StoreKit re-delivering an old unfinished transaction at
+                // launch. When the user just tapped a plan, they must always be
+                // told what happened; suppressing it there is what left a paying
+                // customer watching a spinner with no explanation and no
+                // transaction id to report.
+                const userInitiated = purchaseRequestedRef.current;
+                if (userInitiated || (isFirstFailure && !isReplay)) {
                     // An alert with no action is a dead end — it is what App
                     // Review saw and reported as "the purchase failed to
                     // activate subscription". Offer the retry directly.
@@ -315,6 +322,7 @@ function PaywallNative({ navigation }) {
             return;
         }
         setLoadingSku(sku);
+        purchaseRequestedRef.current = true;
         try {
             await requestPurchase({ request: { apple: { sku } }, type: "subs" });
         } catch (e) {
