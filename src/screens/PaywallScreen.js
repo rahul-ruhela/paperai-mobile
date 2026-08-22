@@ -72,7 +72,7 @@ export default function PaywallScreen(props) {
 ========================================================================= */
 function PaywallNative({ navigation }) {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { useIAP } = require("expo-iap");
+    const { useIAP, getAvailablePurchases } = require("expo-iap");
 
     const [loadingSku, setLoadingSku] = useState(null);
     const [entitlement, setEntitlement] = useState(null);
@@ -151,9 +151,17 @@ function PaywallNative({ navigation }) {
                     // An alert with no action is a dead end — it is what App
                     // Review saw and reported as "the purchase failed to
                     // activate subscription". Offer the retry directly.
+                    // Include the transaction id and the server's answer. Without
+                    // them a failure here is undiagnosable from a user report,
+                    // which is exactly the position this bug left us in.
+                    const diag =
+                        `\n\nTransaction: ${transactionId ?? "unknown"}` +
+                        `\nServer: ${err?.response?.status ?? "none"} ` +
+                        `${JSON.stringify(err?.response?.data ?? null)}`;
+
                     Alert.alert(
                         "Activation pending",
-                        "Your purchase went through and you have not been charged twice. We could not activate it just yet.",
+                        "Your purchase went through and you have not been charged twice. We could not activate it just yet." + diag,
                         [
                             { text: "Later", style: "cancel" },
                             {
@@ -321,14 +329,62 @@ function PaywallNative({ navigation }) {
         if (loadingSku) return;
         setLoadingSku("__restore__");
         try {
+            // restorePurchases() only re-delivers through the async
+            // onPurchaseSuccess listener. Checking our own entitlement straight
+            // afterwards raced that callback and reported "nothing to restore"
+            // even when Apple had a live subscription — which is misleading in
+            // exactly the situation restore exists for. So ask StoreKit what
+            // this Apple ID actually owns, then re-verify it ourselves.
             await restorePurchases();
+
+            let owned = [];
+            try {
+                owned = (await getAvailablePurchases()) ?? [];
+            } catch (listErr) {
+                console.warn("[IAP] getAvailablePurchases failed", listErr?.message);
+            }
+
+            const failures = [];
+            for (const p of owned) {
+                const txId = p?.transactionId;
+                if (!txId) continue;
+                try {
+                    await verifyIosTransactionAutoWithRetry(txId);
+                    await finishTransaction({ purchase: p, isConsumable: false });
+                    await clearFailedVerification(txId);
+                } catch (err) {
+                    failures.push({
+                        txId,
+                        status: err?.response?.status ?? "none",
+                        body: JSON.stringify(err?.response?.data ?? null),
+                    });
+                }
+            }
+
             const e = await loadEntitlement();
+
             if (entitlementIsActive(e)) {
                 Alert.alert("Restored", "Your subscription is active.", [
                     { text: "OK", onPress: () => navigation.goBack() },
                 ]);
+            } else if (owned.length === 0) {
+                // Truthful now: StoreKit itself reports nothing for this Apple ID.
+                Alert.alert(
+                    "Nothing to restore",
+                    "This Apple ID has no active Paper AI subscription. If you subscribed with a different Apple ID, sign in with that one and try again."
+                );
             } else {
-                Alert.alert("Nothing to restore", "No active subscription found for this Apple ID.");
+                // Apple DOES have a subscription and we could not confirm it.
+                // Saying "nothing to restore" here would be a lie, and it hides
+                // the one detail needed to diagnose the failure.
+                const f = failures[0] ?? {};
+                Alert.alert(
+                    "Could not activate",
+                    `Apple reports an active subscription for this Apple ID, but our server has not confirmed it yet.\n\n` +
+                    `Transaction: ${f.txId ?? owned[0]?.transactionId ?? "unknown"}\n` +
+                    `Server: ${f.status ?? "?"} ${f.body ?? ""}\n\n` +
+                    `You have not been charged twice. Please send this screen to support.`
+                );
             }
         } catch (e) {
             Alert.alert("Restore failed", e?.userMessage ?? e?.message ?? "Please try again.");
