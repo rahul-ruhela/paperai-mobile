@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import {
     View,
     Text,
@@ -9,6 +9,7 @@ import {
     Alert,
     Image,
     TextInput,
+    Animated,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -23,6 +24,7 @@ import { useLegacyTheme } from "../ui/theme";
 import { makeCommon, makeHomeStyles } from "../ui/styles";
 import useThemedStyles from "../ui/useThemedStyles";
 import { useTheme } from "../ui/ThemeProvider";
+import useReduceMotion from "../ui/useReduceMotion";
 
 import { listDocuments, deleteDocument } from "../api/documents";
 
@@ -53,6 +55,51 @@ function escapeRegExp(s) {
     return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+// Only the first screenful is staggered. Past that the delay would be longer
+// than the row takes to scroll into view, so later rows just fade straight in —
+// and a row re-mounted by FlatList while scrolling back never stalls visibly.
+const STAGGER_LIMIT = 8;
+const STAGGER_STEP_MS = 55;
+
+/**
+ * A list row that rises and fades in on mount.
+ *
+ * Kept as its own component so each row owns one Animated.Value; hoisting them
+ * into HomeScreen would mean re-creating the whole set on every re-render.
+ * `reduceMotion` is passed in rather than read here — a hook per row would
+ * register one AccessibilityInfo listener per visible document.
+ */
+function FadeInRow({ index, reduceMotion, children }) {
+    const anim = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        if (reduceMotion) {
+            anim.setValue(1);
+            return;
+        }
+        const a = Animated.timing(anim, {
+            toValue: 1,
+            duration: 320,
+            delay: Math.min(index, STAGGER_LIMIT) * STAGGER_STEP_MS,
+            useNativeDriver: true,
+        });
+        a.start();
+        return () => a.stop();
+    }, [reduceMotion, index, anim]);
+
+    const style = useMemo(
+        () => ({
+            opacity: anim,
+            transform: [
+                { translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) },
+            ],
+        }),
+        [anim]
+    );
+
+    return <Animated.View style={style}>{children}</Animated.View>;
+}
+
 export default function HomeScreen({ navigation }) {
     const { theme } = useTheme();
     const Theme = useLegacyTheme();
@@ -67,6 +114,33 @@ export default function HomeScreen({ navigation }) {
 
     const [selectedDoc, setSelectedDoc] = useState(null);
     const [pinnedIds, setPinnedIds] = useState([]);
+
+    // Search field + tab pills settle in just ahead of the first rows, so the
+    // screen assembles top-down instead of appearing all at once.
+    const reduceMotion = useReduceMotion();
+    const chrome = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        if (reduceMotion) {
+            chrome.setValue(1);
+            return;
+        }
+        const a = Animated.timing(chrome, { toValue: 1, duration: 380, useNativeDriver: true });
+        a.start();
+        return () => a.stop();
+    }, [reduceMotion, chrome]);
+
+    // Memoized: the search field re-renders this screen on every keystroke, and
+    // a new interpolation node each time would rebuild the native animated node.
+    const chromeEnter = useMemo(
+        () => ({
+            opacity: chrome,
+            transform: [
+                { translateY: chrome.interpolate({ inputRange: [0, 1], outputRange: [-10, 0] }) },
+            ],
+        }),
+        [chrome]
+    );
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -219,62 +293,67 @@ export default function HomeScreen({ navigation }) {
         );
     }
 
-    function renderItem({ item }) {
+    function renderItem({ item, index }) {
         const pinned = pinnedIds.includes(item.id);
 
         return (
-            <Card style={S.card}>
-                <Pressable onPress={() => openDoc(item)} style={({ pressed }) => pressed && { opacity: 0.93 }}>
-                    <View style={[Common.row, { gap: 10 }]}>
-                        {renderThumbnail(item)}
+            <FadeInRow index={index} reduceMotion={reduceMotion}>
+                <Card style={S.card}>
+                    <Pressable
+                        onPress={() => openDoc(item)}
+                        style={({ pressed }) => pressed && { opacity: 0.93, transform: [{ scale: 0.985 }] }}
+                    >
+                        <View style={[Common.row, { gap: 10 }]}>
+                            {renderThumbnail(item)}
 
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                            <Text style={S.title} numberOfLines={1}>
-                                {highlightText(item.title)}
-                            </Text>
-
-                            {item.summary ? (
-                                <Text style={S.preview} numberOfLines={1}>
-                                    {highlightText(item.summary)}
+                            <View style={{ flex: 1, minWidth: 0 }}>
+                                <Text style={S.title} numberOfLines={1}>
+                                    {highlightText(item.title)}
                                 </Text>
-                            ) : (
-                                <Text style={S.previewMuted} numberOfLines={1}>
-                                    {isProcessed(item) ? "AI summary ready" : "AI is working…"}
-                                </Text>
-                            )}
 
-                            <View style={S.metaRow}>
-                                {renderStatusBadge(item)}
-                                {renderConfidence(item)}
+                                {item.summary ? (
+                                    <Text style={S.preview} numberOfLines={1}>
+                                        {highlightText(item.summary)}
+                                    </Text>
+                                ) : (
+                                    <Text style={S.previewMuted} numberOfLines={1}>
+                                        {isProcessed(item) ? "AI summary ready" : "AI is working…"}
+                                    </Text>
+                                )}
+
+                                <View style={S.metaRow}>
+                                    {renderStatusBadge(item)}
+                                    {renderConfidence(item)}
+                                </View>
                             </View>
+
+                            {/* Pin (FIX: stopPropagation so it doesn't open the doc) */}
+                            <Pressable
+                                onPress={(e) => {
+                                    e?.stopPropagation?.();
+                                    togglePin(item.id);
+                                }}
+                                hitSlop={10}
+                                style={S.iconBtn}
+                            >
+                                <Ionicons name={pinned ? "pin" : "pin-outline"} size={18} color={pinned ? Theme.colors.primary2 : Theme.colors.text2} />
+                            </Pressable>
+
+                            {/* 3-dot menu (FIX: visible + stopPropagation) */}
+                            <Pressable
+                                onPress={(e) => {
+                                    e?.stopPropagation?.();
+                                    setSelectedDoc(item);
+                                }}
+                                hitSlop={10}
+                                style={S.iconBtn}
+                            >
+                                <Ionicons name="ellipsis-horizontal" size={18} color={Theme.colors.text} />
+                            </Pressable>
                         </View>
-
-                        {/* Pin (FIX: stopPropagation so it doesn't open the doc) */}
-                        <Pressable
-                            onPress={(e) => {
-                                e?.stopPropagation?.();
-                                togglePin(item.id);
-                            }}
-                            hitSlop={10}
-                            style={S.iconBtn}
-                        >
-                            <Ionicons name={pinned ? "pin" : "pin-outline"} size={18} color={pinned ? Theme.colors.primary2 : Theme.colors.text2} />
-                        </Pressable>
-
-                        {/* 3-dot menu (FIX: visible + stopPropagation) */}
-                        <Pressable
-                            onPress={(e) => {
-                                e?.stopPropagation?.();
-                                setSelectedDoc(item);
-                            }}
-                            hitSlop={10}
-                            style={S.iconBtn}
-                        >
-                            <Ionicons name="ellipsis-horizontal" size={18} color={Theme.colors.text} />
-                        </Pressable>
-                    </View>
-                </Pressable>
-            </Card>
+                    </Pressable>
+                </Card>
+            </FadeInRow>
         );
     }
 
@@ -287,7 +366,7 @@ export default function HomeScreen({ navigation }) {
                     <AiHeader title="Document AI" subtitle="Workspace" />
 
                     {/* Search */}
-                    <View style={S.searchBox}>
+                    <Animated.View style={[S.searchBox, chromeEnter]}>
                         <Ionicons name="search" size={14} color={Theme.colors.muted} />
                         <TextInput
                             value={query}
@@ -302,15 +381,15 @@ export default function HomeScreen({ navigation }) {
                                 <Ionicons name="close-circle" size={18} color={Theme.colors.muted} />
                             </Pressable>
                         )}
-                    </View>
+                    </Animated.View>
 
                     {/* Tabs */}
-                    <View style={S.tabsRow}>
+                    <Animated.View style={[S.tabsRow, chromeEnter]}>
                         <TabPill active={tab === TABS.INBOX} text="Inbox" onPress={() => setTab(TABS.INBOX)} />
                         <TabPill active={tab === TABS.AI_READY} text="AI-ready" onPress={() => setTab(TABS.AI_READY)} />
                         <TabPill active={tab === TABS.PENDING} text="Pending" onPress={() => setTab(TABS.PENDING)} />
                         <TabPill active={tab === TABS.PINNED} text="Pinned" onPress={() => setTab(TABS.PINNED)} />
-                    </View>
+                    </Animated.View>
 
                     <FlatList
                         data={visibleDocs}
@@ -342,10 +421,7 @@ export default function HomeScreen({ navigation }) {
             </SafeAreaView>
 
             {/* Apply Intelligence (RESTORED) */}
-            <Pressable onPress={() => navigation.navigate("Upload")} style={S.fab}>
-                <Ionicons name="add" size={22} color="#FFFFFF" />
-                <Text style={S.fabText}>Apply Intelligence</Text>
-            </Pressable>
+            <IntelligenceFab onPress={() => navigation.navigate("Upload")} />
 
             {/* Action Sheet */}
             <Modal visible={!!selectedDoc} transparent animationType="slide" onRequestClose={closeMenu}>
@@ -385,6 +461,70 @@ export default function HomeScreen({ navigation }) {
     );
 }
 
+/**
+ * The primary action. Springs up once the list has settled, and dips under the
+ * finger on press. Scale only — the hit box never moves under the user's thumb.
+ */
+function IntelligenceFab({ onPress }) {
+    const S = useThemedStyles(makeHomeStyles);
+    const reduceMotion = useReduceMotion();
+    const enter = useRef(new Animated.Value(0)).current;
+    const press = useRef(new Animated.Value(1)).current;
+
+    useEffect(() => {
+        if (reduceMotion) {
+            enter.setValue(1);
+            return;
+        }
+        const a = Animated.spring(enter, {
+            toValue: 1,
+            delay: 260,
+            useNativeDriver: true,
+            friction: 6,
+            tension: 70,
+        });
+        a.start();
+        return () => a.stop();
+    }, [reduceMotion, enter]);
+
+    const pressIn = () =>
+        Animated.spring(press, { toValue: 0.94, useNativeDriver: true, speed: 40, bounciness: 0 }).start();
+    const pressOut = () =>
+        Animated.spring(press, { toValue: 1, useNativeDriver: true, speed: 40, bounciness: 8 }).start();
+
+    return (
+        <Animated.View
+            style={[
+                S.fab,
+                {
+                    opacity: enter,
+                    transform: [
+                        { scale: Animated.multiply(enter, press) },
+                        {
+                            translateY: enter.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [18, 0],
+                            }),
+                        },
+                    ],
+                },
+            ]}
+        >
+            <Pressable
+                onPress={onPress}
+                onPressIn={pressIn}
+                onPressOut={pressOut}
+                style={S.fabPressable}
+                accessibilityRole="button"
+                accessibilityLabel="Apply Intelligence"
+            >
+                <Ionicons name="add" size={22} color="#FFFFFF" />
+                <Text style={S.fabText}>Apply Intelligence</Text>
+            </Pressable>
+        </Animated.View>
+    );
+}
+
 function TabPill({ text, active, onPress }) {
     const S = useThemedStyles(makeHomeStyles);
     return (
@@ -408,11 +548,36 @@ function SheetAction({ icon, text, onPress, danger }) {
 function EmptyState({ title, subtitle, icon, onUpload }) {
     const Theme = useLegacyTheme();
     const S = useThemedStyles(makeHomeStyles);
+    const reduceMotion = useReduceMotion();
+    const float = useRef(new Animated.Value(0)).current;
+    const fade = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        if (reduceMotion) {
+            float.setValue(0);
+            fade.setValue(1);
+            return;
+        }
+        const fadeIn = Animated.timing(fade, { toValue: 1, duration: 420, useNativeDriver: true });
+        const drift = Animated.loop(
+            Animated.sequence([
+                Animated.timing(float, { toValue: -7, duration: 1700, useNativeDriver: true }),
+                Animated.timing(float, { toValue: 0, duration: 1700, useNativeDriver: true }),
+            ])
+        );
+        fadeIn.start();
+        drift.start();
+        return () => {
+            fadeIn.stop();
+            drift.stop();
+        };
+    }, [reduceMotion, float, fade]);
+
     return (
-        <View style={S.emptyWrap}>
-            <View style={S.emptyIcon}>
+        <Animated.View style={[S.emptyWrap, { opacity: fade }]}>
+            <Animated.View style={[S.emptyIcon, { transform: [{ translateY: float }] }]}>
                 <Ionicons name={icon} size={26} color={Theme.colors.primary2} />
-            </View>
+            </Animated.View>
             <Text style={S.emptyTitle}>{title}</Text>
             <Text style={S.emptySub}>{subtitle}</Text>
 
@@ -420,6 +585,6 @@ function EmptyState({ title, subtitle, icon, onUpload }) {
                 <Ionicons name="cloud-upload-outline" size={18} color="#FFFFFF" />
                 <Text style={S.emptyBtnText}>Upload & Analyze</Text>
             </Pressable>
-        </View>
+        </Animated.View>
     );
 }

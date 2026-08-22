@@ -19,6 +19,7 @@ import { login, appleLogin } from "../api/auth";
 
 import { useTheme } from "../ui/ThemeProvider";
 import useThemedStyles from "../ui/useThemedStyles";
+import useReduceMotion from "../ui/useReduceMotion";
 // Apple Sign In is only available on iOS native builds (not Expo Go / web)
 let AppleAuthentication = null;
 try {
@@ -45,18 +46,98 @@ export default function LoginScreen({ navigation, onAuthed }) {
     const [showPw, setShowPw] = useState(false);
 
     const logo = useMemo(() => require("../../assets/logo.png"), []);
+    const reduceMotion = useReduceMotion();
+
+    // Entrance: brand, then card, then footer — each one rises and fades in.
+    // Driven off a single 0→1 value so the three only need different output
+    // ranges rather than three separate timers.
+    const intro = useRef(new Animated.Value(0)).current;
+    // Continuous idle motion on the mark: a slow breath plus a drifting halo.
     const pulse = useRef(new Animated.Value(1)).current;
+    const halo = useRef(new Animated.Value(0)).current;
+    const float = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
-        const loop = Animated.loop(
-            Animated.sequence([
-                Animated.timing(pulse, { toValue: 1.03, duration: 1400, useNativeDriver: true }),
-                Animated.timing(pulse, { toValue: 1.0, duration: 1400, useNativeDriver: true }),
-            ])
-        );
-        loop.start();
-        return () => loop.stop();
-    }, [pulse]);
+        if (reduceMotion) {
+            // Land on the finished state instead of animating to it.
+            intro.setValue(1);
+            pulse.setValue(1);
+            halo.setValue(0);
+            float.setValue(0);
+            return;
+        }
+
+        Animated.timing(intro, {
+            toValue: 1,
+            duration: 620,
+            delay: 60,
+            useNativeDriver: true,
+        }).start();
+
+        const loops = [
+            Animated.loop(
+                Animated.sequence([
+                    Animated.timing(pulse, { toValue: 1.04, duration: 1600, useNativeDriver: true }),
+                    Animated.timing(pulse, { toValue: 1.0, duration: 1600, useNativeDriver: true }),
+                ])
+            ),
+            Animated.loop(
+                Animated.sequence([
+                    Animated.timing(halo, { toValue: 1, duration: 2200, useNativeDriver: true }),
+                    Animated.timing(halo, { toValue: 0, duration: 2200, useNativeDriver: true }),
+                ])
+            ),
+            Animated.loop(
+                Animated.sequence([
+                    Animated.timing(float, { toValue: -5, duration: 1900, useNativeDriver: true }),
+                    Animated.timing(float, { toValue: 0, duration: 1900, useNativeDriver: true }),
+                ])
+            ),
+        ];
+        loops.forEach((l) => l.start());
+        return () => loops.forEach((l) => l.stop());
+    }, [reduceMotion, intro, pulse, halo, float]);
+
+    // Each block enters over its own slice of `intro`, which staggers them
+    // without extra Animated.Values. Memoized because this screen re-renders on
+    // every keystroke, and a fresh interpolation node per render means the
+    // native animated node is torn down and rebuilt while the user types.
+    const { brandEnter, cardEnter, footerEnter } = useMemo(() => {
+        const enter = (from, to, offset) => ({
+            opacity: intro.interpolate({
+                inputRange: [from, to],
+                outputRange: [0, 1],
+                extrapolate: "clamp",
+            }),
+            transform: [
+                {
+                    translateY: intro.interpolate({
+                        inputRange: [from, to],
+                        outputRange: [offset, 0],
+                        extrapolate: "clamp",
+                    }),
+                },
+            ],
+        });
+        return {
+            brandEnter: enter(0, 0.55, 22),
+            cardEnter: enter(0.2, 0.85, 30),
+            footerEnter: enter(0.5, 1, 14),
+        };
+    }, [intro]);
+
+    const haloStyle = useMemo(
+        () => ({
+            opacity: halo.interpolate({ inputRange: [0, 1], outputRange: [0.25, 0.6] }),
+            transform: [{ scale: halo.interpolate({ inputRange: [0, 1], outputRange: [1, 1.18] }) }],
+        }),
+        [halo]
+    );
+
+    const markStyle = useMemo(
+        () => ({ transform: [{ translateY: float }, { scale: pulse }] }),
+        [float, pulse]
+    );
 
     useEffect(() => {
         if (Platform.OS === "ios" && AppleAuthentication?.isAvailableAsync) {
@@ -139,15 +220,23 @@ export default function LoginScreen({ navigation, onAuthed }) {
         <GradientScreen>
             <SafeAreaView style={{ flex: 1 }}>
                 <View style={styles.container}>
-                    <Animated.View style={[styles.brandWrap, { transform: [{ scale: pulse }] }]}>
-                        <View style={styles.logoRing}>
-                            <Image source={logo} style={styles.logo} resizeMode="contain" />
-                        </View>
+                    <Animated.View style={[styles.brandWrap, brandEnter]}>
+                        <Animated.View style={markStyle}>
+                            {/* Halo sits BEHIND the mark and only breathes in
+                                opacity/scale, so it never intercepts touches. */}
+                            <Animated.View
+                                pointerEvents="none"
+                                style={[styles.logoHalo, haloStyle]}
+                            />
+                            <View style={styles.logoRing}>
+                                <Image source={logo} style={styles.logo} resizeMode="contain" />
+                            </View>
+                        </Animated.View>
                         <Text style={styles.brand}>PaperAI</Text>
                         <Text style={styles.tagline}>Upload documents. Get instant AI insights.</Text>
                     </Animated.View>
 
-                    <View style={styles.card}>
+                    <Animated.View style={[styles.card, cardEnter]}>
                         <Text style={styles.cardTitle}>Sign in</Text>
 
                         <View style={styles.inputWrap}>
@@ -230,11 +319,11 @@ export default function LoginScreen({ navigation, onAuthed }) {
                                 Create an account →
                             </Text>
                         </View>
-                    </View>
+                    </Animated.View>
 
-                    <Text style={styles.footerNote}>
+                    <Animated.Text style={[styles.footerNote, footerEnter]}>
                         Built for fast, private document intelligence.
-                    </Text>
+                    </Animated.Text>
                 </View>
             </SafeAreaView>
         </GradientScreen>
@@ -252,6 +341,15 @@ const makeStyles = (t) =>
         alignItems: "center", justifyContent: "center", marginBottom: 12,
         shadowColor: t.colors.primary, shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.1, shadowRadius: 18, elevation: 4,
+    },
+    // Soft glow behind the app mark. Absolutely positioned and centred on the
+    // 84pt ring above it.
+    logoHalo: {
+        position: "absolute",
+        top: -8, left: -8,
+        width: 100, height: 100,
+        borderRadius: 34,
+        backgroundColor: t.isDark ? "rgba(110,168,255,0.22)" : "rgba(79,140,255,0.20)",
     },
     logo: { width: 56, height: 56 },
     brand: { fontSize: 30, fontWeight: "800", color: t.colors.textPrimary, letterSpacing: 0.2 },

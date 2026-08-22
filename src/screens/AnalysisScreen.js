@@ -179,7 +179,7 @@ export default function AnalysisScreen({ route, navigation }) {
                                             <Ionicons
                                                 name="share-outline"
                                                 size={18}
-                                                color="#004aad"
+                                                color={theme.colors.accentText}
                                             />
                                         </Pressable>
                                     </View>
@@ -239,7 +239,7 @@ export default function AnalysisScreen({ route, navigation }) {
                                                     : "chevron-down"
                                             }
                                             size={18}
-                                            color="#004aad"
+                                            color={theme.colors.accentText}
                                         />
                                     </Pressable>
 
@@ -290,7 +290,7 @@ const makeStyles = (t) =>
     card: {
         marginBottom: 16,
         backgroundColor: t.colors.surface,
-        borderColor: "rgba(0,0,0,0.06)",
+        borderColor: t.colors.border,
     },
 
     cardHeader: {
@@ -300,21 +300,24 @@ const makeStyles = (t) =>
         marginBottom: 6,
     },
 
+    // Card headings ("Summary", "AI Action Tasks", "Extracted Text"). These were
+    // a hardcoded navy that vanished against the dark card — they must follow
+    // the theme, and stay distinct from the blue `verb` accent below.
     heading: {
         fontSize: 16,
         fontWeight: "900",
-        color: "#020c45",
+        color: t.colors.textPrimary,
     },
 
     body: {
         fontSize: 14,
         lineHeight: 22,
-        color: "#334155",
+        color: t.colors.textSecondary,
         fontWeight: "600",
     },
 
     muted: {
-        color: "#64748B",
+        color: t.colors.textMuted,
         fontWeight: "600",
     },
 
@@ -331,17 +334,17 @@ const makeStyles = (t) =>
 
     taskTitle: {
         fontWeight: "700",
-        color: "#020c45",
+        color: t.colors.textPrimary,
     },
 
     verb: {
-        color: "#004aad",
+        color: t.colors.accentText,
         fontWeight: "900",
     },
 
     taskReason: {
         marginTop: 0,
-        color: "#475569",
+        color: t.colors.textMuted,
         fontWeight: "600",
     },
 
@@ -353,12 +356,12 @@ const makeStyles = (t) =>
 
     inProgressTitle: {
         fontWeight: "900",
-        color: "#020c45",
+        color: t.colors.textPrimary,
         fontSize: 16,
     },
 
     inProgressText: {
-        color: "#475569",
+        color: t.colors.textMuted,
         fontWeight: "600",
         textAlign: "center",
     },
@@ -369,14 +372,15 @@ const makeStyles = (t) =>
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: "rgba(15,23,42,0.35)",
+        backgroundColor: t.colors.overlay,
         justifyContent: "center",
         alignItems: "center",
         gap: 12,
     },
 
+    // Sits on the dark scrim above, so it stays light in BOTH themes.
     overlayText: {
-        color: "#E0E7FF",
+        color: t.colors.white,
         fontWeight: "800",
     },
 });

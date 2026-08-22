@@ -37,6 +37,7 @@ import {
     SUBSCRIPTION_TIERS,
     DURATION_LABELS,
     ALL_SUBSCRIPTION_SKUS,
+    productInfoForSku,
 } from "../constants/api";
 import ScreenContainer from "../ui/ScreenContainer";
 
@@ -52,9 +53,51 @@ const DURATIONS = ["weekly", "monthly", "yearly"];
 const PURCHASE_POLL_MS = 2000;
 const PURCHASE_TIMEOUT_MS = 45000;
 
+// How long the new plan gets to appear before we conclude Apple has DEFERRED
+// the change to the next renewal date (see the poll in PaywallNative). An
+// immediate upgrade normally lands in a few seconds, but server-side
+// verification can legitimately run ~15s, so this must clear that comfortably.
+const DEFERRED_CHANGE_GRACE_MS = 22000;
+
 // Backend may return either `active` or `isActive` — accept both.
 function entitlementIsActive(e) {
     return !!(e?.active ?? e?.isActive);
+}
+
+// Human name for a product id — "Plus Monthly" rather than a raw bundle id.
+function planLabelForSku(sku) {
+    const info = productInfoForSku(sku);
+    if (!info) return sku ?? "your plan";
+    return `${info.tier.name} ${DURATION_LABELS[info.duration]}`;
+}
+
+// The backend has used a few names for the period end across versions; accept
+// any of them rather than silently dropping the date from the message.
+function periodEndDate(e) {
+    const raw =
+        e?.expiresAtUtc ??
+        e?.expiresAt ??
+        e?.expiresDateUtc ??
+        e?.renewsAtUtc ??
+        e?.currentPeriodEndUtc ??
+        null;
+    if (!raw) return null;
+    const d = new Date(raw);
+    return isNaN(d.getTime()) ? null : d;
+}
+
+function formatPeriodEnd(e) {
+    const d = periodEndDate(e);
+    if (!d) return null;
+    try {
+        return d.toLocaleDateString(undefined, {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+        });
+    } catch {
+        return d.toDateString();
+    }
 }
 
 /* =========================================================================
@@ -80,6 +123,17 @@ function PaywallNative({ navigation }) {
     const purchaseRequestedRef = useRef(false);
     const [entitlement, setEntitlement] = useState(null);
     const [duration, setDuration] = useState("yearly");
+    // A plan change Apple has accepted but scheduled for the next renewal date
+    // (downgrades and cross-duration changes). Shape: { sku, startsOn }.
+    const [pendingChange, setPendingChange] = useState(null);
+    // Which product was active at the moment the user tapped Subscribe. Needed
+    // to tell "the new plan has not landed yet" apart from "Apple deferred it".
+    const previousProductIdRef = useRef(null);
+    // True once StoreKit has handed us a transaction for THIS request. A
+    // deferred change never produces one, so this is what separates "Apple
+    // scheduled it for the renewal date" from "we are still verifying" — the
+    // latter can legitimately run past the deferred-change grace window.
+    const storeKitRespondedRef = useRef(false);
     // A fetch has finished (successfully or not) — until then we show "Loading…"
     // rather than "Unavailable", so a slow StoreKit call doesn't look like a failure.
     const [fetchSettled, setFetchSettled] = useState(false);
@@ -89,6 +143,9 @@ function PaywallNative({ navigation }) {
         try {
             const e = await getEntitlement();
             setEntitlement(e);
+            // The scheduled change has landed (or the user changed plans again
+            // in App Store settings) — stop advertising it.
+            setPendingChange((p) => (p && e?.productId === p.sku ? null : p));
             // Other screens (Settings, feature gates) read a cached snapshot
             // from entitlementService — drop it so they don't show a stale plan.
             invalidateEntitlements();
@@ -112,6 +169,7 @@ function PaywallNative({ navigation }) {
         // the transaction open is what lets a failed purchase heal itself once
         // the backend is healthy again.
         onPurchaseSuccess: async (purchase) => {
+            storeKitRespondedRef.current = true;
             const transactionId = purchase?.transactionId;
             const productId = purchase?.productId ?? purchase?.id ?? null;
             const isReplay = await wasPreviouslyUnverified(transactionId);
@@ -204,6 +262,7 @@ function PaywallNative({ navigation }) {
             }
         },
         onPurchaseError: (error) => {
+            storeKitRespondedRef.current = true;
             setLoadingSku(null);
             const code = error?.code ?? "";
             if (code === "user-cancelled" || code === "E_USER_CANCELLED") return;
@@ -224,8 +283,17 @@ function PaywallNative({ navigation }) {
     // the tier button spins forever. Polling the entitlement both fixes that
     // and makes activation feel immediate: the moment the backend reports the
     // plan active we stop the spinner, rather than waiting on StoreKit.
+    //
+    // It also has to recognise a change Apple has DELIBERATELY not applied yet.
+    // Within one subscription group Apple only switches immediately when the
+    // new plan is an upgrade; a downgrade, or any move to a different billing
+    // period at the same level, is scheduled for the current period's renewal
+    // date and the old plan stays active until then. Treating that as a failed
+    // purchase — which is what the old "Still processing" alert did — tells a
+    // customer who was charged nothing that something went wrong, when in fact
+    // Apple did exactly what it was asked to do.
     useEffect(() => {
-        if (!loadingSku || loadingSku === "__restore__") return;
+        if (!loadingSku || loadingSku === "__restore__" || loadingSku === "__retry__") return;
 
         let cancelled = false;
         let elapsed = 0;
@@ -245,6 +313,34 @@ function PaywallNative({ navigation }) {
             if (switchedToThisPlan) {
                 clearInterval(timer);
                 setLoadingSku(null);
+                setPendingChange(null);
+                return;
+            }
+
+            // Still sitting on the plan the user started from, well past the
+            // point an immediate upgrade would have landed → Apple scheduled it.
+            const stillOnPreviousPlan =
+                entitlementIsActive(current) &&
+                !storeKitRespondedRef.current &&
+                !!previousProductIdRef.current &&
+                current?.productId === previousProductIdRef.current;
+
+            if (stillOnPreviousPlan && elapsed >= DEFERRED_CHANGE_GRACE_MS) {
+                clearInterval(timer);
+                setLoadingSku(null);
+
+                const startsOn = formatPeriodEnd(current);
+                setPendingChange({ sku: loadingSku, startsOn });
+
+                Alert.alert(
+                    "Plan change scheduled",
+                    `${planLabelForSku(loadingSku)} is confirmed and will start ` +
+                    (startsOn
+                        ? `on ${startsOn}, when your current period ends.`
+                        : "when your current billing period ends.") +
+                    `\n\nYou keep ${planLabelForSku(current?.productId)} until then, and you have not been charged twice. ` +
+                    "Apple applies downgrades and changes of billing period at the renewal date."
+                );
                 return;
             }
 
@@ -321,6 +417,15 @@ function PaywallNative({ navigation }) {
             );
             return;
         }
+        // Snapshot the plan we are moving away from BEFORE StoreKit runs, so the
+        // poll below can recognise a change Apple has scheduled rather than
+        // applied. Null when there is nothing active — a first purchase can
+        // never be "deferred".
+        previousProductIdRef.current = entitlementIsActive(entitlement)
+            ? entitlement?.productId ?? null
+            : null;
+
+        storeKitRespondedRef.current = false;
         setLoadingSku(sku);
         purchaseRequestedRef.current = true;
         try {
@@ -430,6 +535,7 @@ function PaywallNative({ navigation }) {
             duration={duration}
             setDuration={setDuration}
             entitlement={entitlement}
+            pendingChange={pendingChange}
             loadingSku={loadingSku}
             productsStatus={productsStatus}
             onRetryProducts={loadProducts}
@@ -541,6 +647,7 @@ function PaywallView({
     duration,
     setDuration,
     entitlement,
+    pendingChange,
     loadingSku,
     notice,
     productsStatus = "ready",
@@ -578,6 +685,33 @@ function PaywallView({
                 </Text>
 
                 {!!notice && <Text style={styles.notice}>{notice}</Text>}
+
+                {/* What the account is actually on right now. Without this the
+                    paywall is silent about the current plan, which is what made
+                    a scheduled downgrade look like the purchase had failed. */}
+                {entitlementIsActive(entitlement) && (
+                    <View style={styles.currentPlan}>
+                        <Text style={styles.currentPlanLabel}>CURRENT PLAN</Text>
+                        <Text style={styles.currentPlanName}>
+                            {planLabelForSku(entitlement?.productId)}
+                        </Text>
+                        {!!formatPeriodEnd(entitlement) && (
+                            <Text style={styles.currentPlanMeta}>
+                                {pendingChange
+                                    ? `Runs until ${formatPeriodEnd(entitlement)}`
+                                    : `Renews ${formatPeriodEnd(entitlement)}`}
+                            </Text>
+                        )}
+                        {!!pendingChange && (
+                            <Text style={styles.currentPlanScheduled}>
+                                {`${planLabelForSku(pendingChange.sku)} starts ` +
+                                    `${pendingChange.startsOn ?? "at renewal"}. ` +
+                                    "Apple applies downgrades and billing-period changes at the " +
+                                    "renewal date, not immediately."}
+                            </Text>
+                        )}
+                    </View>
+                )}
 
                 {(productsStatus === "error" || productsStatus === "partial") && (
                     <View style={styles.productsBanner}>
@@ -624,6 +758,9 @@ function PaywallView({
                     const isActive =
                         entitlementIsActive(entitlement) &&
                         entitlement.productId === product.sku;
+                    // Bought and confirmed by Apple, but starts at the next
+                    // renewal — not active yet, and not available to re-buy.
+                    const isScheduled = !isActive && pendingChange?.sku === product.sku;
                     const isBusyThis = loadingSku === product.sku;
                     const Wrapper = tier.highlight ? Animated.View : View;
                     const wrapperStyle = tier.highlight ? { transform: [{ scale: scaleAnim }] } : null;
@@ -635,6 +772,7 @@ function PaywallView({
                                     styles.card,
                                     tier.highlight && styles.cardHighlight,
                                     isActive && styles.cardActive,
+                                    isScheduled && styles.cardScheduled,
                                 ]}
                             >
                                 {tier.highlight && (
@@ -674,13 +812,24 @@ function PaywallView({
                                 )}
                                 <Text style={styles.credits}>{product.credits} credits / cycle</Text>
 
+                                {isScheduled && (
+                                    <Text style={styles.scheduledNote}>
+                                        {`Scheduled — starts ${
+                                            pendingChange.startsOn ??
+                                            "when your current period ends"
+                                        }.`}
+                                    </Text>
+                                )}
+
                                 <GradientCTA
                                     onPress={() => onSubscribe(product.sku)}
                                     busy={isBusyThis}
-                                    disabled={isActive || isBusyAny || priceUnavailable}
+                                    disabled={isActive || isScheduled || isBusyAny || priceUnavailable}
                                     label={
                                         isActive
                                             ? "ACTIVE PLAN"
+                                            : isScheduled
+                                            ? "STARTS AT RENEWAL"
                                             : priceUnavailable
                                             ? "UNAVAILABLE"
                                             : "Subscribe"
@@ -817,6 +966,42 @@ const makeStyles = (t) =>
     },
     cardHighlight: { borderColor: t.colors.primary, backgroundColor: t.colors.infoBg },
     cardActive: { borderColor: t.colors.success },
+    cardScheduled: { borderColor: t.colors.warning },
+    scheduledNote: {
+        color: t.colors.warningText,
+        fontSize: 12,
+        fontWeight: "700",
+        marginBottom: 10,
+    },
+
+    currentPlan: {
+        backgroundColor: t.colors.successBg,
+        borderColor: t.colors.successBorder,
+        borderWidth: 1,
+        borderRadius: 14,
+        padding: 12,
+        marginBottom: 18,
+    },
+    currentPlanLabel: {
+        color: t.colors.successText,
+        fontSize: 10,
+        fontWeight: "900",
+        letterSpacing: 0.8,
+    },
+    currentPlanName: {
+        color: t.colors.textPrimary,
+        fontSize: 17,
+        fontWeight: "800",
+        marginTop: 2,
+    },
+    currentPlanMeta: { color: t.colors.textMuted, fontSize: 12, fontWeight: "600", marginTop: 2 },
+    currentPlanScheduled: {
+        color: t.colors.warningText,
+        fontSize: 12,
+        fontWeight: "600",
+        lineHeight: 17,
+        marginTop: 8,
+    },
     popular: {
         alignSelf: "flex-start",
         backgroundColor: t.colors.accent,

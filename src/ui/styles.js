@@ -211,6 +211,9 @@ export const makeHomeStyles = (t) =>
         },
         aiText: { flex: 1, fontSize: 13, fontWeight: "600", color: t.colors.textPrimary },
 
+        // Outer shell: position, fill and shadow. It is the animated element,
+        // so the padding lives on `fabPressable` below — otherwise the touch
+        // target would be the label alone rather than the whole pill.
         fab: {
             position: "absolute",
             right: 14,
@@ -219,12 +222,16 @@ export const makeHomeStyles = (t) =>
             elevation: 20,
             backgroundColor: t.colors.primary,
             borderRadius: 999,
+            ...shadowIOS(t),
+        },
+        fabPressable: {
             paddingHorizontal: 14,
-            paddingVertical: 10,
+            paddingVertical: 12,
+            minHeight: 44,
             flexDirection: "row",
             alignItems: "center",
+            justifyContent: "center",
             gap: 8,
-            ...shadowIOS(t),
         },
         fabText: { color: t.colors.white, fontWeight: "800", fontSize: 13 },
     });
