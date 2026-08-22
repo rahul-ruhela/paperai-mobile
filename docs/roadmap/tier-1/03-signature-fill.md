@@ -1,6 +1,26 @@
 # 1.3 — Signature & Fill
 
-**Status:** DONE — shipped zero-dependency (no react-native-svg). Pad draws with rotated views; export uses inline SVG path in expo-print HTML.
+**Status:** DONE — zero-dependency (no react-native-svg). Pad draws with rotated
+views; export uses an inline SVG path in the expo-print HTML.
+
+**Bug-fix pass 2026-08-21** — four defects found and fixed after the first cut.
+Read these before touching gesture or export code here:
+1. All three `PanResponder`s were created inside `useRef(...)`, freezing `placed`
+   and `box` at first render — the signature snapped back to its original spot on
+   the second drag. Handlers now read current props through a `live` ref.
+2. The page frame was hardcoded to A4 with the image letterboxed inside it, while
+   the exported PDF renders the image at its own aspect with no letterboxing — so
+   overlay percentages described a different box and the signature landed in the
+   wrong place vertically. The frame is now measured from the image via
+   `Image.getSize` (`frameFor()`), and all clamping/export maths use it.
+3. `onChange` was called from inside a `setStrokes` updater (impure updater,
+   cross-component update warning, double-fire under StrictMode). Strokes are now
+   built outside the updater against a `strokesRef` mirror.
+4. Draggables did not refuse the surrounding `ScrollView`'s responder takeover, so
+   vertical drags scrolled the page instead of moving the item.
+
+**Still needs on-device testing** — all four fixes are verified by build/typecheck
+only.
 **Branch:** `feat/signature-fill`
 **Tier gate:** `free` (already declared as `signature_editor`, `onDevice: true`)
 **Credits:** free — 100% on-device, costs you nothing to run

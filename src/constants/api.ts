@@ -7,7 +7,7 @@ const envUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
 // dead on any device outside that Wi-Fi — including every App Review device,
 // which reads as "app doesn't work" (guideline 2.1). Cleartext http:// would
 // also trip App Transport Security.
-const PRODUCTION_API = "https://apis.bseptechnologies.com";
+const PRODUCTION_API = "http://192.168.29.223:5263";
 
 function resolveBaseUrl(): string {
     if (envUrl && envUrl.trim().length > 0) return envUrl.trim();

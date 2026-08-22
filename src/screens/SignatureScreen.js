@@ -14,7 +14,7 @@
  * signature *image* on a document, not a certified e-signature.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     View,
     Text,
@@ -37,25 +37,48 @@ import * as Sharing from "expo-sharing";
 import * as FileSystem from "expo-file-system/legacy";
 
 import GradientScreen from "../ui/GradientScreen";
-import SignaturePad, { strokesToSvg } from "../ui/SignaturePad";
+import SignaturePad, { strokesToSvg, renderStroke } from "../ui/SignaturePad";
 import { listSignatures, saveSignature, deleteSignature } from "../services/signatureStore";
 import { useTheme } from "../ui/ThemeProvider";
 import useThemedStyles from "../ui/useThemedStyles";
 
 const SCREEN_W = Dimensions.get("window").width;
 const PAGE_W = SCREEN_W - 32;
-// A4 aspect — the page frame the user drags onto. Real page images are letterboxed
-// inside it with resizeMode="contain" so placement percentages stay meaningful.
-const PAGE_H = PAGE_W * 1.414;
+// Fallback frame (A4) used only before a page is chosen.
+const DEFAULT_ASPECT = 1 / 1.414; // width / height
+// Very tall images are capped so the editor still fits on screen; the frame is
+// narrowed to match so its aspect always equals the image's.
+const MAX_PAGE_H = PAGE_W * 1.7;
 
 const MIN_SIG_W = 70;
-const MAX_SIG_W = PAGE_W;
+
+/**
+ * The frame MUST have the same aspect ratio as the page image.
+ *
+ * The exported PDF renders the image at width:100% with automatic height and no
+ * letterboxing, and every overlay is positioned as a percentage of that box. If
+ * the on-screen frame were a fixed A4 rectangle with the image letterboxed
+ * inside it, those percentages would describe a different box than the PDF's and
+ * the signature would land somewhere else vertically on export.
+ */
+function frameFor(aspect) {
+    const a = aspect && isFinite(aspect) && aspect > 0 ? aspect : DEFAULT_ASPECT;
+    let w = PAGE_W;
+    let h = PAGE_W / a;
+    if (h > MAX_PAGE_H) {
+        h = MAX_PAGE_H;
+        w = MAX_PAGE_H * a;
+    }
+    return { w, h };
+}
 
 export default function SignatureScreen({ navigation, route }) {
     const { theme } = useTheme();
     const styles = useThemedStyles(makeStyles);
 
     const [pageUri, setPageUri] = useState(route?.params?.imageUri || null);
+    // width / height of the chosen page image, measured via Image.getSize.
+    const [pageAspect, setPageAspect] = useState(null);
     const [saved, setSaved] = useState([]);
     const [padOpen, setPadOpen] = useState(false);
     const [exporting, setExporting] = useState(false);
@@ -76,6 +99,30 @@ export default function SignatureScreen({ navigation, route }) {
     useEffect(() => {
         refreshSaved();
     }, [refreshSaved]);
+
+    // Measure the page so the editor frame matches it exactly (see frameFor).
+    useEffect(() => {
+        if (!pageUri) {
+            setPageAspect(null);
+            return;
+        }
+        let alive = true;
+        Image.getSize(
+            pageUri,
+            (w, h) => {
+                if (alive && h > 0) setPageAspect(w / h);
+            },
+            () => {
+                // Unreadable dimensions — fall back to A4 rather than blocking.
+                if (alive) setPageAspect(null);
+            }
+        );
+        return () => {
+            alive = false;
+        };
+    }, [pageUri]);
+
+    const frame = useMemo(() => frameFor(pageAspect), [pageAspect]);
 
     // ── Page selection ────────────────────────────────────────────────────────
     async function pickPage() {
@@ -103,11 +150,11 @@ export default function SignatureScreen({ navigation, route }) {
     function placeStrokes(strokes) {
         const svg = strokesToSvg(strokes);
         if (!svg) return;
-        const width = Math.min(200, PAGE_W * 0.5);
+        const width = Math.min(200, frame.w * 0.5);
         setPlaced({
             strokes,
-            x: (PAGE_W - width) / 2,
-            y: PAGE_H * 0.72,
+            x: (frame.w - width) / 2,
+            y: frame.h * 0.72,
             width,
             aspect: svg.aspect,
         });
@@ -147,7 +194,7 @@ export default function SignatureScreen({ navigation, route }) {
 
     // ── Text boxes ────────────────────────────────────────────────────────────
     function addTextBox() {
-        const box = { id: `t_${Date.now()}`, text: "Text", x: PAGE_W * 0.15, y: PAGE_H * 0.3 };
+        const box = { id: `t_${Date.now()}`, text: "Text", x: frame.w * 0.15, y: frame.h * 0.3 };
         setBoxes((b) => [...b, box]);
         setEditingBox(box);
     }
@@ -176,6 +223,7 @@ export default function SignatureScreen({ navigation, route }) {
             const base64 = await FileSystem.readAsStringAsync(pageUri, {
                 encoding: FileSystem.EncodingType.Base64,
             });
+            const mime = mimeForUri(pageUri);
 
             // Everything is positioned in percentages of the page frame, so the
             // PDF matches what the user arranged on screen at any output size.
@@ -187,17 +235,17 @@ export default function SignatureScreen({ navigation, route }) {
                 const sig = strokesToSvg(placed.strokes, { color: "#111111" });
                 if (sig) {
                     const h = placed.width / placed.aspect;
-                    overlay += `<div style="position:absolute;left:${pct(placed.x, PAGE_W)};top:${pct(
+                    overlay += `<div style="position:absolute;left:${pct(placed.x, frame.w)};top:${pct(
                         placed.y,
-                        PAGE_H
-                    )};width:${pct(placed.width, PAGE_W)};height:${pct(h, PAGE_H)};">${sig.svg}</div>`;
+                        frame.h
+                    )};width:${pct(placed.width, frame.w)};height:${pct(h, frame.h)};">${sig.svg}</div>`;
                 }
             }
 
             for (const b of boxes) {
-                overlay += `<div style="position:absolute;left:${pct(b.x, PAGE_W)};top:${pct(
+                overlay += `<div style="position:absolute;left:${pct(b.x, frame.w)};top:${pct(
                     b.y,
-                    PAGE_H
+                    frame.h
                 )};font-family:-apple-system,Helvetica,Arial,sans-serif;font-size:13pt;color:#111;">${escapeHtml(
                     b.text
                 )}</div>`;
@@ -211,7 +259,7 @@ export default function SignatureScreen({ navigation, route }) {
   .page img { display:block; width:100%; }
 </style></head><body>
   <div class="page">
-    <img src="data:image/jpeg;base64,${base64}" />
+    <img src="data:${mime};base64,${base64}" />
     ${overlay}
   </div>
 </body></html>`;
@@ -240,7 +288,13 @@ export default function SignatureScreen({ navigation, route }) {
             <SafeAreaView style={styles.flex}>
                 {/* Header */}
                 <View style={styles.header}>
-                    <Pressable onPress={() => navigation.goBack()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Go back">
+                    <Pressable
+                        onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate("Upload"))}
+                        hitSlop={16}
+                        style={{ padding: 4 }}
+                        accessibilityRole="button"
+                        accessibilityLabel="Go back"
+                    >
                         <Ionicons name="chevron-back" size={24} color={theme.colors.textPrimary} />
                     </Pressable>
                     <View style={styles.flex1}>
@@ -268,8 +322,8 @@ export default function SignatureScreen({ navigation, route }) {
                 </View>
 
                 <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-                    {/* Page canvas */}
-                    <View style={styles.page}>
+                    {/* Page canvas — sized to the image's own aspect ratio */}
+                    <View style={[styles.page, { width: frame.w, height: frame.h }]}>
                         {pageUri ? (
                             <Image source={{ uri: pageUri }} style={styles.pageImg} resizeMode="contain" />
                         ) : (
@@ -286,6 +340,7 @@ export default function SignatureScreen({ navigation, route }) {
                                 placed={placed}
                                 onChange={setPlaced}
                                 onRemove={() => setPlaced(null)}
+                                frame={frame}
                                 theme={theme}
                             />
                         )}
@@ -298,6 +353,7 @@ export default function SignatureScreen({ navigation, route }) {
                                 onChange={(patch) => updateBox(b.id, patch)}
                                 onEdit={() => setEditingBox(b)}
                                 onRemove={() => removeBox(b.id)}
+                                frame={frame}
                                 theme={theme}
                             />
                         ))}
@@ -416,22 +472,35 @@ export default function SignatureScreen({ navigation, route }) {
 
 /* ── Draggable + resizable signature ─────────────────────────────────────────*/
 
-function DraggableSignature({ placed, onChange, onRemove, theme }) {
+function DraggableSignature({ placed, onChange, onRemove, frame, theme }) {
     const start = useRef({ x: 0, y: 0, width: 0 });
+
+    // A PanResponder is created ONCE and never re-created, so anything its
+    // handlers close over is frozen at first render. Reading current props
+    // through a ref instead is what keeps the second and every later gesture
+    // from snapping the signature back to where it first appeared.
+    const live = useRef({ placed, onChange, frame });
+    live.current = { placed, onChange, frame };
 
     const drag = useRef(
         PanResponder.create({
             onStartShouldSetPanResponder: () => true,
             onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 2 || Math.abs(g.dy) > 2,
+            // Without these the surrounding ScrollView steals any vertical drag,
+            // so the page scrolls instead of the item moving.
+            onPanResponderTerminationRequest: () => false,
+            onShouldBlockNativeResponder: () => true,
             onPanResponderGrant: () => {
-                start.current = { x: placed.x, y: placed.y, width: placed.width };
+                const p = live.current.placed;
+                start.current = { x: p.x, y: p.y, width: p.width };
             },
             onPanResponderMove: (_, g) => {
-                const h = start.current.width / placed.aspect;
-                onChange({
-                    ...placed,
-                    x: clamp(start.current.x + g.dx, 0, PAGE_W - start.current.width),
-                    y: clamp(start.current.y + g.dy, 0, PAGE_H - h),
+                const { placed: p, frame: f } = live.current;
+                const h = start.current.width / p.aspect;
+                live.current.onChange({
+                    ...p,
+                    x: clamp(start.current.x + g.dx, 0, f.w - start.current.width),
+                    y: clamp(start.current.y + g.dy, 0, f.h - h),
                 });
             },
         })
@@ -440,12 +509,20 @@ function DraggableSignature({ placed, onChange, onRemove, theme }) {
     const resize = useRef(
         PanResponder.create({
             onStartShouldSetPanResponder: () => true,
+            onPanResponderTerminationRequest: () => false,
+            onShouldBlockNativeResponder: () => true,
             onPanResponderGrant: () => {
-                start.current = { x: placed.x, y: placed.y, width: placed.width };
+                const p = live.current.placed;
+                start.current = { x: p.x, y: p.y, width: p.width };
             },
             onPanResponderMove: (_, g) => {
-                const width = clamp(start.current.width + g.dx, MIN_SIG_W, Math.min(MAX_SIG_W, PAGE_W - start.current.x));
-                onChange({ ...placed, width });
+                const { placed: p, frame: f } = live.current;
+                const width = clamp(
+                    start.current.width + g.dx,
+                    MIN_SIG_W,
+                    f.w - start.current.x
+                );
+                live.current.onChange({ ...p, width });
             },
         })
     ).current;
@@ -498,45 +575,95 @@ function DraggableSignature({ placed, onChange, onRemove, theme }) {
     );
 }
 
-function DraggableBox({ box, onChange, onEdit, onRemove, theme }) {
+function DraggableBox({ box, onChange, onEdit, onRemove, frame, theme }) {
     const start = useRef({ x: 0, y: 0 });
+    const gesture = useRef({ startedAt: 0, moved: 0 });
+    const [size, setSize] = useState({ w: 60, h: 24 });
 
+    // Same frozen-closure trap as DraggableSignature — see the note there.
+    const live = useRef({ box, onChange, onEdit, frame, size });
+    live.current = { box, onChange, onEdit, frame, size };
+
+    // A plain View, NOT a Pressable. Pressable installs its own responder
+    // handlers which override the ones panHandlers spreads in, so the drag
+    // never activates and the box sits frozen in place. Tap-vs-drag is
+    // therefore decided here, in onPanResponderRelease.
     const drag = useRef(
         PanResponder.create({
             onStartShouldSetPanResponder: () => true,
-            onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 2 || Math.abs(g.dy) > 2,
+            onMoveShouldSetPanResponder: () => true,
+            onStartShouldSetPanResponderCapture: () => true,
+            onMoveShouldSetPanResponderCapture: (_, g) => Math.abs(g.dx) > 2 || Math.abs(g.dy) > 2,
+            // Stop the surrounding ScrollView stealing vertical drags.
+            onPanResponderTerminationRequest: () => false,
+            onShouldBlockNativeResponder: () => true,
+
             onPanResponderGrant: () => {
-                start.current = { x: box.x, y: box.y };
+                const b = live.current.box;
+                start.current = { x: b.x, y: b.y };
+                gesture.current = { startedAt: Date.now(), moved: 0 };
             },
+
             onPanResponderMove: (_, g) => {
-                onChange({
-                    x: clamp(start.current.x + g.dx, 0, PAGE_W - 40),
-                    y: clamp(start.current.y + g.dy, 0, PAGE_H - 20),
+                const { frame: f, size: sz } = live.current;
+                gesture.current.moved = Math.max(
+                    gesture.current.moved,
+                    Math.abs(g.dx) + Math.abs(g.dy)
+                );
+                live.current.onChange({
+                    x: clamp(start.current.x + g.dx, 0, Math.max(0, f.w - sz.w)),
+                    y: clamp(start.current.y + g.dy, 0, Math.max(0, f.h - sz.h)),
                 });
+            },
+
+            onPanResponderRelease: () => {
+                // A short touch that barely moved is a tap → open the editor.
+                const { startedAt, moved } = gesture.current;
+                if (moved < 6 && Date.now() - startedAt < 400) {
+                    live.current.onEdit();
+                }
             },
         })
     ).current;
 
     return (
         <View style={{ position: "absolute", left: box.x, top: box.y }}>
-            <Pressable
+            <View
                 {...drag.panHandlers}
-                onLongPress={onRemove}
-                onPress={onEdit}
+                onLayout={(e) =>
+                    setSize({
+                        w: e.nativeEvent.layout.width,
+                        h: e.nativeEvent.layout.height,
+                    })
+                }
                 style={{
-                    paddingHorizontal: 6,
-                    paddingVertical: 3,
+                    paddingHorizontal: 8,
+                    paddingVertical: 5,
                     borderWidth: 1,
                     borderStyle: "dashed",
                     borderColor: theme.colors.primary,
                     borderRadius: 4,
+                    backgroundColor: "rgba(255,255,255,0.55)",
                 }}
-                accessibilityRole="button"
-                accessibilityLabel={`Text box: ${box.text}. Tap to edit, long press to remove.`}
+                accessible
+                accessibilityRole="adjustable"
+                accessibilityLabel={`Text box: ${box.text}. Drag to move, tap to edit.`}
             >
                 <Text style={{ color: theme.colors.black, fontSize: 13, fontWeight: "600" }}>
                     {box.text || "Text"}
                 </Text>
+            </View>
+
+            {/* Explicit remove handle. Long-press is deliberately NOT used for
+                delete here — holding is how the user starts a drag. */}
+            <Pressable
+                onPress={onRemove}
+                hitSlop={10}
+                style={[handleStyle(theme), { right: -10, top: -10, backgroundColor: theme.colors.danger }]}
+                accessibilityRole="button"
+                accessibilityLabel="Remove text box"
+            >
+                <Ionicons name="close" size={12} color={theme.colors.white} />
             </Pressable>
         </View>
     );
@@ -549,7 +676,7 @@ function DraggableBox({ box, onChange, onEdit, onRemove, theme }) {
 function MiniSignature({ strokes, color, fill }) {
     const [size, setSize] = useState({ w: 0, h: 0 });
 
-    const bounds = React.useMemo(() => {
+    const bounds = useMemo(() => {
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         for (const s of strokes || []) {
             for (const p of s) {
@@ -569,46 +696,30 @@ function MiniSignature({ strokes, color, fill }) {
         size.w && size.h
             ? Math.min((size.w - pad * 2) / bounds.w, (size.h - pad * 2) / bounds.h)
             : 0;
-    const offX = (size.w - bounds.w * scale) / 2;
-    const offY = (size.h - bounds.h * scale) / 2;
-    const sw = Math.max(1.5, 3 * scale);
+
+    // Shift the ink to the origin, then centre it in the available box.
+    const offset = {
+        x: -bounds.minX * scale + (size.w - bounds.w * scale) / 2,
+        y: -bounds.minY * scale + (size.h - bounds.h * scale) / 2,
+    };
 
     return (
         <View
-            style={{ flex: fill ? 1 : undefined, width: fill ? undefined : "100%", height: fill ? undefined : "100%" }}
+            style={{
+                flex: fill ? 1 : undefined,
+                width: fill ? undefined : "100%",
+                height: fill ? undefined : "100%",
+            }}
             onLayout={(e) => setSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
         >
             {scale > 0 &&
                 (strokes || []).map((stroke, si) =>
-                    stroke.slice(1).map((pt, i) => {
-                        const prev = stroke[i];
-                        const x1 = (prev.x - bounds.minX) * scale + offX;
-                        const y1 = (prev.y - bounds.minY) * scale + offY;
-                        const x2 = (pt.x - bounds.minX) * scale + offX;
-                        const y2 = (pt.y - bounds.minY) * scale + offY;
-                        const dx = x2 - x1;
-                        const dy = y2 - y1;
-                        const len = Math.sqrt(dx * dx + dy * dy);
-                        return (
-                            <View
-                                key={`${si}-${i}`}
-                                pointerEvents="none"
-                                style={{
-                                    position: "absolute",
-                                    left: x1,
-                                    top: y1 - sw / 2,
-                                    width: len + sw * 0.6,
-                                    height: sw,
-                                    borderRadius: sw,
-                                    backgroundColor: color,
-                                    transform: [
-                                        { translateX: -sw * 0.3 },
-                                        { rotateZ: `${Math.atan2(dy, dx)}rad` },
-                                    ],
-                                    transformOrigin: `${sw * 0.3}px ${sw / 2}px`,
-                                }}
-                            />
-                        );
+                    renderStroke(stroke, {
+                        color,
+                        width: Math.max(1.5, 3 * scale),
+                        scale,
+                        offset,
+                        keyPrefix: `m${si}`,
                     })
                 )}
         </View>
@@ -635,6 +746,14 @@ function ToolButton({ icon, label, onPress }) {
 
 function clamp(v, min, max) {
     return Math.max(min, Math.min(max, v));
+}
+
+function mimeForUri(uri) {
+    const ext = String(uri).split("?")[0].split(".").pop()?.toLowerCase();
+    if (ext === "png") return "image/png";
+    if (ext === "heic" || ext === "heif") return "image/heic";
+    if (ext === "webp") return "image/webp";
+    return "image/jpeg";
 }
 
 function escapeHtml(s) {
@@ -689,8 +808,7 @@ const makeStyles = (t) =>
         scroll: { paddingHorizontal: 16, paddingBottom: 40 },
 
         page: {
-            width: PAGE_W,
-            height: PAGE_H,
+            alignSelf: "center",
             borderRadius: t.radius.lg,
             overflow: "hidden",
             backgroundColor: t.colors.white,

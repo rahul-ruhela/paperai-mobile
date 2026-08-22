@@ -131,14 +131,23 @@ Do not build more than one pack until the first one shows retention.
 4. **5.1, 5.3, 5.5** — cheap, and they compound.
 5. **Tier 4** last, once you know who is actually retaining.
 
-## ⚠️ Waiting on the backend — flip these when the endpoints ship
+## Backend status — Tier 1 unblocked
 
-| Flag | File | Unblocks | Endpoints needed |
-|---|---|---|---|
-| `USE_STUB = false` | `src/api/chat.js` | 1.1 AI Chat (also un-hides the "Ask AI" button on AnalysisScreen) | `POST/GET /api/documents/{id}/chat` + credit config row `document_ai_chat` |
-| `USE_STUB = false` | `src/api/receipts.js` | 1.4 real extraction | `POST /api/receipts/extract` + credit config row `receipt_extract` |
+Backend work for 1.1 and 1.4 is **done** in `C:/work/apis/PaperAiApis` (branch `development`).
+Both mobile clients now run live (`USE_STUB = false`).
 
-Both features are fully built and navigable — only the data source is missing.
+| Endpoint | Controller | Credit key |
+|---|---|---|
+| `POST/GET /api/documents/{id}/chat` | `DocumentChatController.cs` | `document_ai_chat` (1) |
+| `POST /api/receipts/extract` | `ReceiptsController.cs` | `receipt_extract` (1) |
+
+Storage Studio credit rows (`blurry_photo_scan` 1, `similar_photo_scan` 2) and all
+five tier-2 `FeatureMatrix` entries are **already registered** — spec 2.0 needs no
+backend work beyond what is deployed.
+
+**Deploy step:** run `ImportantDocument/databasescript/2026-08-21-ai-chat-and-receipts.sql`
+(idempotent), then generate the EF migration with the API stopped — the script header
+has the exact commands.
 
 ## Backend work this roadmap requires
 

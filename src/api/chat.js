@@ -1,21 +1,21 @@
 import { api } from "./client";
 
 /**
- * Document chat client (spec 1.1).
+ * Document chat client (spec 1.1). Live against DocumentChatController.
  *
- * The backend endpoints below DO NOT EXIST YET. Until they ship, USE_STUB keeps
- * the whole UI reviewable and shippable — flip it to false the moment
- * POST/GET /api/documents/{id}/chat are live. Nothing else needs to change.
- *
- * Requested contract:
  *   POST /api/documents/{id}/chat
  *     body    { message, transactionId }
- *     returns { answer, citations?: [{ text, page? }], messageId }
+ *     returns { answer, citations: [{ text, page }], messageId }
+ *              or { answer: "", refunded: true, reason } when the model could
+ *              not ground an answer — the backend has already refunded.
  *   GET  /api/documents/{id}/chat
- *     returns [{ id, role: "user"|"assistant", content, createdAt, citations? }]
+ *     returns [{ id, role: "user"|"assistant", content, createdAt, citations }]
+ *
+ * USE_STUB is kept as an offline escape hatch: set it to true to develop the UI
+ * without a running API. It must be false in anything that ships.
  */
 
-export const USE_STUB = true;
+export const USE_STUB = false;
 
 export const CHAT_FEATURE_KEY = "document_ai_chat";
 

@@ -2,8 +2,9 @@
  * ReceiptCaptureScreen — capture a receipt, extract structured fields, review
  * and save as an expense (spec 1.4).
  *
- * Tier: essential (`receipt_extraction`). Credits: 1 per successful extraction,
- * refunded when the read fails (no merchant AND no total) — CONTEXT §3 rule 1.
+ * Credits: 1 per successful extraction, refunded when the read fails (no merchant
+ * AND no total) — CONTEXT §3 rule 1. No subscription-tier gate; see the note
+ * further down and in AiChatScreen.
  *
  * Every field is editable. OCR on a crumpled thermal receipt is wrong often
  * enough that a read-only result feels broken, so low-confidence fields are
@@ -39,14 +40,12 @@ import {
     refundTransaction,
 } from "../api/credits";
 import { saveExpense } from "../services/expenseStore";
-import { useFeatureAccess } from "../hooks/useFeatureAccess";
 import { useCreditBalance } from "../hooks/useCreditBalance";
 
 export default function ReceiptCaptureScreen({ navigation }) {
     const { theme } = useTheme();
     const styles = useThemedStyles(makeStyles);
 
-    const { allowed, requiredTier, loading: accessLoading } = useFeatureAccess("receipt_extraction");
     const { refresh: refreshCredits } = useCreditBalance();
 
     const [imageUri, setImageUri] = useState(null);
@@ -159,28 +158,10 @@ export default function ReceiptCaptureScreen({ navigation }) {
         navigation.navigate("Expenses");
     }
 
-    if (!accessLoading && !allowed) {
-        return (
-            <GradientScreen>
-                <SafeAreaView style={styles.flex}>
-                    <Header navigation={navigation} />
-                    <View style={styles.upsell}>
-                        <AiOrb size={130} state="idle" />
-                        <Text style={styles.upsellTitle}>Receipts are an {cap(requiredTier)} feature</Text>
-                        <Text style={styles.upsellSub}>
-                            Snap a receipt and get the merchant, date, total and tax pulled out
-                            automatically — then export the month as a CSV.
-                        </Text>
-                        <Pressable onPress={() => navigation.navigate("Paywall")} style={styles.upsellBtn} accessibilityRole="button">
-                            <Ionicons name="sparkles" size={16} color={theme.colors.white} />
-                            <Text style={styles.upsellBtnText}>View plans</Text>
-                        </Pressable>
-                    </View>
-                </SafeAreaView>
-            </GradientScreen>
-        );
-    }
-
+    // NOTE: no tier gate here on purpose. Throughout this app CREDITS are the
+    // entitlement — Junk Wiper (3 credits) and OCR both reserve credits without
+    // checking a subscription tier, and the backend does the same. Adding a tier
+    // check here would show an upsell to a user who already holds credits.
     const low = result?.confidence === "LOW" || result?.confidence === "MEDIUM";
 
     return (
@@ -321,7 +302,13 @@ function Header({ navigation, onExpenses }) {
     const styles = useThemedStyles(makeStyles);
     return (
         <View style={styles.header}>
-            <Pressable onPress={() => navigation.goBack()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Go back">
+            <Pressable
+                onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate("Upload"))}
+                hitSlop={16}
+                accessibilityRole="button"
+                accessibilityLabel="Go back"
+                style={{ padding: 4 }}
+            >
                 <Ionicons name="chevron-back" size={24} color={theme.colors.textPrimary} />
             </Pressable>
             <View style={styles.flex1}>
@@ -366,10 +353,6 @@ function PickBtn({ icon, label, onPress }) {
             <Text style={styles.pickBtnText}>{label}</Text>
         </Pressable>
     );
-}
-
-function cap(s) {
-    return String(s || "").charAt(0).toUpperCase() + String(s || "").slice(1);
 }
 
 const makeStyles = (t) =>
@@ -488,18 +471,4 @@ const makeStyles = (t) =>
             lineHeight: 16,
         },
 
-        upsell: { flex: 1, alignItems: "center", justifyContent: "center", padding: 30, gap: 10 },
-        upsellTitle: { color: t.colors.textPrimary, fontWeight: "900", fontSize: 18, marginTop: 10, textAlign: "center" },
-        upsellSub: { color: t.colors.textMuted, fontWeight: "600", fontSize: 13.5, textAlign: "center", lineHeight: 19 },
-        upsellBtn: {
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 8,
-            marginTop: 14,
-            paddingHorizontal: 22,
-            paddingVertical: 13,
-            borderRadius: 999,
-            backgroundColor: t.colors.primary,
-        },
-        upsellBtnText: { color: t.colors.white, fontWeight: "900", fontSize: 14.5 },
     });

@@ -1,12 +1,12 @@
 /**
  * AiChatScreen — ask questions about one document (spec 1.1).
  *
- * Tier: plus (`ai_chat`). Credits: 1 per message, with the first message of each
- * document free as a hook.
+ * Credits: 1 per message, with the first message of each document free as a hook.
  *
- * The backend endpoints are not live yet — src/api/chat.js runs in stub mode
- * (USE_STUB) so the UI is complete and reviewable now. Credit handling is real
- * either way, so switching the flag needs no changes here.
+ * There is NO subscription-tier gate. Credits are the entitlement throughout this
+ * product — Junk Wiper and OCR both charge credits without checking a tier, and
+ * the backend endpoint does the same. Gating here would show an upsell to someone
+ * already holding credits they paid for.
  */
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -41,7 +41,6 @@ import {
     completeTransaction,
     refundTransaction,
 } from "../api/credits";
-import { useFeatureAccess } from "../hooks/useFeatureAccess";
 import { useCreditBalance } from "../hooks/useCreditBalance";
 
 const MAX_CHARS = 1000;
@@ -58,7 +57,6 @@ export default function AiChatScreen({ navigation, route }) {
     const styles = useThemedStyles(makeStyles);
     const { docId, title } = route.params || {};
 
-    const { allowed, requiredTier, loading: accessLoading } = useFeatureAccess("ai_chat");
     const { credits, refresh: refreshCredits } = useCreditBalance();
 
     const [messages, setMessages] = useState([]);
@@ -147,9 +145,25 @@ export default function AiChatScreen({ navigation, route }) {
                 const answer = (res?.answer || "").trim();
 
                 if (!answer) {
-                    // Never charge for an empty answer.
+                    // Never charge for an empty answer. The server already
+                    // refunded; this call is idempotent and covers the case
+                    // where the response never reached us.
                     if (txnId) await refundTransaction(txnId, "Empty answer").catch(() => {});
-                    Alert.alert("No Answer", "The assistant couldn't answer that. You were not charged.");
+
+                    // `reason` tells the user what to actually DO about it —
+                    // "couldn't answer" on a document that was never analysed
+                    // is a dead end.
+                    if (res?.reason === "no_document_text") {
+                        Alert.alert(
+                            "Nothing To Read Yet",
+                            "This document has no extracted text, so there is nothing to answer from. Run AI analysis on it first.\n\nYou were not charged."
+                        );
+                    } else {
+                        Alert.alert(
+                            "Not In This Document",
+                            "The answer isn't in this document, so nothing was made up. Try rephrasing, or ask about something the document covers.\n\nYou were not charged."
+                        );
+                    }
                     return;
                 }
 
@@ -179,33 +193,8 @@ export default function AiChatScreen({ navigation, route }) {
         [input, sending, isFree, docId, cost, navigation, refreshCredits]
     );
 
-    // ── Upsell for users below the required tier ──────────────────────────────
-    if (!accessLoading && !allowed) {
-        return (
-            <GradientScreen>
-                <SafeAreaView style={styles.flex}>
-                    <Header title={title} navigation={navigation} credits={credits} />
-                    <View style={styles.upsell}>
-                        <AiOrb size={130} state="idle" />
-                        <Text style={styles.upsellTitle}>AI Chat is a {cap(requiredTier)} feature</Text>
-                        <Text style={styles.upsellSub}>
-                            Ask anything about your documents and get answers drawn straight from
-                            their contents.
-                        </Text>
-                        <Pressable
-                            onPress={() => navigation.navigate("Paywall")}
-                            style={styles.upsellBtn}
-                            accessibilityRole="button"
-                        >
-                            <Ionicons name="sparkles" size={16} color={theme.colors.white} />
-                            <Text style={styles.upsellBtnText}>View plans</Text>
-                        </Pressable>
-                    </View>
-                </SafeAreaView>
-            </GradientScreen>
-        );
-    }
-
+    // NOTE: no tier gate — credits are the entitlement everywhere in this app
+    // (see the same note in ReceiptCaptureScreen).
     const over = input.length > MAX_CHARS;
 
     return (
@@ -297,7 +286,13 @@ function Header({ title, navigation, credits }) {
     const styles = useThemedStyles(makeStyles);
     return (
         <View style={styles.header}>
-            <Pressable onPress={() => navigation.goBack()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Go back">
+            <Pressable
+                onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate("Documents"))}
+                hitSlop={16}
+                style={{ padding: 4 }}
+                accessibilityRole="button"
+                accessibilityLabel="Go back"
+            >
                 <Ionicons name="chevron-back" size={24} color={theme.colors.textPrimary} />
             </Pressable>
             <View style={styles.flex1}>
@@ -425,10 +420,6 @@ function EmptyChat({ onPick, isFree }) {
     );
 }
 
-function cap(s) {
-    return String(s || "").charAt(0).toUpperCase() + String(s || "").slice(1);
-}
-
 const makeStyles = (t) =>
     StyleSheet.create({
         flex: { flex: 1 },
@@ -553,18 +544,4 @@ const makeStyles = (t) =>
             paddingVertical: 8,
         },
 
-        upsell: { flex: 1, alignItems: "center", justifyContent: "center", padding: 30, gap: 10 },
-        upsellTitle: { color: t.colors.textPrimary, fontWeight: "900", fontSize: 18, marginTop: 10, textAlign: "center" },
-        upsellSub: { color: t.colors.textMuted, fontWeight: "600", fontSize: 13.5, textAlign: "center", lineHeight: 19 },
-        upsellBtn: {
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 8,
-            marginTop: 14,
-            paddingHorizontal: 22,
-            paddingVertical: 13,
-            borderRadius: 999,
-            backgroundColor: t.colors.primary,
-        },
-        upsellBtnText: { color: t.colors.white, fontWeight: "900", fontSize: 14.5 },
     });

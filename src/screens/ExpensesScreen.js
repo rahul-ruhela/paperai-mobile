@@ -90,7 +90,13 @@ export default function ExpensesScreen({ navigation }) {
         <GradientScreen>
             <SafeAreaView style={styles.flex}>
                 <View style={styles.header}>
-                    <Pressable onPress={() => navigation.goBack()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Go back">
+                    <Pressable
+                        onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate("Upload"))}
+                        hitSlop={16}
+                        style={{ padding: 4 }}
+                        accessibilityRole="button"
+                        accessibilityLabel="Go back"
+                    >
                         <Ionicons name="chevron-back" size={24} color={theme.colors.textPrimary} />
                     </Pressable>
                     <View style={styles.flex1}>
