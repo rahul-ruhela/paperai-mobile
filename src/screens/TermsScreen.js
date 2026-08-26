@@ -60,8 +60,12 @@ export default function TermsScreen() {
                         purchase. Subscriptions renew automatically unless cancelled at least 24
                         hours before the end of the current period, and your account is charged for
                         renewal within 24 hours prior to the end of the current period. Manage or
-                        cancel anytime in App Store › Account › Subscriptions. Credits are consumed
-                        as you use paid features and are non-transferable. Some paid features — such
+                        cancel anytime in App Store › Account › Subscriptions. Each billing period your
+                        balance is reset to the credit allowance of your plan — credits do not roll
+                        over, and any unused credits are lost at the end of the period rather than
+                        added to the next one. Changing plans does not carry a balance across.
+                        Credits are consumed as you use paid features and are non-transferable. Some
+                        paid features — such
                         as a duplicate scan — consume credits each time they run, including when the
                         scan completes successfully and finds nothing to remove; the scan itself is
                         the service being provided.

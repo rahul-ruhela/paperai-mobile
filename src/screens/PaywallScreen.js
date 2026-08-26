@@ -721,8 +721,9 @@ function PaywallView({
             <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
                 <Text style={styles.header}>Choose your plan</Text>
                 <Text style={styles.subHeader}>
-                    Credits power document scanning, OCR and AI analysis, and refresh with every
-                    renewal. Cancel anytime in App Store settings.
+                    Credits power document scanning, OCR and AI analysis. Every billing period
+                    starts with the full credits for your plan; unused credits do not carry over.
+                    Cancel anytime in App Store settings.
                 </Text>
 
                 {!!notice && <Text style={styles.notice}>{notice}</Text>}
