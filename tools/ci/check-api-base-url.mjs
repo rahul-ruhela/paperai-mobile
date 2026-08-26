@@ -50,6 +50,13 @@ if (!match) {
 const BAD_HOST = /\b(?:https?:\/\/)?(?:localhost|127(?:\.\d{1,3}){3}|10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}|169\.254(?:\.\d{1,3}){2})\b/;
 const CLEARTEXT = /["'`]http:\/\/(?!localhost|127\.)/;
 
+// XML/SVG namespace URIs are identifiers, not endpoints — nothing is fetched
+// from them, and "correcting" the scheme breaks parsing, because the namespace
+// string is compared literally. `strokesToSvg` in src/ui/SignaturePad.js emits
+// xmlns="http://www.w3.org/2000/svg", which is spelled exactly this way by
+// spec. Found by running this check against the tier-1 feature branch.
+const NAMESPACE_URI = /https?:\/\/(?:www\.)?(?:w3\.org|purl\.org|xmlsoap\.org)\/\S*/g;
+
 function walk(dir) {
     for (const entry of readdirSync(dir)) {
         const full = join(dir, entry);
@@ -74,9 +81,13 @@ function walk(dir) {
             const code = line.replace(/(^|[^:])\/\/.*$/, "$1").replace(/\/\*.*?\*\//g, "");
             if (!code.trim()) return;
 
-            if (BAD_HOST.test(code)) {
+            // Strip rather than skip: a line carrying both a namespace URI and
+            // a real LAN host must still be caught on the second one.
+            const scannable = code.replace(NAMESPACE_URI, "");
+
+            if (BAD_HOST.test(scannable)) {
                 problems.push(`${rel}:${i + 1}: private/loopback host in shipped source — ${code.trim()}`);
-            } else if (CLEARTEXT.test(code)) {
+            } else if (CLEARTEXT.test(scannable)) {
                 problems.push(`${rel}:${i + 1}: cleartext http:// URL (App Transport Security) — ${code.trim()}`);
             }
         });
