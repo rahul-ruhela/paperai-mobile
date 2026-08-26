@@ -51,18 +51,31 @@ Status date: 2026-07-16. Companion to the code changes in `paperai-mobile` and
 | 5 | After #4, run `node tools/asc/apply-subscription-prices.js` (or set prices in the ASC UI using the table below) | Applies the 9 base USA prices; Apple equalizes other territories |
 | 6 | Upload a **review screenshot** per subscription in the ASC UI | Required for submission (not for sandbox testing) |
 
-### Final agreed subscription prices + credits (applied to code; ASC pending agreement)
+### Subscription prices + credits
+
+> **This table is a copy, not the source of truth.** The authoritative values
+> live in `src/constants/api.ts` (`SUBSCRIPTION_TIERS`) and, for what actually
+> gets written to Apple, in `tools/asc/apply-subscription-prices.js`
+> (`TARGET_USA_PRICE`). Those two agree today, verified against this table on
+> 2026-08-27. If you are setting prices, run the script — do not hand-type from
+> here. An earlier revision of this table listed a completely different set of
+> prices and credits than the code was shipping, which is exactly how the wrong
+> numbers reach App Store Connect.
+
 | Product | Credits | USA price |
 |---|---|---|
-| essential_weekly | 15 | $15.99 |
-| essential_monthly | 60 | $57.90 |
-| essential_yearly | 560 | $459.00 |
-| plus_weekly | 40 | $42.49 |
-| plus_monthly | 160 | $153.99 |
-| plus_yearly | 850 | $699.00 |
-| advance_weekly | 80 | $85.00 |
-| advance_monthly | 320 | $309.00 |
-| advance_yearly | 1100 | $899.00 |
+| essential_weekly | 13 | $12.99 |
+| essential_monthly | 40 | $39.99 |
+| essential_yearly | 353 | $299.99 |
+| plus_weekly | 20 | $19.99 |
+| plus_monthly | 60 | $59.99 |
+| plus_yearly | 471 | $399.99 |
+| advance_weekly | 30 | $29.99 |
+| advance_monthly | 100 | $99.99 |
+| advance_yearly | 706 | $599.99 |
+
+Credits do not roll over: each renewal resets the balance to the plan's
+allowance rather than adding to it. See `docs/api-integration.md`.
 
 Yearly credits set at a 15% better per-credit rate than the monthly plan. Already
 written to `src/constants/api.ts` and backend `IAP:Products`. ASC en-US
