@@ -90,11 +90,22 @@ jobs:
           node-version: "20"
           cache: "npm"
 
+      # Before `npm install`, because it needs no dependencies and the failure
+      # it catches is invisible to every gate that follows: a LAN or cleartext
+      # API host type-checks and bundles cleanly, then reaches App Review as
+      # "the app doesn't work". Run it locally with
+      # `node tools/ci/check-api-base-url.mjs`.
+      - name: API base URL check
+        run: node tools/ci/check-api-base-url.mjs
+
       - name: Install dependencies
         run: npm install
 
       - name: TypeScript check
         run: npx tsc --noEmit
+
+      - name: Tests
+        run: npm test -- --ci
 
       # Catches Metro/import errors that would otherwise only surface as a
       # "Bundle JavaScript" failure ~30 minutes into the EAS build.
