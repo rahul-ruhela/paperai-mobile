@@ -35,8 +35,45 @@ Status date: 2026-07-16. Companion to the code changes in `paperai-mobile` and
   `SubscriptionPlanCard`, `IAPSetupScreen`) and stale product-ID env plumbing
   from `.env.example` + all GitHub workflows.
 - `npm audit fix`: axios 1.18.1, form-data 4.0.6 (runtime highs fixed).
-  Remaining 2 highs are build-time-only (`@xmldom/xmldom` inside
-  `@expo/prebuild-config`) — do not force-fix before release.
+
+### npm audit — what to fix and what to leave (reviewed 2026-08-27)
+
+**Never run `npm audit fix --force` on this project.** Every remaining advisory
+whose "fix" is a major bump resolves to an **Expo SDK 57** package
+(`expo@57`, `expo-constants@57`, `expo-splash-screen@57`, …). The app is on
+SDK 54. `--force` is an unplanned SDK upgrade wearing a security label.
+
+The question that decides whether an advisory matters here is **does the
+vulnerable module ship inside the .ipa**, not what npm's severity column says.
+Almost nothing in this tree does: Metro, the Expo CLI, prebuild-config, xcode
+and their dependencies run on the build machine. To reach them an attacker must
+already be able to run your build.
+
+To check rather than assume:
+
+```
+npx expo export --platform ios --source-maps --output-dir /tmp/x
+# then read the `sources` array of the emitted .hbc.map — that is the
+# definitive list of what is actually in the binary.
+```
+
+Fixed 2026-08-27 by tightening `overrides` in package.json — the previous pins
+had gone stale as new advisories moved past them (29 -> 23 advisories):
+
+| Package | Pin | Why |
+|---|---|---|
+| `nanoid` | `^3.3.18` | **Ships in the binary** (`nanoid/non-secure`). Stay on 3.x — 4+ is ESM-only and breaks the RN require. |
+| `shell-quote` | `>=1.10.0` | was `>=1.8.4`; advisory grew to `<=1.8.4` |
+| `undici` | `7.29.0` | was `7.28.0`; advisory covers `>=7.0.0 <7.29.0` |
+| `tar` | `>=7.5.22` | was `>=7.5.16` (resolved 7.5.20); advisory covers `<=7.5.20` |
+| `postcss` | `>=8.5.26` | advisory covers `<=8.5.22` |
+| `fast-uri` | `^3.1.6` | advisory covers `<3.1.5` |
+
+Deliberately **not** overridden: `js-yaml` and `brace-expansion` (the tree holds
+several incompatible majors, so one forced version breaks build tooling),
+`image-size` (no fixed version published — latest 2.0.2 is itself the
+advisory's upper bound), `uuid` (the fix is v11; `xcode` expects the v7 API).
+All four are build-time only.
 
 ---
 
