@@ -2,8 +2,15 @@ name: iOS Production (App Store)
 
 # !! MANUAL ONLY — production builds never trigger automatically on push.
 # This is now the ONLY workflow. Run it from: GitHub → Actions → iOS Production
-# → Run workflow → pick the branch you want to build (it defaults to the repo
-# default branch, which is usually NOT what you want).
+# → Run workflow → pick the branch you want to build.
+#
+# The branch picker cannot be given a default by this file — GitHub always
+# preselects the REPOSITORY default branch. That is why the repo default is
+# `production`: it makes the preselected branch the correct one. The guard step
+# below is the backstop for when it is changed back, or when someone picks a
+# different branch by hand. Between them, a stale branch cannot reach TestFlight
+# by accident — which is the failure mode this exists to prevent, since neither
+# `tsc` nor the bundle check can tell a month-old tree from today's.
 #
 #   submit: "true"   build + upload to App Store Connect. The binary lands in
 #                    TestFlight for sandbox IAP testing. This is the normal path.
@@ -17,6 +24,14 @@ on:
       submit:
         description: "Submit to App Store Connect after build?"
         required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+      allow_non_release_branch:
+        description: "Build a branch other than 'production'? (build-only; never allowed with submit)"
+        required: false
         default: "false"
         type: choice
         options:
@@ -37,6 +52,37 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 100
     steps:
+      # First step on purpose: it needs no checkout and no runner setup beyond
+      # allocation, so a wrong branch costs seconds instead of a 100-minute
+      # timeout budget. `github.ref_name` is whatever was chosen in the branch
+      # picker for a workflow_dispatch run.
+      - name: Guard — release branch
+        env:
+          REF: ${{ github.ref_name }}
+          SUBMIT: ${{ github.event.inputs.submit }}
+          OVERRIDE: ${{ github.event.inputs.allow_non_release_branch }}
+        run: |
+          RELEASE_BRANCH="production"
+
+          if [ "$REF" = "$RELEASE_BRANCH" ]; then
+            echo "Building '$REF'. Submit to App Store Connect: $SUBMIT."
+            exit 0
+          fi
+
+          # A binary that reaches App Store Connect is a binary that can reach
+          # review, so the override deliberately does not cover submission.
+          if [ "$SUBMIT" = "true" ]; then
+            echo "::error::Refusing to submit '$REF' to App Store Connect — only '$RELEASE_BRANCH' may be submitted. Re-run with submit=false to produce a build-only .ipa, or merge into '$RELEASE_BRANCH' first."
+            exit 1
+          fi
+
+          if [ "$OVERRIDE" != "true" ]; then
+            echo "::error::Refusing to build '$REF' — expected '$RELEASE_BRANCH'. If this is deliberate, re-run with allow_non_release_branch=true."
+            exit 1
+          fi
+
+          echo "::warning::Building non-release branch '$REF' (build-only). This .ipa must not be submitted."
+
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
