@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
     View,
     Text,
@@ -8,6 +8,7 @@ import {
     Pressable,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 
 import GradientScreen from "../ui/GradientScreen";
@@ -21,6 +22,7 @@ import useThemedStyles from "../ui/useThemedStyles";
 import { useTheme } from "../ui/ThemeProvider";
 
 import { listTasks, createTask, updateTask } from "../api/tasks";
+import { groupedReminders, cancelReminder, formatDate } from "../services/reminderService";
 
 export default function TasksScreen() {
     const { theme } = useTheme();
@@ -31,15 +33,44 @@ export default function TasksScreen() {
     const [title, setTitle] = useState("");
     const [expandedId, setExpandedId] = useState(null);
     const [streak, setStreak] = useState(0);
+    const [reminders, setReminders] = useState({ upcoming: [], past: [] });
+    const [showPast, setShowPast] = useState(false);
 
     async function load() {
         const data = await listTasks();
         setTasks(Array.isArray(data) ? data : []);
     }
 
+    const loadReminders = useCallback(async () => {
+        setReminders(await groupedReminders());
+    }, []);
+
     useEffect(() => {
         load();
     }, []);
+
+    // On focus, not on mount: reminders are created over on the Analysis screen,
+    // and this tab stays mounted the whole session — a mount-only load would
+    // show a stale list until the app restarted.
+    useFocusEffect(
+        useCallback(() => {
+            loadReminders();
+        }, [loadReminders])
+    );
+
+    function removeReminder(r) {
+        Alert.alert("Cancel reminder?", `${r.label} · ${formatDate(r.dateUtc)}`, [
+            { text: "Keep", style: "cancel" },
+            {
+                text: "Cancel reminder",
+                style: "destructive",
+                onPress: async () => {
+                    await cancelReminder(r.id);
+                    await loadReminders();
+                },
+            },
+        ]);
+    }
 
     async function add() {
         try {
@@ -86,6 +117,55 @@ export default function TasksScreen() {
 
                     <FlatList
                         data={tasks}
+                        ListHeaderComponent={
+                            reminders.upcoming.length > 0 || reminders.past.length > 0 ? (
+                                <View style={S.remWrap}>
+                                    <View style={S.remHead}>
+                                        <Ionicons name="alarm-outline" size={16} color={theme.colors.warningText} />
+                                        <Text style={S.remHeadTitle}>Reminders</Text>
+                                        {reminders.past.length > 0 ? (
+                                            <Pressable onPress={() => setShowPast((v) => !v)} hitSlop={8} accessibilityRole="button">
+                                                <Text style={S.remToggle}>
+                                                    {showPast ? "Hide past" : `Past (${reminders.past.length})`}
+                                                </Text>
+                                            </Pressable>
+                                        ) : null}
+                                    </View>
+
+                                    {(showPast ? reminders.past : reminders.upcoming).map((r) => (
+                                        <Card key={r.id} style={S.remCard}>
+                                            <View style={S.remRow}>
+                                                <Ionicons
+                                                    name={showPast ? "time-outline" : "notifications-outline"}
+                                                    size={18}
+                                                    color={showPast ? theme.colors.textMuted : theme.colors.warningText}
+                                                />
+                                                <View style={S.remMain}>
+                                                    <Text style={S.remTitle} numberOfLines={1}>
+                                                        {r.docTitle}
+                                                    </Text>
+                                                    <Text style={S.remMeta}>
+                                                        {r.label} · {formatDate(r.dateUtc)}
+                                                    </Text>
+                                                </View>
+                                                <Pressable
+                                                    onPress={() => removeReminder(r)}
+                                                    hitSlop={8}
+                                                    accessibilityRole="button"
+                                                    accessibilityLabel={`Cancel the reminder for ${r.docTitle}`}
+                                                >
+                                                    <Ionicons name="close-circle-outline" size={19} color={theme.colors.textMuted} />
+                                                </Pressable>
+                                            </View>
+                                        </Card>
+                                    ))}
+
+                                    {showPast && reminders.past.length === 0 ? (
+                                        <Text style={S.remEmpty}>No past reminders.</Text>
+                                    ) : null}
+                                </View>
+                            ) : null
+                        }
                         keyExtractor={(x) => x.id}
                         contentContainerStyle={{ paddingBottom: 90 }}
                         ListEmptyComponent={

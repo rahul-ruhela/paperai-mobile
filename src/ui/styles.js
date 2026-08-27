@@ -317,6 +317,18 @@ export const makeHomeStyles = (t) =>
 
 export const makeTaskStyles = (t) =>
     StyleSheet.create({
+        // ── Smart Reminders block, shown above the task list ─────────────────
+        remWrap: { marginBottom: 14 },
+        remHead: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
+        remHeadTitle: { flex: 1, color: t.colors.textPrimary, fontWeight: "900", fontSize: 14 },
+        remToggle: { color: t.colors.accentText, fontWeight: "800", fontSize: 12 },
+        remCard: { marginBottom: 8 },
+        remRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+        remMain: { flex: 1, minWidth: 0 },
+        remTitle: { color: t.colors.textPrimary, fontWeight: "800", fontSize: 13 },
+        remMeta: { color: t.colors.textMuted, fontWeight: "600", fontSize: 11.5, marginTop: 2 },
+        remEmpty: { color: t.colors.textMuted, fontWeight: "600", fontSize: 12 },
+
         addCard: {
             backgroundColor: t.colors.glass,
             borderRadius: t.radius.xl,

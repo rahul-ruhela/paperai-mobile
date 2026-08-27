@@ -40,7 +40,7 @@ export const FEATURES: FeatureDefinition[] = [
 
     // Plus tier
     { key: "explain_text_detail", name: "Explain in Detail", requiredTier: "plus", onDevice: false, backendVerified: true, creditFeatureKey: "explain_text_detail" },
-    { key: "ai_chat", name: "AI Chat", requiredTier: "plus", onDevice: false, backendVerified: true },
+    { key: "ai_chat", name: "AI Chat", requiredTier: "plus", onDevice: false, backendVerified: true, creditFeatureKey: "document_ai_chat" },
     { key: "deep_clean", name: "Deep Clean", requiredTier: "plus", onDevice: false, backendVerified: true, creditFeatureKey: "junk_wiper_scan_report" },
 
     // Advance tier

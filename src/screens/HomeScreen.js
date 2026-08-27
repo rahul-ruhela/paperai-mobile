@@ -52,6 +52,17 @@ function isProcessed(doc) {
 function isPending(doc) {
     return !isProcessed(doc);
 }
+/**
+ * Actually in flight on the server right now — not merely "not processed yet".
+ *
+ * `isPending` covers every document that has no AI result, including ones that
+ * were uploaded and never submitted, and ones that failed. Driving the orb off
+ * that made the app say "Analyzing…" indefinitely for work nobody had started,
+ * which is a claim the app cannot back up.
+ */
+function isAnalyzing(doc) {
+    return doc.status === "QUEUED" || doc.status === "PROCESSING";
+}
 function greeting() {
     const h = new Date().getHours();
     if (h < 12) return "Good morning";
@@ -233,6 +244,7 @@ export default function HomeScreen({ navigation }) {
             total: docs.length,
             ready: docs.filter(isProcessed).length,
             pending: docs.filter(isPending).length,
+            analyzing: docs.filter(isAnalyzing).length,
         }),
         [docs]
     );
@@ -243,15 +255,19 @@ export default function HomeScreen({ navigation }) {
     // subtree of a dozen driven nodes.
     const orb = useMemo(
         () => (
+            {/* The orb only claims to be working when something really is
+                queued or processing on the server. Anything else — including
+                documents sitting un-analysed — is the idle, invitational
+                state. */}
             <AiOrb
-                size={170}
-                state={counts.pending > 0 ? "working" : "idle"}
+                size={132}
+                state={counts.analyzing > 0 ? "working" : "idle"}
                 onPress={() => navigation.navigate("Upload")}
-                label={counts.pending > 0 ? "Analyzing…" : "Tap to analyze"}
+                label={counts.analyzing > 0 ? "Analyzing…" : "Tap to analyze"}
                 sublabel={
-                    counts.pending > 0
-                        ? `${counts.pending} ${counts.pending === 1 ? "document" : "documents"} in progress`
-                        : "Scan, upload or ask anything"
+                    counts.analyzing > 0
+                        ? `${counts.analyzing} ${counts.analyzing === 1 ? "document" : "documents"} being analyzed`
+                        : "Scan, upload or sign a document"
                 }
                 style={S.orb}
             />

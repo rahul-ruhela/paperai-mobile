@@ -16,6 +16,8 @@ import GradientScreen from "../ui/GradientScreen";
 import Card from "../ui/Card";
 import AiHeader from "../ui/AiHeader";
 import AppButton from "../ui/AppButton";
+import ReminderCard from "../ui/ReminderCard";
+import { USE_STUB as CHAT_STUBBED } from "../api/chat";
 import { api } from "../api/client";
 import { listTasks } from "../api/tasks";
 import { useTheme } from "../ui/ThemeProvider";
@@ -26,7 +28,7 @@ import { useFocusEffect } from "@react-navigation/native"; // 🔹 NEW
 export default function AnalysisScreen({ route, navigation }) {
     const { theme } = useTheme();
     const styles = useThemedStyles(makeStyles);
-    const { docId, title } = route.params;
+    const { docId, title } = route.params || {};
 
     const [loading, setLoading] = useState(true);
     const [rerunning, setRerunning] = useState(false);
@@ -190,6 +192,10 @@ export default function AnalysisScreen({ route, navigation }) {
                                     </Text>
                                 </Card>
 
+                                {/* Smart Reminders — renders nothing at all
+                                    when no actionable date is detected. */}
+                                <ReminderCard doc={doc} />
+
                                 {/* AI TASKS */}
                                 <Card style={styles.card}>
                                     <Text style={styles.heading}>
@@ -250,6 +256,25 @@ export default function AnalysisScreen({ route, navigation }) {
                                         </Text>
                                     )}
                                 </Card>
+
+                                {/* Hidden while chat runs against the stub. Shipping a
+                                    visible feature that answers with placeholder text is an
+                                    App Review 2.1 rejection — the same reason the OCR AI
+                                    actions in UploadScreen stay commented out. Flip USE_STUB
+                                    to false in src/api/chat.js once the endpoint is live and
+                                    this button appears on its own. */}
+                                {!CHAT_STUBBED && (
+                                    <AppButton
+                                        title="Ask AI about this document"
+                                        icon="chatbubble-ellipses-outline"
+                                        onPress={() =>
+                                            navigation.navigate("AiChat", {
+                                                docId,
+                                                title: doc?.title || title,
+                                            })
+                                        }
+                                    />
+                                )}
 
                                 <AppButton
                                     title="Re-run AI Analysis (uses credits)"

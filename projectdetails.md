@@ -39,14 +39,15 @@ reason to open the app.
 │  App.js  ThemeProvider → ErrorBoundary → NavigationContainer              │
 │          auth gate on SecureStore token → Auth stack | Main stack         │
 │                                                                          │
-│  src/screens/    25 screens (tabs + modal/detail stack)                   │
+│  src/screens/    26 screens (tabs + modal/detail stack)                   │
 │  src/ui/         design system: theme tokens, GlassCard, GradientScreen,  │
-│                  AiOrb, SignaturePad…                                     │
+│                  AiOrb, SignaturePad, ReminderCard…                       │
 │  src/hooks/      useAccessTier · useCreditBalance · useFeatureAccess      │
 │  src/services/   entitlementService (cached snapshot, 30s TTL) ·          │
-│                  signatureStore · expenseStore (both on-device)           │
+│                  signatureStore · expenseStore · reminderService ·        │
+│                  chatFreeMessages (all on-device)                         │
 │  src/api/        axios client + auth/billing/credits/documents/tasks/    │
-│                  receipts/dev                                            │
+│                  chat/receipts/dev                                       │
 │  src/storage/    tokenStore (SecureStore) · pendingPurchases              │
 │  src/config/     featureMatrix.ts — mirror of backend FeatureMatrix.cs    │
 │  src/constants/  api.ts — base URL resolution + 9 IAP SKUs                │
@@ -82,10 +83,16 @@ Two authority rules the codebase holds to:
 - Pushed screens: `Process`, `Document`, `Analysis`, `Paywall`, `Profile`,
   `Analytics` (credit analytics), `Privacy`, `Terms`, `HelpCenter`,
   `ContactSupport`, `JunkWiper`, `CameraScanner`, `CodeScanner`, `Signature`,
-  `ReceiptCapture`, `Expenses` (`AiChat` only on `future/tier1-features` — see §7)
-- On `future/tier1-features` a shared `navigationRef` lets a tapped reminder
-  notification deep-link straight to `Analysis` for that document, gated on
-  `isReady()`. That listener ships with Smart Reminders and is not in this branch.
+  `AiChat`, `ReceiptCapture`, `Expenses`
+- A shared `navigationRef` lets a tapped reminder notification deep-link straight
+  to `Analysis` for that document. Two delivery paths, because they cover
+  different launch states: `addNotificationResponseReceivedListener` catches a
+  tap while the app is running or backgrounded, and
+  `getLastNotificationResponseAsync` catches the tap that cold-launched it. A
+  cold launch delivers the response *before* the navigator mounts, so the target
+  is parked in `pendingDeepLink` and flushed from `NavigationContainer`'s
+  `onReady` — navigating before `isReady()` throws, and dropping it silently is
+  how a tapped reminder appears to do nothing (`App.js`).
 - `BootScreen` renders until both the token check and the stored theme
   preference have hydrated, so the first paint is already in the right palette
   (`App.js`).
@@ -178,8 +185,7 @@ refundTransaction(id, r)  on failure or cancel
 
 Feature keys in use: `image_ocr_extract_text`, `summarize_text`,
 `explain_text_detail`, `document_scan_ai_ready`, `junk_wiper_scan_report`,
-`receipt_extract`. (`document_ai_chat` is declared in the matrix but nothing in
-this branch reserves against it — see §7.)
+`receipt_extract`, `document_ai_chat`.
 
 `receipt_extraction` in `featureMatrix.ts` points at `receipt_extract`. It
 previously pointed at `image_ocr_extract_text`, which would have quoted and
@@ -281,13 +287,30 @@ limit, and a signature is not a credential).
 ### 4.5c AI Chat over a document
 `AiChatScreen` — a threaded chat scoped to one document, backed by
 `GET/POST /api/documents/{id}/chat`. **1 credit per message, first message per
-document free** as a hook. Feature key `document_ai_chat`.
+document free** as a hook. Feature key `document_ai_chat`. Reached from the
+"Ask AI about this document" button on `AnalysisScreen`.
 
 Deliberately **no subscription-tier gate**: credits are the entitlement
 throughout this product (Junk Wiper and OCR both charge credits without checking
 a tier, and the backend does the same), so showing an upsell to someone holding
 credits they already paid for would be wrong. `USE_STUB` in `src/api/chat.js` is
-an offline escape hatch for UI work, currently `false`.
+an offline escape hatch for UI work, currently `false` — and the Analysis screen's
+entry button is hidden while it is true, because shipping a visible feature that
+answers with placeholder text is a guideline 2.1 rejection.
+
+The free first message skips the reserve entirely rather than reserving and
+refunding — a cleaner ledger. Which means **the client decides whether to
+charge**, so it has to be right about whether the free message is spent:
+`chatFreeMessages` keeps a per-document on-device ledger that is OR'd with the
+server's chat history. History alone is not enough — `getChatHistory` swallows
+its errors and returns `[]`, so any network hiccup on open made the screen
+believe the document had never been asked anything and hand out the free message
+again, every time.
+
+Sending is optimistic: the question appears immediately. Every failure path —
+reserve rejected, empty answer, thrown request — rolls that bubble back out and
+returns the text to the composer, so a failed send never leaves a question
+sitting in the thread with no answer and no explanation.
 
 ### 4.5d Scan Receipt — receipts and expenses
 - `ReceiptCaptureScreen` — capture a receipt, `POST /api/receipts/extract`
@@ -318,16 +341,43 @@ an offline escape hatch for UI work, currently `false`.
   until the backend has an expenses table.
 
 ### 4.5e Smart Reminders (free, on-device)
-`reminderService` + `ReminderCard`, surfaced in `TasksScreen`. Detects dates in a
-document's AI output and schedules local notifications before a bill, contract or
-warranty comes due. No credits, no server round-trip.
+`reminderService` + `ReminderCard`. The card sits on `AnalysisScreen` and renders
+nothing at all when no actionable date is found; the scheduled reminders are
+listed and cancellable in `TasksScreen`. Detects dates in a document's AI output
+and schedules local notifications before a bill, contract or warranty comes due.
+No credits, no server round-trip.
 
 Date source in priority order: `doc.detectedDates` from the backend
 (`[{ label, dateUtc, confidence }]`) when present, else client-side extraction
 from the summary / extracted text — so nothing in the UI has to change when the
-backend ships it. Lead times are 1 day / 3 days / 1 week before, and everything
-**fires at 09:00 local**, not at the raw timestamp, because waking people at
-midnight is how an app gets its notifications turned off.
+backend ships it. Lead times are 1 day / 3 days / 1 week / on the day, and
+everything **fires at 09:00 local**, not at the raw timestamp, because waking
+people at midnight is how an app gets its notifications turned off.
+
+A bare date is not a reminder — only dates within 60 characters after an intent
+word (`due`, `expires`, `valid until`, `deadline`, …) are kept, or the print date
+in a letterhead becomes a notification.
+
+**`05/09/2026` is genuinely ambiguous** and guessing wrong schedules the reminder
+months off. When one of the two numbers is > 12 that settles the order outright.
+When neither can be ruled out, the device locale decides (`MONTH_FIRST`, probed
+once via `Intl.DateTimeFormat.formatToParts` rather than hardcoding either
+convention) and the result is downgraded to `LOW` confidence to record that it
+was a guess. `__tests__/reminderDates.test.js` pins this behaviour.
+
+Records live in `reminders.json` in the app document directory. Two details that
+are not optional:
+- Mutations are **serialised through one promise chain**. Each is a
+  read-modify-write of a single file, so two in flight at once — two "Remind me"
+  taps, or a tap while the Tasks tab loads — would both read the same list and
+  the second write would drop the first record.
+- Reminders more than 60 days past their date are **swept on read**. Without it
+  `hasReminderFor` keeps reporting "Set" for a notification that fired months
+  ago, and the user can never schedule a new one for that document and date.
+
+`ensurePermission()` returns `{ granted, reason }`, not a bare boolean: a
+simulator cannot deliver local notifications at all, and offering "Open Settings"
+there sends the user somewhere that cannot fix it.
 
 ### 4.9 Push notifications
 `expo-notifications` + `UIBackgroundModes: remote-notification`. Token
@@ -371,7 +421,7 @@ guideline 5.1.1 rejection.
 | Auth | `register`, `login`, `email-otp/send·verify`, `otp/send·verify`, `apple`, `refresh`, `logout` |
 | Account | `DELETE /api/account`, `GET/POST /api/profile` |
 | Documents | `GET /api/documents`, `GET /api/documents/{id}`, `POST /upload`, `POST /{id}/process`, `POST /{id}/ocr`, `POST /{id}/reprocess`, `DELETE /{id}` |
-| Chat | `GET/POST /api/documents/{id}/chat` — **not called from this branch**, see §7 |
+| Chat | `GET/POST /api/documents/{id}/chat` |
 | Receipts | `POST /api/receipts/extract` (multipart + `X-Transaction-Id`) |
 | Tasks | `GET/POST /api/tasks`, `PATCH/DELETE /api/tasks/{id}` |
 | Credits | `GET /balance`, `GET /feature-configs[/{key}]`, `POST /reserve`, `POST /complete`, `POST /refund` |
@@ -407,7 +457,9 @@ LAN IP that would look broken to App Review (guideline 2.1) and trip ATS.
 - ASC automation: `tools/asc/apply-subscription-prices.js`,
   `set-subscription-availability.js`, `upload-review-screenshots.js`
 - Tests: `__tests__/billingRetry.test.js` (IAP retry loop),
-  `__tests__/featureMatrix.test.ts` (gating matrix) — `npm test`, jest-expo
+  `__tests__/featureMatrix.test.ts` (gating matrix),
+  `__tests__/reminderDates.test.js` (reminder date detection) — `npm test`,
+  jest-expo
 - Expo Go convenience: a fresh account with a zero balance gets 500 test credits
   once; the endpoint 404s in production so it is safe to ship (`src/api/dev.js`).
 
@@ -429,11 +481,13 @@ secret.
   have no screen yet.
 - Expenses live only on-device; there is no backend expenses table, so they do
   not survive a reinstall or sync across devices.
-- **AI Chat (§4.5c) and Smart Reminders (§4.5e) are not in this branch.** They
-  exist only on `future/tier1-features`, along with `src/api/chat.js`,
-  `AiChatScreen`, `reminderService` and `ReminderCard`. Sign & Fill (§4.5b) and
-  Receipts / Expenses (§4.5d) have been ported over; those two have not, so the
-  `AiChat` route and the reminder deep-link in `App.js` do not exist here yet.
+- Reminders are **local notifications only**. They live in a JSON file in the app
+  document directory, so they do not survive a reinstall and do not sync across
+  devices — the same limitation as Expenses above.
+- `detectedDates` is not implemented server-side yet, so reminder dates come from
+  the client-side regex fallback. It is deliberately conservative (intent word
+  required), which means it misses more than it invents — the right trade for a
+  feature that schedules notifications.
 - Android is unstarted.
 
 ---

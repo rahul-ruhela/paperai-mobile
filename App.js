@@ -1,5 +1,6 @@
 ﻿import React, { useEffect, useState } from "react";
-import { NavigationContainer, DefaultTheme, DarkTheme } from "@react-navigation/native";
+import { NavigationContainer, DefaultTheme, DarkTheme, createNavigationContainerRef } from "@react-navigation/native";
+import * as Notifications from "expo-notifications";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
@@ -42,9 +43,43 @@ import JunkWiperScanScreen from "./src/screens/JunkWiperScanScreen";
 import CameraDocumentScanScreen from "./src/screens/CameraDocumentScanScreen";
 import CodeScannerScreen from "./src/screens/CodeScannerScreen";
 import SignatureScreen from "./src/screens/SignatureScreen";
+import AiChatScreen from "./src/screens/AiChatScreen";
 import ReceiptCaptureScreen from "./src/screens/ReceiptCaptureScreen";
 import ExpensesScreen from "./src/screens/ExpensesScreen";
 import BootScreen from "./src/screens/BootScreen";
+
+// Shared ref so a tapped reminder notification can navigate from outside any
+// screen. `isReady()` gates every use — a notification can be delivered before
+// the navigator has mounted, and navigating then throws.
+const navigationRef = createNavigationContainerRef();
+
+// A notification tapped while the app was terminated is delivered before the
+// navigator exists. Park the target and flush it from NavigationContainer's
+// onReady instead of dropping it — otherwise a cold launch from a reminder just
+// opens the app on the Documents tab and the tap appears to have done nothing.
+let pendingDeepLink = null;
+
+function docIdFromResponse(response) {
+    const data = response?.notification?.request?.content?.data;
+    return data?.type === "reminder" && data?.docId ? data.docId : null;
+}
+
+function openDocument(docId) {
+    if (!docId) return;
+    if (navigationRef.isReady()) {
+        navigationRef.navigate("Analysis", { docId });
+    } else {
+        pendingDeepLink = docId;
+    }
+}
+
+function flushDeepLink() {
+    const docId = pendingDeepLink;
+    pendingDeepLink = null;
+    if (docId && navigationRef.isReady()) {
+        navigationRef.navigate("Analysis", { docId });
+    }
+}
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -162,6 +197,29 @@ function AppShell() {
         ensureExpoGoTestCredits();
     };
 
+    // Smart Reminders: tapping a reminder notification opens the document it
+    // belongs to. Two paths, because they cover different launch states —
+    // the listener catches taps while the app is running or backgrounded, and
+    // getLastNotificationResponseAsync catches the tap that cold-launched it.
+    useEffect(() => {
+        let alive = true;
+
+        const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+            openDocument(docIdFromResponse(response));
+        });
+
+        Notifications.getLastNotificationResponseAsync()
+            .then((response) => {
+                if (alive) openDocument(docIdFromResponse(response));
+            })
+            .catch(() => {});
+
+        return () => {
+            alive = false;
+            sub.remove();
+        };
+    }, []);
+
     // ✅ Conditional render AFTER hooks.
     // `hydrated` gates on the stored appearance preference so the first paint
     // is already in the right palette instead of flashing light then swapping.
@@ -185,7 +243,7 @@ function AppShell() {
 
     return (
         <ErrorBoundary>
-        <NavigationContainer theme={navTheme}>
+        <NavigationContainer ref={navigationRef} theme={navTheme} onReady={flushDeepLink}>
             <Stack.Navigator
                 screenOptions={{
                     headerStyle: {
@@ -300,6 +358,11 @@ function AppShell() {
                         <Stack.Screen
                             name="Signature"
                             component={SignatureScreen}
+                            options={{ headerShown: false }}
+                        />
+                        <Stack.Screen
+                            name="AiChat"
+                            component={AiChatScreen}
                             options={{ headerShown: false }}
                         />
                         <Stack.Screen
