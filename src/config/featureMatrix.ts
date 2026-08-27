@@ -52,6 +52,14 @@ export const FEATURES: FeatureDefinition[] = [
     { key: "blurry_detector", name: "Blurry Photo Detector", requiredTier: "essential", onDevice: true, backendVerified: true, creditFeatureKey: "blurry_photo_scan" },
     { key: "similar_photos", name: "Similar Photo Grouping", requiredTier: "plus", onDevice: true, backendVerified: true, creditFeatureKey: "similar_photo_scan" },
 
+    // Storage Studio, Advance layer (Module 4). `storage_prediction` carries no
+    // credit key on purpose: the estimate is least-squares arithmetic over a
+    // local history file, so there is no server work to bill and charging for it
+    // would be a fee for nothing. The two that do call the server carry one.
+    { key: "ai_storage_analysis", name: "AI Storage Analysis", requiredTier: "advance", onDevice: false, backendVerified: true, creditFeatureKey: "ai_storage_analysis" },
+    { key: "screenshot_intelligence", name: "Screenshot Intelligence", requiredTier: "advance", onDevice: false, backendVerified: true, creditFeatureKey: "screenshot_intelligence" },
+    { key: "storage_prediction", name: "Storage Forecast", requiredTier: "advance", onDevice: true, backendVerified: true },
+
     // Advance tier
     // On-device: reminders are local notifications, so there is no server call to
     // authorize. `backendVerified` is still true because the TIER is decided by

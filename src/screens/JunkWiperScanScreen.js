@@ -26,24 +26,28 @@ import { listDocuments, deleteDocument } from "../api/documents";
 import { useTheme } from "../ui/ThemeProvider";
 import useThemedStyles from "../ui/useThemedStyles";
 import { showEntitlementDenial } from "../ui/FeatureLock";
-// ── Duplicate detection strategies ────────────────────────────────────────────
-// Strategy 1 — Exact duplicate: same fileSize + same pixel dimensions + same mediaType
-//   Catches: screenshots saved twice, downloaded photos saved multiple times,
-//            WhatsApp/Telegram duplicates, iCloud duplicates
-// Strategy 2 — Same filename (case-insensitive): same name in different albums/folders
-//   Catches: photos organised into albums but original still in Camera Roll
-// Strategy 3 — Near-duplicate burst shots: same dimensions + creation within 2 seconds
-//   Catches: burst-mode photos, Live Photos saved as stills
-// Strategy 4 — Duplicate PaperAI documents: same normalised title in GET /api/documents
-//   Catches: the same file uploaded to the app more than once
-// Strategies 1–3 run over the media library and are deduplicated by asset ID so
-// nothing is counted twice; strategy 4 runs over the user's uploaded documents.
+import {
+    buildDocumentDuplicateGroups,
+    buildDuplicateGroups,
+    enrichAssets,
+    enumerateAssets,
+    formatSize,
+    isVideoAsset,
+} from "../services/cleanerService";
+// ── Junk Wiper — the duplicate scan screen ────────────────────────────────────
+// This is the Basic Cleaner from docs/smart-cleaner-spec.md, and the entry point
+// Storage Studio hands off to for duplicates. It owns permission, the credit
+// reservation, the review list and deletion.
 //
-// Results are grouped by `kind` ("photo" | "video" | "document") so the report can
-// be filtered. Every reported row maps to something real: the API exposes no size
-// for a document, so document groups carry no megabyte figure rather than an
-// invented one, and nothing is ever synthesised to pad out an empty result.
-// ──────────────────────────────────────────────────────────────────────────────
+// It no longer owns the detection. The four strategies — exact size+dimensions,
+// same filename, burst-shot neighbours, and duplicate PaperAI documents by title
+// — live in services/cleanerService.js so the newer cleaner layers group photos
+// with the same code rather than a copy of it. Read them there.
+//
+// Two things this screen will not do, both of them spec §7 and App Review
+// guideline 2.3.1: it never deletes anything without an explicit in-app confirm
+// followed by the OS sheet, and it never invents a finding. A clean library
+// returns zero groups and renders the empty state.
 
 const SCAN_MESSAGES = [
     "Initialising neural scan matrix…",
@@ -58,8 +62,6 @@ const SCAN_MESSAGES = [
     "Generating cleanup report…",
 ];
 
-const PAGE_SIZE = 500;
-
 // Report categories. "all" is always shown; the rest hide themselves when the
 // scan found nothing of that kind.
 const KIND_FILTERS = [
@@ -70,17 +72,6 @@ const KIND_FILTERS = [
 ];
 
 const { height: SCREEN_H } = Dimensions.get("window");
-
-// ── Scan helpers ──────────────────────────────────────────────────────────────
-
-// Human-readable size from raw bytes (used for the live junk-size readout).
-function formatSize(bytes) {
-    if (!bytes || bytes <= 0) return "0 MB";
-    const mb = bytes / 1024 / 1024;
-    if (mb >= 1024) return `${(mb / 1024).toFixed(2)} GB`;
-    if (mb >= 10) return `${mb.toFixed(0)} MB`;
-    return `${mb.toFixed(1)} MB`;
-}
 
 
 export default function JunkWiperScanScreen({ navigation }) {
@@ -382,192 +373,56 @@ export default function JunkWiperScanScreen({ navigation }) {
         setProgress(0);
     }
 
-    // ── Duplicate detection — three strategies ─────────────────────────────────
+    // ── Duplicate detection ────────────────────────────────────────────────────
+    // The strategies themselves now live in services/cleanerService.js, so the
+    // Storage Studio layers group photos with exactly the same code this screen
+    // does instead of a second copy that drifts. This function is only the
+    // orchestration: page, enrich, group, then fold in the document duplicates.
     async function findDuplicates(onScanned, onFound, onProgress, onBytes) {
-        // Phase 1: load all assets (0–60% of progress bar)
-        let assets = [];
-        let after = undefined;
-        let hasMore = true;
-        while (hasMore) {
-            const page = await MediaLibrary.getAssetsAsync({
-                mediaType: [MediaLibrary.MediaType.photo, MediaLibrary.MediaType.video],
-                first: PAGE_SIZE,
-                after,
-                sortBy: [MediaLibrary.SortBy.creationTime],
-            });
-            assets = assets.concat(page.assets);
-            hasMore = page.hasNextPage;
-            after = page.endCursor;
-            onScanned(assets.length);
-            // Report 0–55% during loading
-            onProgress(Math.min(55, Math.round((assets.length / Math.max(assets.length + 1, 1)) * 55)));
-        }
+        const assets = await enumerateAssets({
+            onCount: (n) => {
+                onScanned(n);
+                // 0–55% while enumerating. The library size is unknown until the
+                // last page, so this is a paced bar rather than a true fraction —
+                // it never claims to be at 100% before the work is done.
+                onProgress(Math.min(55, Math.round((n / Math.max(n + 1, 1)) * 55)));
+            },
+        });
 
         onProgress(60);
 
-        // Phase 2: fetch full asset info for fileSize (MediaLibrary.getAssetInfoAsync gives fileSize)
-        // We do this in batches to avoid overwhelming the bridge
-        const BATCH = 100;
-        const enriched = [];
-        for (let i = 0; i < assets.length; i += BATCH) {
-            const batch = assets.slice(i, i + BATCH);
-            const infos = await Promise.all(
-                batch.map(a => MediaLibrary.getAssetInfoAsync(a).catch(() => a))
-            );
-            enriched.push(...infos);
-            onProgress(60 + Math.round(((i + BATCH) / assets.length) * 30));
-        }
+        const enriched = await enrichAssets(assets, {
+            onProgress: (fraction) => onProgress(60 + Math.round(fraction * 30)),
+        });
 
         onProgress(92);
 
-        // ── Strategy 1: exact duplicate by fileSize + width + height + mediaType ──
-        // Same file saved twice (exact copy). fileSize MUST match exactly.
-        const sizeMap = {};
-        for (const a of enriched) {
-            const sz = a.fileSize ?? 0;
-            if (sz === 0) continue; // skip assets where fileSize isn't available
-            const key = `${sz}__${a.width}__${a.height}__${a.mediaType}`;
-            if (!sizeMap[key]) sizeMap[key] = [];
-            sizeMap[key].push(a);
-        }
-
-        // ── Strategy 2: same normalised filename in different albums ──────────────
-        // e.g. "photo.jpg" in Camera Roll AND in "WhatsApp" album
-        const nameMap = {};
-        for (const a of enriched) {
-            const name = (a.filename || "").toLowerCase().trim();
-            if (!name) continue;
-            if (!nameMap[name]) nameMap[name] = [];
-            nameMap[name].push(a);
-        }
-
-        // ── Strategy 3: burst / near-duplicate shots ──────────────────────────────
-        // Same dimensions, creation time within 3 seconds of each other
-        const timeMap = {};
-        for (const a of enriched) {
-            if (!a.width || !a.height) continue;
-            // Round creation time to nearest 3-second bucket
-            const timeBucket = Math.floor((a.creationTime ?? 0) / 3000);
-            const key = `${a.width}__${a.height}__${timeBucket}`;
-            if (!timeMap[key]) timeMap[key] = [];
-            timeMap[key].push(a);
-        }
-
-        // ── Merge all strategies into unified groups ───────────────────────────────
-        // Track which asset IDs have already been assigned to a group to avoid double-counting
-        const assignedIds = new Set();
-        const groups = [];
-
-        function buildGroup(items, strategyLabel) {
-            if (items.length < 2) return;
-            // Deduplicate items within this group by ID
-            const unique = items.filter((a, i, arr) =>
-                arr.findIndex(b => b.id === a.id) === i
-            );
-            if (unique.length < 2) return;
-            // Skip if all IDs already claimed by a previous strategy
-            const newItems = unique.filter(a => !assignedIds.has(a.id));
-            if (newItems.length < 1) return;
-            // Mark all as assigned
-            unique.forEach(a => assignedIds.add(a.id));
-
-            // Sort newest first — keep the newest, delete the rest
-            const sorted = [...unique].sort((a, b) =>
-                (b.creationTime ?? 0) - (a.creationTime ?? 0)
-            );
-            const dupes = sorted.slice(1); // everything except the newest copy
-            const totalBytes = dupes.reduce((acc, a) => acc + (a.fileSize ?? 0), 0);
-            const fname = sorted[0].filename || "Unknown";
-
-            groups.push({
-                id: `${strategyLabel}__${sorted[0].id}`,
-                label: fname,
-                strategy: strategyLabel,
-                // Photos and videos both live in the media library; split them so
-                // the report can be filtered by what the user is looking for.
-                kind: sorted[0].mediaType === MediaLibrary.MediaType.video ? "video" : "photo",
-                count: dupes.length,
-                totalBytes,
-                saveMB: parseFloat((totalBytes / 1024 / 1024).toFixed(2)),
-                assetIds: dupes.map(a => a.id),
-                // For display — show all copies including the one we keep
-                allCount: unique.length,
-            });
-
-            // Live feedback — real detected count + reclaimable bytes so far
-            onFound?.(groups.length);
-            onBytes?.(groups.reduce((acc, g) => acc + g.totalBytes, 0));
-        }
-
-        // Strategy 1 — exact fileSize matches (most reliable — do first)
-        for (const items of Object.values(sizeMap)) {
-            buildGroup(items, "exact");
-        }
-
-        // Strategy 2 — same filename
-        for (const items of Object.values(nameMap)) {
-            buildGroup(items, "name");
-        }
-
-        // Strategy 3 — burst shots (least reliable — do last)
-        for (const items of Object.values(timeMap)) {
-            // Extra guard: require at least 2 items with non-zero fileSize
-            const valid = items.filter(a => (a.fileSize ?? 0) > 0);
-            buildGroup(valid, "burst");
-        }
+        const groups = buildDuplicateGroups(enriched, {
+            isVideo: isVideoAsset,
+            onGroup: (built) => {
+                onFound?.(built.length);
+                onBytes?.(built.reduce((acc, g) => acc + g.totalBytes, 0));
+            },
+        });
 
         onProgress(96);
 
-        // ── Strategy 4: duplicate documents uploaded to PaperAI ───────────────────
-        // Uses the existing GET /api/documents list — no new endpoint. The API
-        // exposes no size or checksum for a document, so these are matched on
-        // normalised title only and deliberately claim NO megabyte savings:
-        // reporting an invented size is exactly the dishonesty this screen was
-        // cleaned up to remove. They still count as duplicates worth deleting.
+        // Duplicate PaperAI documents, via the existing GET /api/documents. A
+        // failure here reports the media results we do have rather than failing
+        // the whole scan the user just paid for.
         try {
-            const docs = await listDocuments();
-            const docMap = {};
-            for (const d of docs ?? []) {
-                const title = (d.title || "").toLowerCase().trim().replace(/\s+/g, " ");
-                if (!title) continue;
-                (docMap[title] ??= []).push(d);
-            }
-
-            for (const items of Object.values(docMap)) {
-                if (items.length < 2) continue;
-                // Keep the newest upload, offer the older copies for deletion.
-                const sorted = [...items].sort(
-                    (a, b) =>
-                        new Date(b.createdAt ?? b.uploadedAt ?? 0) -
-                        new Date(a.createdAt ?? a.uploadedAt ?? 0)
-                );
-                const dupes = sorted.slice(1);
-
-                groups.push({
-                    id: `document__${sorted[0].id}`,
-                    label: sorted[0].title || "Untitled document",
-                    strategy: "document",
-                    kind: "document",
-                    count: dupes.length,
-                    totalBytes: 0, // unknown — never guessed
-                    saveMB: 0,
-                    assetIds: [],
-                    docIds: dupes.map(d => d.id),
-                    allCount: sorted.length,
-                });
-            }
+            groups.push(...buildDocumentDuplicateGroups(await listDocuments()));
             onFound?.(groups.length);
         } catch {
-            // Offline or the documents call failed — report the media results we
-            // do have rather than failing the whole scan.
+            // Offline, or the documents call failed.
         }
 
         onProgress(100);
         onFound(groups.length);
 
-        // Sort by most space saved first
         return groups.sort((a, b) => b.totalBytes - a.totalBytes);
     }
+
 
     function toggleSelect(id) {
         setSelected(prev => {

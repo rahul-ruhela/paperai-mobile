@@ -1,6 +1,6 @@
 # Paper AI Assistant — Product Roadmap v2
 
-Status: **in progress — Modules 0, 1, 2 and 3 shipped; Module 4 is next.**
+Status: **in progress — Modules 0, 1, 2, 3 and 4 shipped; Module 5 is next.**
 Written: 2026-08-27. Last synced to the repository: 2026-08-28. Branch: `chore/release-hardening`.
 Basis: the mobile repo (`paperai-mobile`) + API repo (`PaperAiApis`).
 
@@ -54,6 +54,10 @@ deployed. See §11 for what is live in production.
 - **Essential** — AI document analysis, image OCR, summarize text, receipt extraction, smart reminders.
 - **Plus** — explain in detail, AI chat (`AiChatScreen` + `DocumentChatController`), deep clean (`junk_wiper_scan_report`, 30 credits).
 - **Advance** — custom reminder dates + snooze (`advanced_reminders`), household assistant (declared in the matrix, not built).
+- **Storage Studio** *(Module 4, merged 2026-08-28)* — the cleaner hub: device
+  storage, Duplicates, Screenshots and Large Files (free, on-device), Blurry
+  (Essential) and Similar Photos (Plus, both analysed on-device), and the
+  Advance Storage Forecast. Reached from Settings → Storage Studio.
 - **Assistant** *(Module 3, merged 2026-08-28)* — the Assistant tab: My Tasks / AI Tasks / Reminders, task descriptions, due date + time, repeat, priority, complete, snooze, delete, and on-device read-aloud.
 
 ---
@@ -81,7 +85,7 @@ Ordered by dependency, not desirability. Each row is one approval gate.
 | 1 | Subscription & entitlement policy | `subscription-entitlement-policy.md` | all | No | Low (matrix keys + shared lock UI) | **Shipped** 2026-08-28 |
 | 2 | Device Permission Center | `device-permission-center.md` | Free | No | Low | **Shipped** 2026-08-28 |
 | 3 | Assistant module (Tasks → Assistant; My Tasks / AI Tasks / Reminders) | `assistant-module-spec.md` | Free base, Advance extras | Yes | Medium | **Shipped** 2026-08-28 |
-| 4 | Smart Cleaner layers (Basic / Deep / Pro) | `smart-cleaner-spec.md` | Free → Advance | Seeds only | Medium | Not started |
+| 4 | Smart Cleaner layers (Basic / Deep / Pro) | `smart-cleaner-spec.md` | Free → Advance | Seeds only | Medium | **Shipped** 2026-08-28 |
 | 5 | Privacy & Security module (Vault, sensitive detection, privacy score) | `privacy-security-module.md` | Free → Plus | Local only | Medium | Not started |
 | 6 | Smart Recall engine | `smart-recall-engine.md` | Advance | Yes | High | Not started |
 | 7 | AI Voice Companion | `voice-assistant-spec.md` | Advance | Yes (prefs) | Medium | Not started |
@@ -97,7 +101,7 @@ Module 0  (matrix repair + tasks API)            [DONE]
    ├── Module 3  Assistant ──┬── Module 6  Smart Recall ── Module 7  Voice Companion
    │              [DONE]     └── (reuses reminderService)
    ├── Module 1  Entitlement policy   (informs every gate below)  [DONE]
-   ├── Module 4  Smart Cleaner        (D2 credit seeds now exist)
+   ├── Module 4  Smart Cleaner        [DONE]
    └── Module 5  Privacy ── Module 2  Permission Center  [DONE — standalone; Module 5 embeds it]
 
 Module 8  Performance — last, measured against the finished surface area.
@@ -134,7 +138,16 @@ Migration `20260828090000_AddAssistantTaskFields`, applied to `PaperAiDb`. Each
 
 **Module 1** — no schema change. Policy, matrix keys and shared lock UI only. **Done.**
 
-**Module 4** — `FeatureCreditConfig` seeds. `blurry_photo_scan` and `similar_photo_scan` are **already seeded** (migration `20260827230000_SeedStorageStudioCreditConfigs`, Module 0); still to add are `ai_storage_analysis`, `screenshot_intelligence`, `storage_prediction`. No new table.
+**Module 4 — `FeatureCreditConfig` seeds — APPLIED.** Migration
+`20260828120000_SeedAdvanceStorageCreditConfigs` adds `ai_storage_analysis` (5)
+and `screenshot_intelligence` (3), guarded by `IF NOT EXISTS` and reverted by Id.
+`blurry_photo_scan` and `similar_photo_scan` were already seeded in Module 0. No
+new table, no column.
+
+`storage_prediction` is deliberately **not** seeded: it is an Advance feature but
+a purely on-device one — least-squares arithmetic over a local history file — so
+it has no credit key and there is no server work to bill. A zero-cost row would
+only invite a future Reserve for a computation the server never performs.
 
 **Module 6** — new table `RecallMemories` (`Id, UserId, SourceType, SourceId, Kind, Content, Confidence, CreatedAt, ExpiresAtUtc, DeletedAt`), index on `(UserId, SourceId)`.
 
@@ -155,7 +168,8 @@ Additive only; no existing route or response shape changes.
 | 3 | `GET /api/tasks?source=ai\|manual&status=open\|done` | Feeds the Assistant tabs from one endpoint. Params absent = previous behaviour. | **Implemented** |
 | 3 | `POST /api/tasks/{id}/complete`, `POST /api/tasks/{id}/snooze` | Explicit verbs so completion time and snooze are recorded server-side. | **Implemented** |
 | 1 | none | Policy module — no new routes. It consumes the `code` / `requiredTier` / `message` body `GET /api/entitlements/check/{key}` already returns on 403, whose `SUBSCRIPTION_EXPIRED` case was corrected to fire only for a plan that genuinely lapsed. | **Implemented** |
-| 4 | none | The cleaner stays on-device; only Reserve/Complete/Refund on existing credit routes. | Not started |
+| 4 | none | The cleaner stays on-device; only Reserve/Complete/Refund on existing credit routes. | **Implemented** — no route added, as specified. |
+| 4 | *(deferred)* | `ai_storage_analysis` and `screenshot_intelligence` need a route this module does not add. Both are registered in the matrix and priced, but have **no entry point** until that route exists — see `smart-cleaner-spec.md` §10.2. | Deferred |
 | 5 | none | Local-only by design. | Not started |
 | 6 | `GET/POST/DELETE /api/recall/memories`, `DELETE /api/recall/memories/all` | Memory CRUD plus the mandatory "forget everything" control. | Not started |
 | 7 | `GET/PUT /api/voice/preferences` | Voice on/off, voice id, rate, tone. | Not started |
@@ -178,14 +192,22 @@ Every new endpoint is `[Authorize]`, scopes by `GetUserId()`, and calls `Entitle
 - New: `src/services/permissionStatus.js` (get-only permission reads; `toDisplayState` / `mergePhotoStates` exported pure) and `src/screens/PermissionCenterScreen.js` (read-only panel, re-reads on `AppState` `active`, one Open Settings button, plus the iOS limited-photo "Manage selection" picker). No feature-matrix key and no entitlement check — the panel is Free and on-device. *(Module 2)*
 - `__tests__/permissionStatus.test.js` — 14 cases, including a spy assertion that reading status never calls any `request*Async`. *(Module 2)*
 
+- `App.js` — `StorageStudio` and `StorageScan` stack routes; `SettingsScreen` gains **Account → Storage Studio** as the hub's entry point. *(Module 4)*
+- New services: `cleanerService.js` (the scan engine extracted out of `JunkWiperScanScreen.js`, pure grouping/hashing/sharpness/projection above a thin `MediaLibrary` layer), `imageSampler.js` (one 64×64 on-device downsample per photo, read for a sharpness score and a 64-bit hash, then discarded), `cleanerHistory.js` (the 24-entry aggregate store — the only thing a scan persists). *(Module 4)*
+- New UI: `StorageStudioScreen` (hub) and `StorageScanScreen` (one scan → review → delete flow, four modes by route param). `JunkWiperScanScreen` kept its UI and became a consumer of the service. *(Module 4)*
+- `app.json` — both photo usage strings extended to name the new scans and to state that photos are analysed on-device, per guideline 5.1.1. *(Module 4)*
+- New dependencies: `expo-image-manipulator` and `jpeg-js`, for the on-device downsample the blurry and similar scans read. **A new native build is required before either paid scan runs on a device.** *(Module 4)*
+- `__tests__/cleanerService.test.js` (38 cases) and `__tests__/cleanerHistory.test.js` (12 cases). *(Module 4)*
+
 **Remaining**
 
-- `App.js` — add `Vault`, `SmartCleaner` and `VoiceSettings` stack routes as their modules land.
+- `App.js` — add `Vault` and `VoiceSettings` stack routes as their modules land.
 - `src/config/featureMatrix.ts` — add each later module's keys, always in the same commit as `FeatureMatrix.cs` **and** the snapshot in `__tests__/featureMatrix.test.ts`.
 - **Nothing further to convert.** The other screens' paywall prompts were checked and are 402 credit top-ups or plain navigation, not tier locks — see the policy §5. Converting them would turn a top-up into a wall.
-- New services: `vaultService.js`, `recallService.js`, `voiceService.js`, and `cleanerService.js` extracted from `JunkWiperScanScreen.js` (1641 lines — too large to extend safely).
+- New services: `vaultService.js`, `recallService.js`, `voiceService.js`.
 - New UI: `VaultScreen`, `PrivacyScoreCard`, `VoiceSettingsSection`.
-- New dependencies, none currently installed: `expo-local-authentication` (Face ID / Touch ID), `expo-speech` (voice), `expo-crypto` (vault key derivation). Each needs an `app.json` plugin entry and an Info.plist usage string.
+- Entry points for `ai_storage_analysis` and `screenshot_intelligence`, in the same commit as the backend route they need. Both are already registered and priced; neither has a card, deliberately — see `smart-cleaner-spec.md` §10.2.
+- New dependencies, not currently installed: `expo-local-authentication` (Face ID / Touch ID) and `expo-crypto` (vault key derivation). Each needs an `app.json` plugin entry and an Info.plist usage string. (`expo-speech` is already a dependency.)
 
 ---
 
@@ -215,6 +237,7 @@ Merged is not deployed. Track the two separately.
 | 1 — Entitlement policy | Yes (2026-08-28) | **No** | No schema and no new routes, but the `SUBSCRIPTION_EXPIRED` correction is server-side: until the API deploys, a never-subscribed user on a production build would still be told their plan ended. |
 | 2 — Device Permission Center | Yes (2026-08-28) | **n/a** | Mobile-only and entirely on-device: no schema, no route, no backend change at all. It is the one module here with no API dependency, so it is safe to ship in a mobile build ahead of the API deploy. |
 | 3 — Assistant | Yes (2026-08-28) | **No** | The Assistant screen works only against a local backend until the API is deployed. Do not ship the mobile build to TestFlight/App Store before the API deploy. |
+| 4 — Smart Cleaner | Yes (2026-08-28) | **No** | The free layers (Screenshots, Large Files) and the Storage Forecast are entirely on-device and work against any backend. The two paid scans need migration `20260828120000` applied and the API deployed, or their Reserve 404s on an unpriced key. Also needs a **new native build** — `expo-image-manipulator` was added — so neither paid scan runs in the current TestFlight binary. |
 
 The App Store release currently live is v1.0 (build 37) plus the nine
 subscriptions, submitted 2026-08-18 — it predates all of the above.

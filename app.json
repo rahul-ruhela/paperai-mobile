@@ -53,7 +53,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Paper AI Assistant uses your photo library to choose images to extract text from, pick a page to sign, add a receipt to scan, and — when you run Junk Wiper — scan for duplicate photos and videos so you can remove the extra copies. Junk Wiper needs \"All Photos\" to find every duplicate."
+          "photosPermission": "Paper AI Assistant uses your photo library to choose images to extract text from, pick a page to sign, add a receipt to scan, and — in Storage Studio — to find duplicates, screenshots, large files, blurry shots and near-identical photos so you can remove the copies you choose. Photos are analysed on this device and none are uploaded or deleted without your confirmation. Storage Studio needs \"All Photos\" to cover your whole library."
         }
       ],
       [
@@ -66,7 +66,7 @@
       [
         "expo-media-library",
         {
-          "photosPermission": "Paper AI Assistant uses your photo library to choose images to extract text from, pick a page to sign, add a receipt to scan, and — when you run Junk Wiper — scan for duplicate photos and videos so you can remove the extra copies. Junk Wiper needs \"All Photos\" to find every duplicate.",
+          "photosPermission": "Paper AI Assistant uses your photo library to choose images to extract text from, pick a page to sign, add a receipt to scan, and — in Storage Studio — to find duplicates, screenshots, large files, blurry shots and near-identical photos so you can remove the copies you choose. Photos are analysed on this device and none are uploaded or deleted without your confirmation. Storage Studio needs \"All Photos\" to cover your whole library.",
           "savePhotosPermission": "Paper AI Assistant needs permission to save scanned documents to your photo library.",
           "isAccessMediaLocationEnabled": true
         }

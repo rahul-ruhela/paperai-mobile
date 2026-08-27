@@ -42,6 +42,9 @@ export const UPGRADE_MESSAGES: Record<string, string> = {
     advanced_reminders: "Custom dates and snooze are part of Advance.",
     household_assistant: "Run the household from one place with Advance.",
     smart_recall: "Advance remembers the details for you.",
+    ai_storage_analysis: "Get a storage plan written for your device with Advance.",
+    screenshot_intelligence: "Sort screenshots into receipts, chats and documents with Advance.",
+    storage_prediction: "See when your storage runs out with Advance.",
     voice_companion: "Hear your reminders read aloud with Advance.",
 };
 

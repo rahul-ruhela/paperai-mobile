@@ -396,6 +396,13 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
                         />
 
                         <Row
+                            icon="hardware-chip-outline"
+                            title="Storage Studio"
+                            subtitle="Free up space on this device"
+                            onPress={() => navigation.navigate("StorageStudio")}
+                        />
+
+                        <Row
                             icon="lock-open-outline"
                             title="App Permissions"
                             subtitle="See what Paper AI can access on this device"

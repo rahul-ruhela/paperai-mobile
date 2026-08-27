@@ -45,6 +45,8 @@ import TermsScreen from "./src/screens/TermsScreen";
 import HelpCenterScreen from "./src/screens/HelpCenterScreen";
 import ContactSupportScreen from "./src/screens/ContactSupportScreen";
 import JunkWiperScanScreen from "./src/screens/JunkWiperScanScreen";
+import StorageStudioScreen from "./src/screens/StorageStudioScreen";
+import StorageScanScreen from "./src/screens/StorageScanScreen";
 import CameraDocumentScanScreen from "./src/screens/CameraDocumentScanScreen";
 import CodeScannerScreen from "./src/screens/CodeScannerScreen";
 import SignatureScreen from "./src/screens/SignatureScreen";
@@ -418,6 +420,19 @@ function AppShell() {
                             name="JunkWiper"
                             component={JunkWiperScanScreen}
                             options={{ headerShown: false }}
+                        />
+                        <Stack.Screen
+                            name="StorageStudio"
+                            component={StorageStudioScreen}
+                            options={{ title: "Storage Studio" }}
+                        />
+                        {/* One screen, four modes — the mode comes in as a route
+                            param and sets the title, so every cleaner layer
+                            shares the same review and delete path. */}
+                        <Stack.Screen
+                            name="StorageScan"
+                            component={StorageScanScreen}
+                            options={{ title: "Storage" }}
                         />
                         <Stack.Screen
                             name="CameraScanner"
