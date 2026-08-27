@@ -37,6 +37,18 @@ export const LEAD_OPTIONS = [
  * reminder, so behaviour is identical in dev, TestFlight and production — there
  * is no build-flag-dependent path here to get wrong.
  */
+/**
+ * Snooze intervals offered when a reminder is already due or has fired.
+ * Advance tier — see `advanced_reminders` in featureMatrix.ts.
+ */
+export const SNOOZE_OPTIONS = [
+    { key: "1h", label: "1 hour", minutes: 60 },
+    { key: "3h", label: "3 hours", minutes: 180 },
+    { key: "tomorrow", label: "Tomorrow 9am", minutes: null, nextMorning: true },
+    { key: "3d", label: "In 3 days", minutes: 60 * 24 * 3 },
+    { key: "1w", label: "In 1 week", minutes: 60 * 24 * 7 },
+];
+
 export const CUSTOM_OFFSETS = [
     { key: "tomorrow", label: "Tomorrow", days: 1 },
     { key: "3d", label: "In 3 days", days: 3 },
@@ -276,13 +288,31 @@ export async function ensurePermission() {
  * Schedules a reminder. Returns the stored record, or null when the computed
  * fire time is already in the past.
  */
-export async function scheduleReminder({ docId, docTitle, label, dateUtc, leadDays = 3 }) {
+/**
+ * Schedules a reminder.
+ *
+ * @returns the stored record, or a `{ error }` object the caller can explain:
+ *   { error: "duplicate" } — this document already has a reminder for that day
+ *   { error: "past" }      — the computed fire time has already gone by
+ *
+ * The duplicate check lives HERE, not only in the UI. The card hides the button
+ * once a date is marked set, but that state is a snapshot taken on mount: the
+ * custom-date path never consulted it at all, so the same day could be added
+ * over and over. Guarding at the only place that writes a record makes every
+ * entry point safe, including ones added later.
+ */
+export async function scheduleReminder({ docId, docTitle, label, dateUtc, leadDays = 3, allowDuplicate = false }) {
     const due = new Date(dateUtc);
+
+    if (!allowDuplicate && (await hasReminderFor(docId, dateUtc))) {
+        return { error: "duplicate" };
+    }
+
     const fire = new Date(due);
     fire.setDate(fire.getDate() - leadDays);
     fire.setHours(FIRE_HOUR, 0, 0, 0);
 
-    if (fire.getTime() <= Date.now()) return null;
+    if (fire.getTime() <= Date.now()) return { error: "past" };
 
     const body =
         leadDays === 0
@@ -315,6 +345,62 @@ export async function scheduleReminder({ docId, docTitle, label, dateUtc, leadDa
         await writeAll([...all, record]);
     });
     return record;
+}
+
+/**
+ * Reschedules an existing reminder to fire later (Advance tier).
+ *
+ * Cancels the OS notification and replaces the record rather than adding a
+ * second one — a snoozed reminder is the same reminder, and leaving the original
+ * scheduled would fire it twice.
+ *
+ * @returns the new record, or { error: "past" } / { error: "missing" }
+ */
+export async function snoozeReminder(id, option) {
+    const all = await listReminders();
+    const target = all.find((r) => r.id === id);
+    if (!target) return { error: "missing" };
+
+    let fire;
+    if (option?.nextMorning) {
+        fire = new Date();
+        fire.setDate(fire.getDate() + 1);
+        fire.setHours(FIRE_HOUR, 0, 0, 0);
+    } else {
+        fire = new Date(Date.now() + (option?.minutes ?? 60) * 60000);
+    }
+
+    if (fire.getTime() <= Date.now()) return { error: "past" };
+
+    if (target.notificationId) {
+        await Notifications.cancelScheduledNotificationAsync(target.notificationId).catch(() => {});
+    }
+
+    const notificationId = await Notifications.scheduleNotificationAsync({
+        content: {
+            title: target.docTitle || "PaperAI reminder",
+            body: `${target.label} — ${target.docTitle}`,
+            data: { type: "reminder", docId: target.docId },
+        },
+        trigger: { type: "date", date: fire },
+    });
+
+    return serialise(async () => {
+        const list = await listReminders();
+        const next = list.map((r) =>
+            r.id === id
+                ? {
+                      ...r,
+                      notificationId,
+                      fireAtUtc: fire.toISOString(),
+                      snoozedAtUtc: new Date().toISOString(),
+                      snoozeCount: (r.snoozeCount ?? 0) + 1,
+                  }
+                : r
+        );
+        await writeAll(next);
+        return next.find((r) => r.id === id);
+    });
 }
 
 /** Cancels a reminder, including the OS-level scheduled notification. */

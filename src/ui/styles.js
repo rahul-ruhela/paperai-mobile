@@ -329,6 +329,24 @@ export const makeTaskStyles = (t) =>
         remMeta: { color: t.colors.textMuted, fontWeight: "600", fontSize: 11.5, marginTop: 2 },
         remEmpty: { color: t.colors.textMuted, fontWeight: "600", fontSize: 12 },
 
+        // ── Snooze sheet (Advance tier) ──────────────────────────────────────
+        snoozeOverlay: { flex: 1, backgroundColor: t.colors.overlay, justifyContent: "center", padding: 28 },
+        snoozeSheet: { backgroundColor: t.colors.sheet, borderRadius: 20, padding: 18, gap: 8 },
+        snoozeTitle: { color: t.colors.textPrimary, fontWeight: "900", fontSize: 16 },
+        snoozeSub: { color: t.colors.textMuted, fontWeight: "600", fontSize: 12.5, marginBottom: 6 },
+        snoozeOption: {
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 10,
+            paddingVertical: 13,
+            paddingHorizontal: 12,
+            borderRadius: t.radius.md,
+            backgroundColor: t.colors.glassSoft,
+        },
+        snoozeOptionText: { color: t.colors.textPrimary, fontWeight: "800", fontSize: 14 },
+        snoozeCancel: { paddingVertical: 12, alignItems: "center" },
+        snoozeCancelText: { color: t.colors.textMuted, fontWeight: "800", fontSize: 13 },
+
         addCard: {
             backgroundColor: t.colors.glass,
             borderRadius: t.radius.xl,

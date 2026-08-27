@@ -6,6 +6,7 @@ import {
     FlatList,
     Alert,
     Pressable,
+    Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
@@ -22,9 +23,16 @@ import useThemedStyles from "../ui/useThemedStyles";
 import { useTheme } from "../ui/ThemeProvider";
 
 import { listTasks, createTask, updateTask } from "../api/tasks";
-import { groupedReminders, cancelReminder, formatDate } from "../services/reminderService";
+import {
+    groupedReminders,
+    cancelReminder,
+    snoozeReminder,
+    formatDate,
+    SNOOZE_OPTIONS,
+} from "../services/reminderService";
+import { useFeatureAccess } from "../hooks/useFeatureAccess";
 
-export default function TasksScreen() {
+export default function TasksScreen({ navigation }) {
     const { theme } = useTheme();
     const Theme = useLegacyTheme();
     const Common = useThemedStyles(makeCommon);
@@ -35,6 +43,10 @@ export default function TasksScreen() {
     const [streak, setStreak] = useState(0);
     const [reminders, setReminders] = useState({ upcoming: [], past: [] });
     const [showPast, setShowPast] = useState(false);
+    const [snoozing, setSnoozing] = useState(null); // the reminder being snoozed
+
+    // Snooze is an Advance-tier feature, same gate as the calendar picker.
+    const { allowed: advanced } = useFeatureAccess("advanced_reminders");
 
     async function load() {
         const data = await listTasks();
@@ -57,6 +69,45 @@ export default function TasksScreen() {
             loadReminders();
         }, [loadReminders])
     );
+
+    function openSnooze(r) {
+        if (!advanced) {
+            Alert.alert(
+                "Advance Plan Feature",
+                "Snoozing a reminder is part of the Advance plan. You can still cancel a reminder and set a new one on your current plan.",
+                [
+                    { text: "Not now", style: "cancel" },
+                    { text: "View plans", onPress: () => navigation?.navigate("Paywall") },
+                ]
+            );
+            return;
+        }
+        setSnoozing(r);
+    }
+
+    async function applySnooze(option) {
+        const target = snoozing;
+        setSnoozing(null);
+        if (!target) return;
+
+        const result = await snoozeReminder(target.id, option);
+
+        if (result?.error === "past") {
+            Alert.alert("Too Soon", "That snooze time has already passed. Pick a longer one.");
+            return;
+        }
+        if (result?.error === "missing") {
+            Alert.alert("Reminder Gone", "That reminder no longer exists.");
+            await loadReminders();
+            return;
+        }
+
+        await loadReminders();
+        Alert.alert(
+            "Snoozed",
+            `We'll remind you again on ${formatDate(result.fireAtUtc)} at ${new Date(result.fireAtUtc).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}.`
+        );
+    }
 
     function removeReminder(r) {
         Alert.alert("Cancel reminder?", `${r.label} · ${formatDate(r.dateUtc)}`, [
@@ -148,6 +199,24 @@ export default function TasksScreen() {
                                                         {r.label} · {formatDate(r.dateUtc)}
                                                     </Text>
                                                 </View>
+                                                {!showPast && (
+                                                    <Pressable
+                                                        onPress={() => openSnooze(r)}
+                                                        hitSlop={8}
+                                                        accessibilityRole="button"
+                                                        accessibilityLabel={
+                                                            advanced
+                                                                ? `Snooze the reminder for ${r.docTitle}`
+                                                                : `Snooze. Advance plan feature.`
+                                                        }
+                                                    >
+                                                        <Ionicons
+                                                            name="alarm-outline"
+                                                            size={19}
+                                                            color={advanced ? theme.colors.accentText : theme.colors.textMuted}
+                                                        />
+                                                    </Pressable>
+                                                )}
                                                 <Pressable
                                                     onPress={() => removeReminder(r)}
                                                     hitSlop={8}
@@ -228,6 +297,35 @@ export default function TasksScreen() {
                     />
                 </View>
             </SafeAreaView>
+
+            {/* Snooze picker — Advance tier. Reached only through openSnooze,
+                which shows the upsell instead when the plan does not include it. */}
+            <Modal visible={!!snoozing} transparent animationType="fade" onRequestClose={() => setSnoozing(null)}>
+                <Pressable style={S.snoozeOverlay} onPress={() => setSnoozing(null)}>
+                    <Pressable style={S.snoozeSheet} onPress={() => {}}>
+                        <Text style={S.snoozeTitle}>Snooze reminder</Text>
+                        <Text style={S.snoozeSub} numberOfLines={1}>
+                            {snoozing?.docTitle}
+                        </Text>
+
+                        {SNOOZE_OPTIONS.map((opt) => (
+                            <Pressable
+                                key={opt.key}
+                                onPress={() => applySnooze(opt)}
+                                style={S.snoozeOption}
+                                accessibilityRole="button"
+                            >
+                                <Ionicons name="alarm-outline" size={17} color={theme.colors.accentText} />
+                                <Text style={S.snoozeOptionText}>{opt.label}</Text>
+                            </Pressable>
+                        ))}
+
+                        <Pressable onPress={() => setSnoozing(null)} style={S.snoozeCancel} accessibilityRole="button">
+                            <Text style={S.snoozeCancelText}>Cancel</Text>
+                        </Pressable>
+                    </Pressable>
+                </Pressable>
+            </Modal>
         </GradientScreen>
     );
 }

@@ -397,6 +397,16 @@ date the user picks themselves (`CUSTOM_OFFSETS` — tomorrow / 3 days / 1 week 
 to an intent word, and without it the card is invisible on those documents and
 the feature looks broken.
 
+**One reminder per document per day.** The guard lives in `scheduleReminder`,
+which returns `{ error: "duplicate" }`, not only in the card. The card hides the
+button once a date is marked set — but that state is a snapshot taken on mount,
+and the custom-date path never consulted it, so the same day could be added over
+and over. Guarding at the only place that writes a record makes every entry
+point safe, including ones added later. A day already taken is refused
+regardless of the *time* on that date and regardless of the lead time, since
+both describe the same calendar day. `__tests__/reminderScheduling.test.js`
+covers it.
+
 > An earlier revision rendered a fake **"Sample date (dev build)"** row under
 > `__DEV__` to make the card testable, alongside a `__DEV__` "In 1 minute" lead
 > option. Both are **removed**. A row that looks like it was found in the
@@ -407,6 +417,31 @@ the feature looks broken.
 
 Scheduling requires a **real device** — a simulator cannot deliver a local
 notification, which is what the "Needs A Real Device" alert says.
+
+#### Custom dates and snooze — Advance tier
+
+`advanced_reminders` (Advance) in both `featureMatrix.ts` and the backend
+`FeatureMatrix.cs`, gating two things on top of the Essential-tier reminders:
+
+- **Pick a date** — `CalendarPicker`, a month grid. Days that already carry a
+  reminder for this document are dotted and unselectable, so the duplicate rule
+  is visible before you tap rather than explained in an alert afterwards.
+- **Snooze** — `snoozeReminder` on a row in the Tasks tab. 1 hour / 3 hours /
+  tomorrow 9am / 3 days / 1 week. It **replaces** the existing record rather
+  than adding one: a snoozed reminder is the same reminder, and leaving the
+  original scheduled would fire it twice. The due date is untouched — snooze
+  moves the nudge, not the deadline.
+
+Both entry points stay **visible** to users without the plan and explain the
+upsell when tapped. A feature nobody can see is a feature nobody upgrades for.
+
+> `CalendarPicker` is hand-rolled rather than `@react-native-community/
+> datetimepicker` or a calendar package. Those are native modules, so adding one
+> forces every developer and tester onto a fresh dev-client build before the app
+> will run at all. This is a few dozen `View`s and behaves identically in Expo
+> Go, a development build and TestFlight — what you test is what ships. It uses
+> a local-time `dayKey()`, not `toISOString().slice(0,10)`, which would shift the
+> day for anyone not on UTC.
 
 ### 4.9 Push notifications
 `expo-notifications` + `UIBackgroundModes: remote-notification`.

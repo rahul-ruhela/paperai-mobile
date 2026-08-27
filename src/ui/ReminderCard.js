@@ -8,9 +8,11 @@ import {
     ensurePermission,
     hasReminderFor,
     formatDate,
+    listReminders,
     LEAD_OPTIONS,
     CUSTOM_OFFSETS,
 } from "../services/reminderService";
+import CalendarPicker, { dayKey } from "./CalendarPicker";
 import { useFeatureAccess } from "../hooks/useFeatureAccess";
 import { useTheme } from "./ThemeProvider";
 import useThemedStyles from "./useThemedStyles";
@@ -40,11 +42,18 @@ export default function ReminderCard({ doc, navigation }) {
     const { theme } = useTheme();
     const styles = useThemedStyles(makeStyles);
     const { allowed, loading: accessLoading } = useFeatureAccess("smart_reminders");
+    // Custom dates and snooze are an Advance-tier upsell on top of reminders.
+    const { allowed: advanced } = useFeatureAccess("advanced_reminders");
 
     const [dates, setDates] = useState([]);
     const [existing, setExisting] = useState({});
     const [picking, setPicking] = useState(null); // the date being scheduled
     const [customOpen, setCustomOpen] = useState(false);
+    const [calendarOpen, setCalendarOpen] = useState(false);
+    const [chosenDate, setChosenDate] = useState(null);
+    // Days this document already has a reminder on, so the calendar can mark
+    // them and the duplicate check has something to show.
+    const [takenDays, setTakenDays] = useState([]);
 
     const docId = doc?.id;
 
@@ -63,6 +72,18 @@ export default function ReminderCard({ doc, navigation }) {
             // lookups were in flight — without it a stale map lands on the new
             // document and rows show the wrong "Set" state.
             if (alive) setExisting(Object.fromEntries(entries));
+
+            const all = await listReminders();
+            if (alive) {
+                setTakenDays(
+                    all
+                        .filter((r) => r.docId === docId)
+                        // Local-time day, matching CalendarPicker's dayKey —
+                        // slicing the ISO string would shift the day for anyone
+                        // not on UTC.
+                        .map((r) => dayKey(new Date(r.dateUtc)))
+                );
+            }
         })();
 
         return () => {
@@ -112,7 +133,15 @@ export default function ReminderCard({ doc, navigation }) {
             return;
         }
 
-        if (!record) {
+        if (record?.error === "duplicate") {
+            Alert.alert(
+                "Reminder Already Set",
+                `You already have a reminder for ${formatDate(dateUtc)} on this document. Cancel it in the Tasks tab first if you want to change it.`
+            );
+            return;
+        }
+
+        if (record?.error === "past" || !record) {
             Alert.alert(
                 "Too Late To Remind",
                 `${lead?.label ?? "That lead time"} for this date has already passed. Choose a shorter lead time.`
@@ -121,6 +150,7 @@ export default function ReminderCard({ doc, navigation }) {
         }
 
         setExisting((m) => ({ ...m, [dateUtc]: true }));
+        setTakenDays((d) => [...new Set([...d, dayKey(new Date(dateUtc))])]);
         Alert.alert("Reminder Set", `We'll notify you on ${formatDate(record.fireAtUtc)} at 9:00 AM.`);
     }
 
@@ -137,6 +167,31 @@ export default function ReminderCard({ doc, navigation }) {
         when.setHours(9, 0, 0, 0);
         // Fires on the day itself — the user picked when they want to be told,
         // so there is no lead time to subtract.
+        schedule({ label: "Reminder", dateUtc: when.toISOString(), lead: { days: 0, label: "On the day" } });
+    }
+
+    function openCalendar() {
+        setCustomOpen(false);
+        if (!advanced) {
+            Alert.alert(
+                "Advance Plan Feature",
+                "Picking an exact date and snoozing reminders are part of the Advance plan. The preset reminder times are included in your current plan.",
+                [
+                    { text: "Not now", style: "cancel" },
+                    { text: "View plans", onPress: () => navigation?.navigate("Paywall") },
+                ]
+            );
+            return;
+        }
+        setChosenDate(null);
+        setCalendarOpen(true);
+    }
+
+    function confirmCalendar() {
+        if (!chosenDate) return;
+        setCalendarOpen(false);
+        const when = new Date(chosenDate);
+        when.setHours(9, 0, 0, 0);
         schedule({ label: "Reminder", dateUtc: when.toISOString(), lead: { days: 0, label: "On the day" } });
     }
 
@@ -260,6 +315,48 @@ export default function ReminderCard({ doc, navigation }) {
                 </Pressable>
             </Modal>
 
+            {/* Exact date picker — Advance tier */}
+            <Modal visible={calendarOpen} transparent animationType="fade" onRequestClose={() => setCalendarOpen(false)}>
+                <Pressable style={styles.overlay} onPress={() => setCalendarOpen(false)}>
+                    <Pressable style={styles.sheet} onPress={() => {}}>
+                        <Text style={styles.sheetTitle}>Pick a date</Text>
+                        <Text style={styles.sheetSub}>
+                            {doc.title || "This document"} · fires at 9:00 AM
+                        </Text>
+
+                        <CalendarPicker
+                            value={chosenDate}
+                            onChange={setChosenDate}
+                            markedDates={takenDays}
+                        />
+
+                        {chosenDate && takenDays.includes(dayKey(chosenDate)) ? (
+                            <Text style={styles.calWarn}>
+                                A reminder is already set for this day.
+                            </Text>
+                        ) : null}
+
+                        <Pressable
+                            onPress={confirmCalendar}
+                            disabled={!chosenDate || takenDays.includes(dayKey(chosenDate))}
+                            style={[
+                                styles.calConfirm,
+                                (!chosenDate || takenDays.includes(dayKey(chosenDate))) && { opacity: 0.45 },
+                            ]}
+                            accessibilityRole="button"
+                        >
+                            <Text style={styles.calConfirmText}>
+                                {chosenDate ? `Remind me on ${formatDate(chosenDate)}` : "Choose a day"}
+                            </Text>
+                        </Pressable>
+
+                        <Pressable onPress={() => setCalendarOpen(false)} style={styles.cancel} accessibilityRole="button">
+                            <Text style={styles.cancelText}>Cancel</Text>
+                        </Pressable>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
             {/* User-chosen reminder, relative to today */}
             <Modal visible={customOpen} transparent animationType="fade" onRequestClose={() => setCustomOpen(false)}>
                 <Pressable style={styles.overlay} onPress={() => setCustomOpen(false)}>
@@ -278,6 +375,26 @@ export default function ReminderCard({ doc, navigation }) {
                                 <Text style={styles.optionText}>{opt.label}</Text>
                             </Pressable>
                         ))}
+
+                        {/* Shown to everyone rather than hidden from non-subscribers:
+                            a feature nobody can see is a feature nobody upgrades for.
+                            Tapping it explains the plan instead of failing silently. */}
+                        <Pressable
+                            onPress={openCalendar}
+                            style={styles.option}
+                            accessibilityRole="button"
+                            accessibilityLabel={
+                                advanced ? "Pick an exact date" : "Pick an exact date. Advance plan feature."
+                            }
+                        >
+                            <Ionicons name="calendar-outline" size={17} color={theme.colors.accentText} />
+                            <Text style={styles.optionText}>Pick a date…</Text>
+                            {!advanced && (
+                                <View style={styles.tierBadge}>
+                                    <Text style={styles.tierText}>ADVANCE</Text>
+                                </View>
+                            )}
+                        </Pressable>
 
                         <Pressable onPress={() => setCustomOpen(false)} style={styles.cancel} accessibilityRole="button">
                             <Text style={styles.cancelText}>Cancel</Text>
@@ -384,7 +501,23 @@ const makeStyles = (t) =>
             borderRadius: t.radius.md,
             backgroundColor: t.colors.glassSoft,
         },
-        optionText: { color: t.colors.textPrimary, fontWeight: "800", fontSize: 14 },
+        optionText: { flex: 1, color: t.colors.textPrimary, fontWeight: "800", fontSize: 14 },
+
+        calWarn: {
+            color: t.colors.warningText,
+            fontWeight: "700",
+            fontSize: 12,
+            textAlign: "center",
+            marginTop: 4,
+        },
+        calConfirm: {
+            marginTop: 8,
+            paddingVertical: 13,
+            borderRadius: t.radius.md,
+            backgroundColor: t.colors.primary,
+            alignItems: "center",
+        },
+        calConfirmText: { color: t.colors.white, fontWeight: "900", fontSize: 14 },
         cancel: { paddingVertical: 12, alignItems: "center" },
         cancelText: { color: t.colors.textMuted, fontWeight: "800", fontSize: 13 },
     });

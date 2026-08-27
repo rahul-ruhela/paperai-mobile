@@ -44,6 +44,10 @@ export const FEATURES: FeatureDefinition[] = [
     { key: "deep_clean", name: "Deep Clean", requiredTier: "plus", onDevice: false, backendVerified: true, creditFeatureKey: "junk_wiper_scan_report" },
 
     // Advance tier
+    // On-device: reminders are local notifications, so there is no server call to
+    // authorize. `backendVerified` is still true because the TIER is decided by
+    // the entitlement snapshot, which is server-issued.
+    { key: "advanced_reminders", name: "Custom Dates & Snooze", requiredTier: "advance", onDevice: true, backendVerified: true },
     { key: "household_assistant", name: "Household Assistant", requiredTier: "advance", onDevice: false, backendVerified: true },
 ];
 
