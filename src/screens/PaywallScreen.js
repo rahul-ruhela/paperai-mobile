@@ -40,6 +40,8 @@ import {
     productInfoForSku,
 } from "../constants/api";
 import ScreenContainer from "../ui/ScreenContainer";
+import { getFeature } from "../config/featureMatrix";
+import { TIER_LABELS, upgradeMessageFor } from "../config/upgradeMessages";
 
 import { useTheme } from "../ui/ThemeProvider";
 import useThemedStyles from "../ui/useThemedStyles";
@@ -58,6 +60,26 @@ const PURCHASE_TIMEOUT_MS = 45000;
 // immediate upgrade normally lands in a few seconds, but server-side
 // verification can legitimately run ~15s, so this must clear that comfortably.
 const DEFERRED_CHANGE_GRACE_MS = 22000;
+
+/**
+ * The banner shown when the paywall was opened from a specific locked feature,
+ * per docs/subscription-entitlement-policy.md §4. Arriving from a lock and then
+ * being shown three undifferentiated plans leaves the user to work out which one
+ * unlocks the thing they just tapped; this names it and the plan that grants it.
+ *
+ * Returns null for an unknown key or a free feature, so a stale or malformed
+ * deep link degrades to the ordinary paywall rather than an empty banner.
+ */
+function unlockNoticeFor(featureKey) {
+    if (!featureKey) return null;
+    const feature = getFeature(featureKey);
+    if (!feature || feature.requiredTier === "free") return null;
+    return {
+        tierId: feature.requiredTier,
+        title: `${feature.name} is part of ${TIER_LABELS[feature.requiredTier]}`,
+        message: upgradeMessageFor(featureKey),
+    };
+}
 
 // Backend may return either `active` or `isActive` — accept both.
 function entitlementIsActive(e) {
@@ -113,7 +135,7 @@ export default function PaywallScreen(props) {
 /* =========================================================================
    Real purchases (expo-iap) — dev-client / TestFlight / App Store.
 ========================================================================= */
-function PaywallNative({ navigation }) {
+function PaywallNative({ navigation, route }) {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { useIAP, getAvailablePurchases } = require("expo-iap");
 
@@ -571,6 +593,23 @@ function PaywallNative({ navigation }) {
         return subscriptions?.find((p) => p.id === sku)?.currency ?? null;
     }
 
+    // Set when the user arrived here from a locked feature rather than from
+    // Settings. Names the feature and the plan that unlocks it.
+    const unlockNotice = unlockNoticeFor(route?.params?.featureKey);
+
+    // A lock sheet on an EXPIRED plan offers Restore first and lands here with
+    // restore:true — running it on arrival saves the user a second tap on the
+    // action they already chose. Guarded by a ref rather than the effect's
+    // dependency list because a re-render with the same params must not replay
+    // a StoreKit call; only a fresh navigation with restore:true should.
+    const autoRestoredRef = useRef(false);
+    useEffect(() => {
+        if (!route?.params?.restore) return;
+        if (autoRestoredRef.current) return;
+        autoRestoredRef.current = true;
+        restore();
+    }, [route?.params?.restore]);
+
     return (
         <PaywallView
             duration={duration}
@@ -578,6 +617,7 @@ function PaywallNative({ navigation }) {
             entitlement={entitlement}
             pendingChange={pendingChange}
             loadingSku={loadingSku}
+            unlockNotice={unlockNotice}
             productsStatus={productsStatus}
             onRetryProducts={loadProducts}
             priceForSku={priceForSku}
@@ -594,7 +634,7 @@ function PaywallNative({ navigation }) {
 /* =========================================================================
    Expo Go fallback — read-only, no native module, never crashes.
 ========================================================================= */
-function PaywallExpoGo({ navigation }) {
+function PaywallExpoGo({ navigation, route }) {
     const [entitlement, setEntitlement] = useState(null);
     const [duration, setDuration] = useState("yearly");
 
@@ -621,6 +661,7 @@ function PaywallExpoGo({ navigation }) {
             setDuration={setDuration}
             entitlement={entitlement}
             loadingSku={null}
+            unlockNotice={unlockNoticeFor(route?.params?.featureKey)}
             notice="You're in Expo Go — purchasing is disabled here. Use a TestFlight / App Store build to subscribe."
             productsStatus="ready"
             priceForSku={(sku, fallback) => fallback ?? null}
@@ -691,6 +732,7 @@ function PaywallView({
     pendingChange,
     loadingSku,
     notice,
+    unlockNotice,
     productsStatus = "ready",
     onRetryProducts,
     priceForSku,
@@ -727,6 +769,16 @@ function PaywallView({
                 </Text>
 
                 {!!notice && <Text style={styles.notice}>{notice}</Text>}
+
+                {/* Opened from a specific lock — say which feature and which
+                    plan, so the user is not left matching three plans against a
+                    feature name they saw on the previous screen. */}
+                {!!unlockNotice && (
+                    <View style={styles.unlockBanner}>
+                        <Text style={styles.unlockTitle}>{unlockNotice.title}</Text>
+                        <Text style={styles.unlockMessage}>{unlockNotice.message}</Text>
+                    </View>
+                )}
 
                 {/* What the account is actually on right now. Without this the
                     paywall is silent about the current plan, which is what made
@@ -804,23 +856,36 @@ function PaywallView({
                     // renewal — not active yet, and not available to re-buy.
                     const isScheduled = !isActive && pendingChange?.sku === product.sku;
                     const isBusyThis = loadingSku === product.sku;
-                    const Wrapper = tier.highlight ? Animated.View : View;
-                    const wrapperStyle = tier.highlight ? { transform: [{ scale: scaleAnim }] } : null;
+                    // The plan the user came here to buy. It takes over the
+                    // animated emphasis from "most popular": pulsing a plan that
+                    // does NOT unlock the feature they just tapped is a nudge in
+                    // the wrong direction.
+                    const unlocksThis = unlockNotice?.tierId === tier.id;
+                    const emphasised = unlockNotice ? unlocksThis : tier.highlight;
+                    const Wrapper = emphasised ? Animated.View : View;
+                    const wrapperStyle = emphasised ? { transform: [{ scale: scaleAnim }] } : null;
 
                     return (
                         <Wrapper key={tier.id} style={wrapperStyle}>
                             <View
                                 style={[
                                     styles.card,
-                                    tier.highlight && styles.cardHighlight,
+                                    emphasised && styles.cardHighlight,
                                     isActive && styles.cardActive,
                                     isScheduled && styles.cardScheduled,
                                 ]}
                             >
-                                {tier.highlight && (
+                                {unlocksThis ? (
                                     <View style={styles.popular}>
-                                        <Text style={styles.popularText}>MOST POPULAR</Text>
+                                        <Text style={styles.popularText}>UNLOCKS THIS FEATURE</Text>
                                     </View>
+                                ) : (
+                                    !unlockNotice &&
+                                    tier.highlight && (
+                                        <View style={styles.popular}>
+                                            <Text style={styles.popularText}>MOST POPULAR</Text>
+                                        </View>
+                                    )
                                 )}
 
                                 <Text style={styles.tierName}>{tier.name}</Text>
@@ -1044,6 +1109,16 @@ const makeStyles = (t) =>
         lineHeight: 17,
         marginTop: 8,
     },
+    unlockBanner: {
+        marginBottom: 14,
+        padding: 12,
+        borderRadius: 14,
+        backgroundColor: t.colors.glassSoft,
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: t.colors.border,
+    },
+    unlockTitle: { color: t.colors.textPrimary, fontSize: 14, fontWeight: "700" },
+    unlockMessage: { color: t.colors.textSecondary, fontSize: 13, marginTop: 3 },
     popular: {
         alignSelf: "flex-start",
         backgroundColor: t.colors.accent,

@@ -58,6 +58,13 @@ export const FEATURES: FeatureDefinition[] = [
     // the entitlement snapshot, which is server-issued.
     { key: "advanced_reminders", name: "Custom Dates & Snooze", requiredTier: "advance", onDevice: true, backendVerified: true },
     { key: "household_assistant", name: "Household Assistant", requiredTier: "advance", onDevice: false, backendVerified: true },
+
+    // Declared ahead of their modules (roadmap 6 and 7) so the gate is settled
+    // once, here, rather than invented twice when those modules land. Both are
+    // unreachable until their screens exist; a declared-but-unbuilt feature is
+    // locked, not open — which is the whole point of the change below.
+    { key: "smart_recall", name: "Smart Recall", requiredTier: "advance", onDevice: false, backendVerified: true },
+    { key: "voice_companion", name: "AI Voice Companion", requiredTier: "advance", onDevice: true, backendVerified: true },
 ];
 
 const BY_KEY: Record<string, FeatureDefinition> = FEATURES.reduce(
@@ -70,8 +77,19 @@ export function getFeature(key: string): FeatureDefinition | undefined {
 }
 
 // Client-side allow check. This is a UX hint only — the backend re-checks.
+//
+// An unknown key returns FALSE. This used to return true, and that is exactly
+// how the five Storage Studio features shipped rendering unlocked to Free users:
+// the backend gated them, the mirror had never heard of them, and the UI failed
+// open until the server refused mid-action. Locked-with-a-CTA is the recoverable
+// mistake; charging into a paid action that then 403s is not.
+//
+// The mirror is now complete and `__tests__/featureMatrix.test.ts` fails CI in
+// both directions if it drifts from Services/FeatureMatrix.cs, so "unknown" here
+// means a typo or a key someone forgot to register — both of which should be
+// loud. A genuinely ungated on-device affordance must not call this at all.
 export function isFeatureAllowed(key: string, userTier: AccessTier): boolean {
     const f = BY_KEY[key];
-    if (!f) return true; // unknown/on-device-only features are not gated here
+    if (!f) return false;
     return TIER_ORDER[userTier] >= TIER_ORDER[f.requiredTier];
 }

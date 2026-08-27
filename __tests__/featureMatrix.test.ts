@@ -42,9 +42,14 @@ describe("isFeatureAllowed", () => {
         expect(isFeatureAllowed("household_assistant", "plus")).toBe(false);
     });
 
-    it("defaults unknown keys to allowed, matching the documented contract", () => {
-        // On-device-only features are not listed here and must not be gated.
-        expect(isFeatureAllowed("some_unlisted_on_device_thing", "free")).toBe(true);
+    it("fails CLOSED on an unknown key", () => {
+        // This used to return true. That default is how the five Storage Studio
+        // features shipped rendering unlocked to Free users: the backend gated
+        // them, the mirror had never heard of them, and the UI failed open until
+        // the server refused mid-action. Locked-with-a-CTA is recoverable;
+        // walking someone into a paid action that then 403s is not.
+        expect(isFeatureAllowed("some_unlisted_on_device_thing", "free")).toBe(false);
+        expect(isFeatureAllowed("typo_in_a_feature_key", "advance")).toBe(false);
     });
 });
 
@@ -91,6 +96,8 @@ const BACKEND_FEATURES: { key: string; requiredTier: string; creditFeatureKey?: 
     { key: "similar_photos", requiredTier: "plus", creditFeatureKey: "similar_photo_scan" },
     { key: "advanced_reminders", requiredTier: "advance" },
     { key: "household_assistant", requiredTier: "advance" },
+    { key: "smart_recall", requiredTier: "advance" },
+    { key: "voice_companion", requiredTier: "advance" },
 ];
 
 describe("backend parity", () => {
@@ -117,6 +124,18 @@ describe("backend parity", () => {
         const backendKeys = new Set(BACKEND_FEATURES.map((f) => f.key));
         const extra = FEATURES.map((f) => f.key).filter((k) => !backendKeys.has(k));
         expect(extra).toEqual([]);
+    });
+
+    it("locks the Advance features declared ahead of their modules", () => {
+        // smart_recall and voice_companion are registered before Modules 6 and 7
+        // are built, so that the gate is decided once. A declared-but-unbuilt
+        // feature must read as locked at every tier below Advance — never as an
+        // unknown key that some future screen would fall through.
+        for (const key of ["smart_recall", "voice_companion"]) {
+            expect(isFeatureAllowed(key, "free")).toBe(false);
+            expect(isFeatureAllowed(key, "plus")).toBe(false);
+            expect(isFeatureAllowed(key, "advance")).toBe(true);
+        }
     });
 
     it("keeps a Free user out of the paid Storage Studio scans", () => {

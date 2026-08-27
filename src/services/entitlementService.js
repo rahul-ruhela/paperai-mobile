@@ -70,3 +70,17 @@ export function isAllowedLocal(snapshot, featureKey) {
     const tier = snapshot?.tier ?? "free";
     return isFeatureAllowed(featureKey, tier);
 }
+
+// True only when the user HAD a plan and it lapsed — not when they never bought
+// one. The two states get different copy (policy §5): a lapsed plan names its
+// end date and offers Restore Purchases, because a reinstall that has not
+// replayed its receipts looks exactly like an expiry and must be recoverable
+// without a second purchase. A never-subscribed user gets the ordinary upsell.
+export function isSubscriptionExpired(snapshot) {
+    if (!snapshot) return false;
+    if (snapshot.active) return false;
+    // productId is the evidence a subscription once existed; the FREE fallback
+    // snapshot and a brand-new account both leave it null.
+    if (!snapshot.productId) return false;
+    return snapshot.status !== "inactive";
+}

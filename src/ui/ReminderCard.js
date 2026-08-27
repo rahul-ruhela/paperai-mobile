@@ -13,7 +13,7 @@ import {
     CUSTOM_OFFSETS,
 } from "../services/reminderService";
 import CalendarPicker, { dayKey } from "./CalendarPicker";
-import { useFeatureAccess } from "../hooks/useFeatureAccess";
+import { useUpgradePrompt } from "./FeatureLock";
 import { useTheme } from "./ThemeProvider";
 import useThemedStyles from "./useThemedStyles";
 
@@ -41,9 +41,18 @@ import useThemedStyles from "./useThemedStyles";
 export default function ReminderCard({ doc, navigation }) {
     const { theme } = useTheme();
     const styles = useThemedStyles(makeStyles);
-    const { allowed, loading: accessLoading } = useFeatureAccess("smart_reminders");
+    const {
+        allowed,
+        loading: accessLoading,
+        lockMessage,
+        tierBadge,
+        prompt: promptReminders,
+    } = useUpgradePrompt("smart_reminders", navigation);
     // Custom dates and snooze are an Advance-tier upsell on top of reminders.
-    const { allowed: advanced } = useFeatureAccess("advanced_reminders");
+    const { allowed: advanced, prompt: promptAdvanced } = useUpgradePrompt(
+        "advanced_reminders",
+        navigation
+    );
 
     const [dates, setDates] = useState([]);
     const [existing, setExisting] = useState({});
@@ -173,14 +182,10 @@ export default function ReminderCard({ doc, navigation }) {
     function openCalendar() {
         setCustomOpen(false);
         if (!advanced) {
-            Alert.alert(
-                "Advance Plan Feature",
-                "Picking an exact date and snoozing reminders are part of the Advance plan. The preset reminder times are included in your current plan.",
-                [
-                    { text: "Not now", style: "cancel" },
-                    { text: "View plans", onPress: () => navigation?.navigate("Paywall") },
-                ]
-            );
+            // Copy, the paywall hand-off and the expired-plan variant all come
+            // from the policy module now, so this reads the same as every other
+            // Advance lock in the app.
+            promptAdvanced();
             return;
         }
         setChosenDate(null);
@@ -202,14 +207,15 @@ export default function ReminderCard({ doc, navigation }) {
                     <Ionicons name="alarm-outline" size={17} color={theme.colors.textMuted} />
                     <Text style={styles.title}>Smart Reminders</Text>
                     <View style={styles.tierBadge}>
-                        <Text style={styles.tierText}>ESSENTIAL</Text>
+                        <Text style={styles.tierText}>{tierBadge}</Text>
                     </View>
                 </View>
                 <Text style={styles.lockedSub}>
-                    Get a notification before a bill, contract or warranty in this document comes due.
+                    Get a notification before a bill, contract or warranty in this document comes
+                    due. {lockMessage}
                 </Text>
                 <Pressable
-                    onPress={() => navigation?.navigate("Paywall")}
+                    onPress={promptReminders}
                     style={styles.upsellBtn}
                     accessibilityRole="button"
                     accessibilityLabel="View plans to unlock Smart Reminders"

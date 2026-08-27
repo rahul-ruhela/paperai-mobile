@@ -33,6 +33,16 @@ function isAuthEndpoint(url = "") {
 // ---------------------------------------------------------------------------
 // Friendly user messages per HTTP status
 // ---------------------------------------------------------------------------
+// The structured 403 body EntitlementService emits. Kept as a set rather than a
+// truthiness check on `code` so an unrelated 403 that happens to carry a code
+// is not silently rendered as a paywall.
+const ENTITLEMENT_CODES = new Set(["FEATURE_NOT_INCLUDED", "SUBSCRIPTION_EXPIRED"]);
+
+export function isEntitlementDenial(err) {
+    if (err?.response?.status !== 403) return false;
+    return ENTITLEMENT_CODES.has(err?.response?.data?.code);
+}
+
 function friendlyMessage(err) {
     const status = err?.response?.status;
     const serverMsg =
@@ -49,7 +59,15 @@ function friendlyMessage(err) {
         if (isAuthEndpoint(url)) return serverMsg || "Sign in failed. Please try again.";
         return "Session expired. Please log in again.";
     }
-    if (status === 403) return "You don't have permission to do this.";
+    if (status === 403) {
+        // A 403 carrying an entitlement code is a paywall, not a permissions
+        // error. "You don't have permission to do this" is both wrong and a dead
+        // end for something the user can fix by subscribing, so the server's own
+        // sentence — which names the feature and the tier — is used instead.
+        // See docs/subscription-entitlement-policy.md §5.
+        if (isEntitlementDenial(err)) return serverMsg || "This feature needs a higher plan.";
+        return "You don't have permission to do this.";
+    }
     if (status === 404) return "The requested resource was not found.";
     if (status === 409) return serverMsg || "A conflict occurred. Please refresh and try again.";
     if (status === 422) return serverMsg || "Validation failed. Please check your input.";
@@ -164,6 +182,19 @@ api.interceptors.response.use(
 
         // Attach a friendly message to every error so screens can use err.userMessage
         err.userMessage = friendlyMessage(err);
+
+        // Structured entitlement denial, so a screen can route to the paywall
+        // instead of showing a generic failure. `requiredTier` is what the
+        // paywall highlights; `expired` decides whether Restore is offered first.
+        if (isEntitlementDenial(err)) {
+            const data = err.response.data;
+            err.entitlement = {
+                code: data.code,
+                requiredTier: data.requiredTier ?? null,
+                expired: data.code === "SUBSCRIPTION_EXPIRED",
+            };
+        }
+
         return Promise.reject(err);
     }
 );

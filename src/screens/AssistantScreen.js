@@ -37,7 +37,7 @@ import {
     formatDate,
     SNOOZE_OPTIONS,
 } from "../services/reminderService";
-import { useFeatureAccess } from "../hooks/useFeatureAccess";
+import { useUpgradePrompt } from "../ui/FeatureLock";
 import { speakTask, stopSpeaking } from "../services/taskSpeech";
 
 /**
@@ -140,7 +140,10 @@ export default function AssistantScreen({ navigation }) {
 
     // Custom dates, repeat and snooze are Advance-tier; the controls stay visible
     // and prompt instead of vanishing.
-    const { allowed: advanced } = useFeatureAccess("advanced_reminders");
+    const { allowed: advanced, prompt: promptAdvanced } = useUpgradePrompt(
+        "advanced_reminders",
+        navigation
+    );
 
     const load = useCallback(async () => {
         try {
@@ -223,15 +226,11 @@ export default function AssistantScreen({ navigation }) {
     const visibleTasks = tab === TAB_AI ? aiTasks : tab === TAB_MINE ? myTasks : [];
     const reminderCount = reminders.upcoming.length + reminders.past.length;
 
-    function requireAdvanced(what) {
-        Alert.alert(
-            "Advance Plan Feature",
-            `${what} is part of the Advance plan. You can still create, edit and complete tasks on your current plan.`,
-            [
-                { text: "Not now", style: "cancel" },
-                { text: "View plans", onPress: () => navigation?.navigate("Paywall") },
-            ]
-        );
+    // `what` is kept for call-site readability, but the copy itself comes from
+    // the policy module so this lock reads identically to every other Advance
+    // lock — including the lapsed-plan variant, which offers Restore first.
+    function requireAdvanced() {
+        promptAdvanced();
     }
 
     /* ── tasks ──────────────────────────────────────────────────────────────*/

@@ -1,7 +1,23 @@
 # Smart Recall Engine
 
 Status: **specification only — no code changed.**
-Written: 2026-08-27. Tier: **ADVANCE only.** Depends on: Assistant module (`Description`, `DueAtUtc`).
+Written: 2026-08-27. Last reviewed: 2026-08-28. Tier: **ADVANCE only.**
+Depends on: Assistant module (`Description`, `DueAtUtc`) — **satisfied**; both
+columns shipped in Module 3, so this module is unblocked.
+
+Already provided by Module 1 (entitlement policy) — do **not** rebuild these:
+
+- The feature key `smart_recall` is registered at ADVANCE in both
+  `Services/FeatureMatrix.cs` and `src/config/featureMatrix.ts`, and is covered by
+  the parity test and by `EntitlementPolicyTests`. It is locked at every tier
+  below Advance today.
+- Its upgrade sentence lives in `src/config/upgradeMessages.ts`
+  ("Advance remembers the details for you."). Do not write new copy for it.
+- The locked-state UI is `src/ui/FeatureLock.js` — use `useUpgradePrompt("smart_recall", navigation)`
+  for a control that only needs the right sheet, or wrap the entry point in
+  `<FeatureLock featureKey="smart_recall">`. Do not hand-roll an `Alert`.
+- Every `/api/recall/*` route must still call `CheckAccessAsync("smart_recall")`
+  server-side; the client gate is presentation only.
 
 ---
 

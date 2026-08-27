@@ -1,7 +1,25 @@
 # AI Voice Companion — Specification
 
 Status: **specification only — no code changed.**
-Written: 2026-08-27. Tier: **ADVANCE** (Plus gets a locked preview). Depends on: Assistant module (`Description`), optionally Smart Recall.
+Written: 2026-08-27. Last reviewed: 2026-08-28. Tier: **ADVANCE** (Plus gets a
+locked preview). Depends on: Assistant module (`Description`) — **satisfied**, so
+this module is unblocked.
+
+Already provided by Module 1 (entitlement policy) — do **not** rebuild these:
+
+- The feature key `voice_companion` is registered at ADVANCE in both
+  `Services/FeatureMatrix.cs` and `src/config/featureMatrix.ts`, covered by the
+  parity test and by `EntitlementPolicyTests`.
+- Its upgrade sentence lives in `src/config/upgradeMessages.ts`
+  ("Hear your reminders read aloud with Advance.").
+- The locked-state UI is `src/ui/FeatureLock.js` (`useUpgradePrompt` / `FeatureLock`).
+- The **Plus locked preview** described below is NOT built — Module 1 registered
+  the key only. Building it is this module's job, and it is the one place where
+  this spec deliberately departs from the plain tier gate.
+- `GET/PUT /api/voice/preferences` must call `CheckAccessAsync("voice_companion")`.
+
+Note that `src/services/taskSpeech.js` already exists — Module 3 shipped on-device
+read-aloud for a task. Extend it rather than adding a second speech service.
 
 ---
 
@@ -30,11 +48,25 @@ Composition rules:
 
 Gating uses feature key `voice_companion` through `useFeatureAccess`; the backend authorises `/api/voice/preferences` with `CheckAccessAsync`.
 
+> **Already shipped, and in conflict with the table above.** The Assistant module
+> (`assistant-module-spec.md`) ships `src/services/taskSpeech.js` and a speaker
+> button on every task card: on-device read-aloud, **ungated, on every tier**, at
+> the owner's explicit request. Module 7 must resolve this before it gates
+> anything — either adopt that button as the FREE baseline and gate only the
+> richer companion (voice choice, speed, tone, per-task override, spoken
+> reminders), or bring it under `voice_companion`.
+>
+> `taskSpeech.js` also does not yet follow §1's composition rules: it speaks
+> title → description → due → priority → repeat, with no name greeting, no
+> "urgent" wording for `Priority == HIGH`, and a 400-character description cap
+> rather than 200 trimmed at a sentence boundary. Reconcile the two rather than
+> adding a second speech path.
+
 ---
 
 ## 3. Apple-compliant technology choice
 
-**Primary: on-device speech synthesis** — `expo-speech` (AVSpeechSynthesizer). Not currently a dependency; it must be added with an `app.json` entry.
+**Primary: on-device speech synthesis** — `expo-speech` (AVSpeechSynthesizer). Added as a dependency in the Assistant module (2026-08-28). It ships no config plugin, so **no `app.json` entry is required** — an earlier draft of this line claimed otherwise.
 
 Why on-device first:
 - No audio recording, so no `NSMicrophoneUsageDescription` and no privacy-manifest exposure for microphone access.
