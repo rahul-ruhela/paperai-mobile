@@ -34,3 +34,16 @@ export async function updatePushPreferences(patch) {
     const { data } = await api.put("/api/push/preferences", patch);
     return data;
 }
+
+/**
+ * Sends a test push to the calling account only.
+ *
+ * Admin-gated server-side (403 otherwise), so this is safe even if the UI that
+ * calls it is ever visible outside a dev build. Useful for confirming the whole
+ * chain end to end: token registered → Expo accepted it → APNs delivered it →
+ * the app displayed it.
+ */
+export async function sendTestPush() {
+    const { data } = await api.post("/api/push/test");
+    return data; // { ok, tokenIsDead, error }
+}

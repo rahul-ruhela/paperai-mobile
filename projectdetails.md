@@ -433,15 +433,88 @@ sends `{ type: "ANALYSIS_COMPLETE", docId }`. The server previously sent
 the Documents tab and nothing else. That spelling is still accepted so
 notifications already sitting in Notification Centre still work.
 
+> **Remote push cannot be tested in Expo Go.** It was removed from Expo Go in
+> Expo SDK 53 (`expo-notifications` warns about exactly this), so
+> `getExpoPushTokenAsync` cannot issue a token there. Local notifications —
+> Smart Reminders (§4.5e) — still work in Expo Go. A push token needs a
+> **development build or TestFlight**:
+> `eas build --profile development --platform ios`.
+>
+> `registerForPushNotifications()` returns `{ token, reason, detail }`, never a
+> bare null, because "simulator", "Expo Go", "permission denied", "no project
+> id", "Expo refused" and "the API rejected the token" are six different
+> problems with six different fixes and used to be indistinguishable. A
+> `server-failed` with HTTP 404 means the `/api/push` endpoints are not deployed
+> yet — the device is fine.
+
 **Preferences (`src/api/push.js` → `/api/push`).** Four switches in Settings:
 Document ready, Unused credits, Subscription renewal, and — separated by a
-divider — Offers and announcements.
+divider — Offers and announcements. Below them, in dev builds and Expo Go only,
+a **Send test notification** row that exercises the whole chain in one tap
+(permission → Expo token → backend → Expo relay → APNs → handler). The endpoint
+behind it is admin-gated server-side, so it 403s for a normal account regardless.
+
+Three backend routes register a token — `/api/push/token` plus two legacy ones —
+and all three now delegate to one `PushTokenRegistrar`. Registering a token
+detaches it from any other account first: a device token identifies a *device*,
+and on a reinstall-and-switch-accounts the previous owner otherwise keeps getting
+the new owner's document titles on their lock screen.
 
 > The promotional switch is **off by default and separately controllable** on
 > purpose. App Store guideline 4.5.4: push may not be used for advertising or
 > marketing unless the customer explicitly opted in. Accepting the OS permission
 > prompt is consent for transactional notifications only. Folding announcements
 > into the other three switches, or defaulting it on, is a rejection.
+
+#### Testing push locally
+
+`docs/local-push-testing.md` — the full loop against the API on your Mac, so a
+bug is found before anything is deployed. Two things decide whether it can work
+at all:
+
+- **A development build on a real iPhone.** Remote push was removed from Expo Go
+  in Expo SDK 53, and a simulator has no APNs connection. Local notifications
+  (Smart Reminders) still work in Expo Go; push tokens do not.
+- **`NSAllowsLocalNetworking`** in `app.json`, which permits cleartext HTTP to
+  LAN addresses only — that is what lets the phone reach
+  `http://<mac-lan-ip>:5263`. It cannot be used to reach the public internet in
+  the clear, so it does not weaken the shipped app.
+
+Bind the API to `0.0.0.0`, not `localhost`, or the phone cannot see it. Leave
+`Notifications:WorkerEnabled` false: manual sends still work, but the daily job
+would push to real users from your laptop, because the dev connection string
+points at the live database.
+
+#### Testing push with Postman
+
+`docs/paperai-push.postman_collection.json` — import it into Postman, set the
+`email` / `password` collection variables to an **admin** account (admin ids live
+in `Admin:UserIds` in the API's `appsettings.json`), then run **1. Login**. Its
+test script captures `accessToken` into the `jwt` variable, and every other
+request uses it automatically.
+
+| # | Request | Notes |
+|---|---|---|
+| 1 | Login | Captures `{{jwt}}` |
+| 2 | Register device token | Paste a real `ExponentPushToken[…]` into `expoPushToken` |
+| 3 | Get preferences | Expect `announcements: false` — marketing is opt-in only |
+| 4 | Opt in to announcements | Only the keys you send change |
+| 5 | Send test push | To your own token; admin only, 403 otherwise |
+| 6 | Announce — **DRY RUN** | Returns `{ audience, sent: 0 }`, delivers nothing |
+| 7 | Announce — **SEND** | No recall. Run 6 first, every time |
+| 8 | Remove device token | What sign-out calls |
+
+Switch the `baseUrl` variable to `{{localUrl}}` (`http://localhost:5263`) to run
+against a local API.
+
+Steps 5–7 report `audience: 0` until step 2 has stored a genuine token — a
+broadcast reaches accounts that have **a token AND `announcements = true`**, and
+nothing else. `sent` can be lower than `audience` when Expo rejects tokens; those
+are `DeviceNotRegistered` and get cleared automatically.
+
+> App Store Connect cannot send push notifications — it has no such feature.
+> Announcements go out through `POST /api/push/announce` (this collection), or a
+> web admin panel if you later want non-engineers sending them.
 
 ### 4.10 Theming and design system
 `ThemeProvider` persists System / Light / Dark, hydrates before first paint, and

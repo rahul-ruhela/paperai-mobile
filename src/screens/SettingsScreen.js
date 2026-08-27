@@ -19,7 +19,9 @@ import GradientScreen from "../ui/GradientScreen";
 import { logout, deleteAccount } from "../api/auth";
 import { fetchEntitlements, invalidateEntitlements } from "../services/entitlementService";
 import { productInfoForSku } from "../constants/api";
-import { getPushPreferences, updatePushPreferences } from "../api/push";
+import { getPushPreferences, updatePushPreferences, sendTestPush } from "../api/push";
+import { isExpoGo } from "../api/dev";
+import { registerForPushNotifications } from "../notifications/pushNotifications";
 
 const DURATION_TITLE = { weekly: "Weekly", monthly: "Monthly", yearly: "Yearly" };
 
@@ -157,6 +159,75 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
                 />
             </View>
         );
+    }
+
+    /**
+     * Re-registers the device token and asks the server to push to this account.
+     *
+     * Shown only in a dev build or Expo Go — but the endpoint behind it is
+     * admin-gated server-side, so it 403s for everyone else even if this UI ever
+     * became visible. It exercises the whole chain in one tap: permission →
+     * Expo token → backend → Expo relay → APNs → the notification handler.
+     */
+    async function runTestPush() {
+        const { token, reason, detail } = await registerForPushNotifications();
+
+        if (!token) {
+            // Each reason is a genuinely different problem with a different fix,
+            // so each gets its own message rather than one vague catch-all.
+            const explain = {
+                simulator: [
+                    "Needs A Real Device",
+                    "The simulator has no connection to Apple's push service, so it cannot be given a push token. Run this on your iPhone.",
+                ],
+                "expo-go": [
+                    "Not Available In Expo Go",
+                    "Remote push notifications were removed from Expo Go in Expo SDK 53. Local reminders still work here, but a push token needs a development build or TestFlight.\n\nRun: eas build --profile development --platform ios",
+                ],
+                denied: [
+                    "Notifications Are Off",
+                    "Allow notifications for Paper AI Assistant in iOS Settings, then try again.",
+                ],
+                "no-project-id": [
+                    "Missing Project ID",
+                    "No EAS project id was found in app.json (extra.eas.projectId). Expo cannot issue a token without it.",
+                ],
+                "token-failed": [
+                    "Could Not Get A Token",
+                    `Expo refused to issue a push token.${detail ? `\n\n${detail}` : ""}`,
+                ],
+            }[reason] ?? ["Could Not Register", detail || "Unknown problem."];
+
+            Alert.alert(explain[0], explain[1]);
+            return;
+        }
+
+        if (reason === "server-failed") {
+            // The device gave us a token; the backend would not take it. Almost
+            // always means the push endpoints are not deployed yet.
+            Alert.alert(
+                "Server Did Not Accept The Token",
+                `The device issued a push token but the API rejected it (${detail}).\n\n` +
+                    "If this is a 404, the /api/push endpoints are not deployed yet."
+            );
+            return;
+        }
+        try {
+            const res = await sendTestPush();
+            Alert.alert(
+                res?.ok ? "Test Sent" : "Not Sent",
+                res?.ok
+                    ? "It should arrive in a few seconds. Leave the app open to check the foreground banner, or background it to check the lock screen."
+                    : `Expo rejected it: ${res?.error ?? "unknown"}`
+            );
+        } catch (e) {
+            Alert.alert(
+                "Test Failed",
+                e?.response?.status === 403
+                    ? "This account is not an admin, so the test endpoint is not available to it."
+                    : e?.userMessage || "Could not reach the server."
+            );
+        }
     }
 
     function Row({ icon, title, subtitle, onPress, danger }) {
@@ -408,6 +479,21 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
                                     prefKey="announcements"
                                     label="Offers and announcements"
                                     hint="New features, deals and product news. Off unless you turn it on."
+                                />
+                            </>
+                        )}
+
+                        {/* Dev/Expo Go only. The endpoint is admin-gated on the
+                            server regardless, so this cannot be used by a normal
+                            account even if the row were visible. */}
+                        {(__DEV__ || isExpoGo()) && (
+                            <>
+                                <View style={styles.toggleDivider} />
+                                <Row
+                                    icon="paper-plane-outline"
+                                    title="Send test notification"
+                                    subtitle="Dev build only · admin accounts only"
+                                    onPress={runTestPush}
                                 />
                             </>
                         )}

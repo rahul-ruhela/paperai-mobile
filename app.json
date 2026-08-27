@@ -12,7 +12,13 @@
       "bundleIdentifier": "com.bholeshankar.paperai",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "UIBackgroundModes": ["remote-notification"]
+        "UIBackgroundModes": ["remote-notification"],
+
+        "//": "NSAllowsLocalNetworking permits cleartext HTTP to LAN addresses ONLY, never to public internet hosts. It is what lets a development build on a real device reach the API running on a laptop (http://192.168.x.x:5263), so push registration can be tested end to end before anything is deployed. It does not weaken production: the app defaults to the HTTPS production API, and Apple accepts this key without a justification because it cannot be used to reach the internet in the clear.",
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        },
+        "NSLocalNetworkUsageDescription": "Paper AI Assistant connects to a development API running on your computer when you are testing a development build on the same Wi-Fi network."
       }
     },
 
