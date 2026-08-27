@@ -27,7 +27,7 @@ import EmailOtpVerifyScreen from "./src/screens/EmailOtpVerifyScreen";
 ======================= */
 import HomeScreen from "./src/screens/HomeScreen";
 import UploadScreen from "./src/screens/UploadScreen";
-import TasksScreen from "./src/screens/TasksScreen";
+import AssistantScreen from "./src/screens/AssistantScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import ProcessScreen from "./src/screens/ProcessScreen";
 import DocumentDetailScreen from "./src/screens/DocumentDetailScreen";
@@ -84,9 +84,14 @@ Notifications.setNotificationHandler({
 // opens the app on the Documents tab and the tap appears to have done nothing.
 let pendingDeepLink = null;
 
-function docIdFromResponse(response) {
+function targetFromResponse(response) {
     const data = response?.notification?.request?.content?.data;
     if (!data) return null;
+
+    const type = String(data.type ?? "");
+
+    // Assistant task alerts carry no document — they open the Assistant tab.
+    if (type === "task") return { screen: "Tasks" };
 
     // Two producers, two shapes:
     //   local Smart Reminders  → { type: "reminder", docId }
@@ -96,28 +101,30 @@ function docIdFromResponse(response) {
     const docId = data.docId ?? data.documentId;
     if (!docId) return null;
 
-    const type = String(data.type ?? "");
     const opensDocument =
         type === "reminder" || type === "ANALYSIS_COMPLETE" || data.screen === "Analysis";
 
-    return opensDocument ? docId : null;
+    return opensDocument ? { screen: "Analysis", docId } : null;
 }
 
-function openDocument(docId) {
-    if (!docId) return;
+function navigateTo(target) {
+    if (!target) return;
+
     if (navigationRef.isReady()) {
-        navigationRef.navigate("Analysis", { docId });
+        if (target.screen === "Tasks") {
+            navigationRef.navigate("Main", { screen: "Tasks" });
+        } else {
+            navigationRef.navigate("Analysis", { docId: target.docId });
+        }
     } else {
-        pendingDeepLink = docId;
+        pendingDeepLink = target;
     }
 }
 
 function flushDeepLink() {
-    const docId = pendingDeepLink;
+    const target = pendingDeepLink;
     pendingDeepLink = null;
-    if (docId && navigationRef.isReady()) {
-        navigationRef.navigate("Analysis", { docId });
-    }
+    if (target && navigationRef.isReady()) navigateTo(target);
 }
 
 const Stack = createNativeStackNavigator();
@@ -152,8 +159,8 @@ function Tabs({ onLoggedOut }) {
                             ? "cloud-upload"
                             : "cloud-upload-outline",
                         Tasks: focused
-                            ? "checkbox"
-                            : "checkbox-outline",
+                            ? "sparkles"
+                            : "sparkles-outline",
                         Settings: focused
                             ? "settings"
                             : "settings-outline",
@@ -171,7 +178,14 @@ function Tabs({ onLoggedOut }) {
         >
             <Tab.Screen name="Documents" component={HomeScreen} />
             <Tab.Screen name="Upload" component={UploadScreen} />
-            <Tab.Screen name="Tasks" component={TasksScreen} />
+            {/* Route name stays "Tasks" so every existing navigate("Tasks")
+                call site and any parked deep link keeps working; only the label
+                the user reads changes. */}
+            <Tab.Screen
+                name="Tasks"
+                component={AssistantScreen}
+                options={{ title: "Assistant" }}
+            />
             <Tab.Screen name="Settings">
                 {(props) => (
                     <SettingsScreen
@@ -254,12 +268,12 @@ function AppShell() {
         let alive = true;
 
         const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-            openDocument(docIdFromResponse(response));
+            navigateTo(targetFromResponse(response));
         });
 
         Notifications.getLastNotificationResponseAsync()
             .then((response) => {
-                if (alive) openDocument(docIdFromResponse(response));
+                if (alive) navigateTo(targetFromResponse(response));
             })
             .catch(() => {});
 

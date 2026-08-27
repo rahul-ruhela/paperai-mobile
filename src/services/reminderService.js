@@ -455,3 +455,122 @@ export function formatDate(d) {
     const date = d instanceof Date ? d : new Date(d);
     return date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 }
+
+/* ── task alerts ─────────────────────────────────────────────────────────────
+ *
+ * The Assistant's due-date notifications. Same mechanism as document reminders —
+ * same permission gate, same OS scheduling, same serialised read-modify-write —
+ * but stored in their own file.
+ *
+ * Sharing `reminders.json` would put task records into `groupedReminders()`,
+ * which every document-reminder screen renders assuming a `docTitle` and a
+ * `label`. Separate storage keeps that proven path exactly as it was.
+ *
+ * A task alert always fires at its exact `dueAtUtc`. When the user picked a date
+ * but no time, the Assistant sends 09:00 local for that day (matching FIRE_HOUR
+ * above), so there is one absolute instant here and no timezone guessing.
+ */
+
+const TASK_FILE = "task-reminders.json";
+
+function taskPath() {
+    return `${FileSystem.documentDirectory}${TASK_FILE}`;
+}
+
+export async function listTaskAlerts() {
+    try {
+        const info = await FileSystem.getInfoAsync(taskPath());
+        if (!info.exists) return [];
+        const parsed = JSON.parse(await FileSystem.readAsStringAsync(taskPath()));
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
+}
+
+async function writeAllTaskAlerts(list) {
+    await FileSystem.writeAsStringAsync(taskPath(), JSON.stringify(list));
+}
+
+async function pruneStaleTaskAlerts(list) {
+    const cutoff = Date.now() - KEEP_PAST_DAYS * 86400000;
+    const live = list.filter((a) => {
+        const time = new Date(a.fireAtUtc).getTime();
+        return isNaN(time) || time >= cutoff;
+    });
+    if (live.length !== list.length) await writeAllTaskAlerts(live);
+    return live;
+}
+
+/** Cancels the OS notification for a task and forgets the record. Safe to call twice. */
+export async function cancelTaskAlert(taskId) {
+    return serialise(async () => {
+        const all = await listTaskAlerts();
+        const target = all.find((a) => a.taskId === taskId);
+
+        if (target?.notificationId) {
+            await Notifications.cancelScheduledNotificationAsync(target.notificationId).catch(() => {});
+        }
+
+        const next = all.filter((a) => a.taskId !== taskId);
+        if (next.length !== all.length) await writeAllTaskAlerts(next);
+        return next;
+    });
+}
+
+/**
+ * Schedules (or reschedules) the alert for one task.
+ *
+ * Always replaces any existing alert for that task first: editing a due date
+ * must move the notification, not add a second one.
+ *
+ * @returns the stored record, or { error: "past" } when the due time has gone by.
+ */
+export async function scheduleTaskAlert({ taskId, title, description, dueAtUtc }) {
+    if (!taskId || !dueAtUtc) return { error: "past" };
+
+    const fire = new Date(dueAtUtc);
+    if (isNaN(fire.getTime()) || fire.getTime() <= Date.now()) {
+        // Still clear any stale alert, so an overdue edit does not leave the old
+        // notification scheduled.
+        await cancelTaskAlert(taskId);
+        return { error: "past" };
+    }
+
+    await cancelTaskAlert(taskId);
+
+    const notificationId = await Notifications.scheduleNotificationAsync({
+        content: {
+            title: title || "PaperAI task",
+            // The description is what makes the reminder useful — it is the line
+            // the user wrote to their future self.
+            body: description ? String(description).slice(0, 180) : "Task due now.",
+            data: { type: "task", taskId },
+        },
+        trigger: { type: "date", date: fire },
+    });
+
+    const record = {
+        id: `task_${taskId}`,
+        taskId,
+        notificationId,
+        title: title || "",
+        fireAtUtc: fire.toISOString(),
+        createdAt: new Date().toISOString(),
+    };
+
+    await serialise(async () => {
+        const all = await pruneStaleTaskAlerts(await listTaskAlerts());
+        await writeAllTaskAlerts([...all.filter((a) => a.taskId !== taskId), record]);
+    });
+
+    return record;
+}
+
+/** { [taskId]: record } — what the Assistant needs to show an alarm on a row. */
+export async function taskAlertMap() {
+    const all = await serialise(async () => pruneStaleTaskAlerts(await listTaskAlerts()));
+    const map = {};
+    for (const alert of all) map[alert.taskId] = alert;
+    return map;
+}
