@@ -88,7 +88,12 @@ forces one version onto every consumer and breaks the build; `"js-yaml@3"` and
 `@expo/metro-config`, `@expo/cli`, `expo`) are just the dependency chain above
 it. Its advisory range is `*` — **every published version is affected, and no
 fixed release exists**, so there is nothing to pin to. npm's only offered fix is
-`expo@57`, i.e. the SDK upgrade.
+`expo@57`, i.e. the SDK upgrade — **and it does not actually fix this.** Verified
+2026-08-27: the newest Metro (`0.87.0`, well past what SDK 57 ships) still
+declares `image-size: ^1.0.2`, and the newest `image-size` (`2.0.2`, published
+2025-04-02) is still inside the advisory range `<=2.0.2`. `npm audit fix --force`
+picks the major bump heuristically, not because it clears the advisory. Do not
+run it for this.
 
 In practice it is Metro reading image dimensions from your own asset files at
 build time; the DoS needs a hostile ICNS/JXL/HEIF input, which would mean

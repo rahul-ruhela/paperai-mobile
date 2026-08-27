@@ -51,9 +51,6 @@ SUBSCRIPTIONS
 
 Paper AI Assistant offers three auto-renewable subscription tiers. Each tier is available as a weekly, monthly, or yearly subscription, and grants a set number of credits per billing cycle for use with the AI features above.
 
-• Essential — 15 credits weekly / 60 credits monthly / 560 credits yearly
-• Plus — 40 credits weekly / 160 credits monthly / 850 credits yearly
-• Advance — 80 credits weekly / 320 credits monthly / 1100 credits yearly
 
 Prices are shown in the app in your local currency before you purchase.
 
