@@ -102,6 +102,22 @@ curl -X POST http://localhost:5263/api/push/announce \
   -d '{"title":"New feature","body":"Sign & Fill is here","screen":"Upload"}'
 ```
 
+## A 411 is not a broken endpoint
+
+The reverse proxy in front of the production API answers a POST that carries **no
+body at all** with `411 Length Required`, before ASP.NET sees the request — so it
+looks like the route is broken or the auth is wrong when it is neither:
+
+```bash
+curl -X POST https://apis.bseptechnologies.com/api/push/test   -H "Authorization: Bearer $JWT"                      # -> 411
+
+curl -X POST https://apis.bseptechnologies.com/api/push/test   -H "Authorization: Bearer $JWT"   -H "Content-Type: application/json" -d '{}'          # -> works
+```
+
+`/api/push/test` is the only endpoint that takes no parameters, so it is the only
+one you can hit this on. Send `{}`. GET and DELETE are unaffected. The Postman
+collection already does this.
+
 ## What "it didn't work" means
 
 The app reports a distinct reason for each failure — it does not just say
