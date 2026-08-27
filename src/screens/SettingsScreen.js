@@ -396,6 +396,13 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
                         />
 
                         <Row
+                            icon="lock-open-outline"
+                            title="App Permissions"
+                            subtitle="See what Paper AI can access on this device"
+                            onPress={() => navigation.navigate("PermissionCenter")}
+                        />
+
+                        <Row
                             icon="shield-checkmark-outline"
                             title="Privacy Policy"
                             subtitle="How we handle your documents"

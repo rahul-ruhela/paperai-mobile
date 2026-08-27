@@ -40,6 +40,7 @@ import PaywallScreen from "./src/screens/PaywallScreen";
 import ProfileScreen from "./src/screens/ProfileScreen";
 import CreditAnalyticsScreen from "./src/screens/CreditAnalyticsScreen";
 import PrivacyScreen from "./src/screens/PrivacyScreen";
+import PermissionCenterScreen from "./src/screens/PermissionCenterScreen";
 import TermsScreen from "./src/screens/TermsScreen";
 import HelpCenterScreen from "./src/screens/HelpCenterScreen";
 import ContactSupportScreen from "./src/screens/ContactSupportScreen";
@@ -400,6 +401,13 @@ function AppShell() {
                         <Stack.Screen name="Profile" component={ProfileScreen} />
                         <Stack.Screen name="Analytics" component={CreditAnalyticsScreen} />
                         <Stack.Screen name="Privacy" component={PrivacyScreen} />
+                        {/* Standalone for now; Module 5 embeds the same panel
+                            as a section inside the Privacy centre. */}
+                        <Stack.Screen
+                            name="PermissionCenter"
+                            component={PermissionCenterScreen}
+                            options={{ title: "Permissions" }}
+                        />
                         <Stack.Screen name="Terms" component={TermsScreen} />
                         <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />
                         <Stack.Screen

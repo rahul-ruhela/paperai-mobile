@@ -1,6 +1,6 @@
 # Paper AI Assistant — Product Roadmap v2
 
-Status: **in progress — Modules 0, 1 and 3 shipped; Module 2 or 4 is next.**
+Status: **in progress — Modules 0, 1, 2 and 3 shipped; Module 4 is next.**
 Written: 2026-08-27. Last synced to the repository: 2026-08-28. Branch: `chore/release-hardening`.
 Basis: the mobile repo (`paperai-mobile`) + API repo (`PaperAiApis`).
 
@@ -79,7 +79,7 @@ Ordered by dependency, not desirability. Each row is one approval gate.
 |---|---|---|---|---|---|---|
 | 0 | Matrix repair (D1–D2) + task API completion (D3–D4) | this doc, §3 | all | Yes (task columns, credit seeds) | Low | **Shipped** 2026-08-28 |
 | 1 | Subscription & entitlement policy | `subscription-entitlement-policy.md` | all | No | Low (matrix keys + shared lock UI) | **Shipped** 2026-08-28 |
-| 2 | Device Permission Center | `device-permission-center.md` | Free | No | Low | **Next** — smallest remaining |
+| 2 | Device Permission Center | `device-permission-center.md` | Free | No | Low | **Shipped** 2026-08-28 |
 | 3 | Assistant module (Tasks → Assistant; My Tasks / AI Tasks / Reminders) | `assistant-module-spec.md` | Free base, Advance extras | Yes | Medium | **Shipped** 2026-08-28 |
 | 4 | Smart Cleaner layers (Basic / Deep / Pro) | `smart-cleaner-spec.md` | Free → Advance | Seeds only | Medium | Not started |
 | 5 | Privacy & Security module (Vault, sensitive detection, privacy score) | `privacy-security-module.md` | Free → Plus | Local only | Medium | Not started |
@@ -98,7 +98,7 @@ Module 0  (matrix repair + tasks API)            [DONE]
    │              [DONE]     └── (reuses reminderService)
    ├── Module 1  Entitlement policy   (informs every gate below)  [DONE]
    ├── Module 4  Smart Cleaner        (D2 credit seeds now exist)
-   └── Module 5  Privacy ── Module 2  Permission Center (a panel inside Privacy)
+   └── Module 5  Privacy ── Module 2  Permission Center  [DONE — standalone; Module 5 embeds it]
 
 Module 8  Performance — last, measured against the finished surface area.
 ```
@@ -174,14 +174,17 @@ Every new endpoint is `[Authorize]`, scopes by `GetUserId()`, and calls `Entitle
 - New UI: `AssistantScreen` (three tabs), `TaskCard`, `TaskEditorSheet`, `SegmentedTabs`; `taskSpeech.js` for on-device read-aloud. *(Module 3)*
 - `src/config/upgradeMessages.ts` (one CTA sentence per gated key) and `src/ui/FeatureLock.js` (`FeatureLock` + `useUpgradePrompt`), implementing the policy §4/§5 contract once. `PaywallScreen` takes a `featureKey` param and names the plan that unlocks it. *(Module 1)*
 - `smart_recall` and `voice_companion` registered in both matrices, and `isFeatureAllowed()` now fails closed on an unknown key. *(Module 1)*
+- `App.js` — `PermissionCenter` stack route (title "Permissions"); `SettingsScreen` gains **Account → App Permissions** as its entry point. *(Module 2)*
+- New: `src/services/permissionStatus.js` (get-only permission reads; `toDisplayState` / `mergePhotoStates` exported pure) and `src/screens/PermissionCenterScreen.js` (read-only panel, re-reads on `AppState` `active`, one Open Settings button, plus the iOS limited-photo "Manage selection" picker). No feature-matrix key and no entitlement check — the panel is Free and on-device. *(Module 2)*
+- `__tests__/permissionStatus.test.js` — 14 cases, including a spy assertion that reading status never calls any `request*Async`. *(Module 2)*
 
 **Remaining**
 
-- `App.js` — add `PermissionCenter`, `Vault`, `SmartCleaner` and `VoiceSettings` stack routes as their modules land.
+- `App.js` — add `Vault`, `SmartCleaner` and `VoiceSettings` stack routes as their modules land.
 - `src/config/featureMatrix.ts` — add each later module's keys, always in the same commit as `FeatureMatrix.cs` **and** the snapshot in `__tests__/featureMatrix.test.ts`.
 - **Nothing further to convert.** The other screens' paywall prompts were checked and are 402 credit top-ups or plain navigation, not tier locks — see the policy §5. Converting them would turn a top-up into a wall.
 - New services: `vaultService.js`, `recallService.js`, `voiceService.js`, and `cleanerService.js` extracted from `JunkWiperScanScreen.js` (1641 lines — too large to extend safely).
-- New UI: `PermissionCenterScreen`, `VaultScreen`, `PrivacyScoreCard`, `VoiceSettingsSection`.
+- New UI: `VaultScreen`, `PrivacyScoreCard`, `VoiceSettingsSection`.
 - New dependencies, none currently installed: `expo-local-authentication` (Face ID / Touch ID), `expo-speech` (voice), `expo-crypto` (vault key derivation). Each needs an `app.json` plugin entry and an Info.plist usage string.
 
 ---
@@ -210,6 +213,7 @@ Merged is not deployed. Track the two separately.
 |---|---|---|---|
 | 0 — Matrix repair + tasks API | Yes (2026-08-28) | **No** | Migrations `20260827230000` and `20260828090000` are applied to the shared `PaperAiDb`, and every column is additive and nullable, so the **production build is unaffected**. |
 | 1 — Entitlement policy | Yes (2026-08-28) | **No** | No schema and no new routes, but the `SUBSCRIPTION_EXPIRED` correction is server-side: until the API deploys, a never-subscribed user on a production build would still be told their plan ended. |
+| 2 — Device Permission Center | Yes (2026-08-28) | **n/a** | Mobile-only and entirely on-device: no schema, no route, no backend change at all. It is the one module here with no API dependency, so it is safe to ship in a mobile build ahead of the API deploy. |
 | 3 — Assistant | Yes (2026-08-28) | **No** | The Assistant screen works only against a local backend until the API is deployed. Do not ship the mobile build to TestFlight/App Store before the API deploy. |
 
 The App Store release currently live is v1.0 (build 37) plus the nine
