@@ -86,14 +86,28 @@ forces one version onto every consumer and breaks the build; `"js-yaml@3"` and
 **The 8 that remain are all one root cause: `image-size`.** The other seven
 (`metro`, `metro-config`, `metro-transform-worker`, `@expo/metro`,
 `@expo/metro-config`, `@expo/cli`, `expo`) are just the dependency chain above
-it. Its advisory range is `*` — **every published version is affected, and no
-fixed release exists**, so there is nothing to pin to. npm's only offered fix is
-`expo@57`, i.e. the SDK upgrade — **and it does not actually fix this.** Verified
-2026-08-27: the newest Metro (`0.87.0`, well past what SDK 57 ships) still
-declares `image-size: ^1.0.2`, and the newest `image-size` (`2.0.2`, published
-2025-04-02) is still inside the advisory range `<=2.0.2`. `npm audit fix --force`
-picks the major bump heuristically, not because it clears the advisory. Do not
-run it for this.
+it. `image-size`'s own advisory range is `*` and its newest release (`2.0.2`)
+is still inside it, so there is nothing to pin `image-size` itself to.
+
+**Corrected 2026-08-28** — the note previously here was wrong, and acting on it
+broke the dev server (see `troubleshooting.md` §1). Bumping **Metro** does clear
+these 8: Metro **0.83.4+** dropped the `image-size` dependency entirely and
+inlined its own `getAssetSize`. Verified on 0.83.8 — `image-size` appears
+neither in its `dependencies` nor in `src/Assets.js`.
+
+We still do not take it. Metro `^0.83.8` **breaks `expo start` on SDK 54**: that
+same 0.83.4 release changed the `metro-file-map` change-event shape that
+`@expo/cli@54.0.26` destructures, so the bundler dies on the first file change.
+The pin buys a clean audit and costs you the dev server.
+
+| Option | Audit | `expo start` |
+|---|---|---|
+| Metro 0.83.3 (Expo's pin) | 8 highs remain | works |
+| Metro 0.83.8 | clean | **broken** |
+
+**Never add a `metro*` override to `package.json`.** Metro's version belongs to
+the Expo SDK. `npm audit fix --force` picks the major bump heuristically, not
+because it understands this trade-off. Do not run it for this.
 
 In practice it is Metro reading image dimensions from your own asset files at
 build time; the DoS needs a hostile ICNS/JXL/HEIF input, which would mean

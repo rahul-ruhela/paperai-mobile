@@ -43,6 +43,15 @@ export const FEATURES: FeatureDefinition[] = [
     { key: "ai_chat", name: "AI Chat", requiredTier: "plus", onDevice: false, backendVerified: true, creditFeatureKey: "document_ai_chat" },
     { key: "deep_clean", name: "Deep Clean", requiredTier: "plus", onDevice: false, backendVerified: true, creditFeatureKey: "junk_wiper_scan_report" },
 
+    // Storage Studio — mirrors Services/FeatureMatrix.cs. The hub and the two
+    // free cleaners run entirely on-device; only the two AI-assisted scans are
+    // credit-bearing and backend-verified.
+    { key: "storage_studio", name: "Storage Studio", requiredTier: "free", onDevice: true, backendVerified: false },
+    { key: "screenshot_cleaner", name: "Screenshot Cleaner", requiredTier: "free", onDevice: true, backendVerified: false },
+    { key: "large_video_finder", name: "Large Video Finder", requiredTier: "free", onDevice: true, backendVerified: false },
+    { key: "blurry_detector", name: "Blurry Photo Detector", requiredTier: "essential", onDevice: true, backendVerified: true, creditFeatureKey: "blurry_photo_scan" },
+    { key: "similar_photos", name: "Similar Photo Grouping", requiredTier: "plus", onDevice: true, backendVerified: true, creditFeatureKey: "similar_photo_scan" },
+
     // Advance tier
     // On-device: reminders are local notifications, so there is no server call to
     // authorize. `backendVerified` is still true because the TIER is decided by

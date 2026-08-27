@@ -1,4 +1,4 @@
-import { isFeatureAllowed, getFeature, TIER_ORDER } from "../src/config/featureMatrix";
+import { isFeatureAllowed, getFeature, TIER_ORDER, FEATURES } from "../src/config/featureMatrix";
 
 // This file is the mobile mirror of the backend's Services/FeatureMatrix.cs and
 // decides which upsell a user sees. It is a UX hint — the backend re-authorizes
@@ -55,5 +55,75 @@ describe("credit feature keys", () => {
         for (const key of ["document_ai_analysis", "image_ocr", "summarize_text", "deep_clean"]) {
             expect(getFeature(key)?.creditFeatureKey).toBeTruthy();
         }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Backend parity
+//
+// Snapshot of Services/FeatureMatrix.cs in the API repo (c:\workpis\PaperAiApis).
+// The two files are a cross-repo contract: a key the backend gates but the
+// mirror omits falls through isFeatureAllowed's unknown-key default of `true`,
+// so a paid feature renders unlocked until the server refuses it. That is how
+// storage_studio, screenshot_cleaner, large_video_finder, blurry_detector and
+// similar_photos shipped unlocked for Free users.
+//
+// When you change FeatureMatrix.cs, update THIS list and the mirror together.
+// ---------------------------------------------------------------------------
+const BACKEND_FEATURES: { key: string; requiredTier: string; creditFeatureKey?: string }[] = [
+    { key: "upload_hub", requiredTier: "free" },
+    { key: "document_scanner", requiredTier: "free" },
+    { key: "code_scanner", requiredTier: "free" },
+    { key: "signature_editor", requiredTier: "free" },
+    { key: "usage_dashboard", requiredTier: "free" },
+    { key: "document_ai_analysis", requiredTier: "essential", creditFeatureKey: "document_scan_ai_ready" },
+    { key: "image_ocr", requiredTier: "essential", creditFeatureKey: "image_ocr_extract_text" },
+    { key: "summarize_text", requiredTier: "essential", creditFeatureKey: "summarize_text" },
+    { key: "receipt_extraction", requiredTier: "essential", creditFeatureKey: "receipt_extract" },
+    { key: "smart_reminders", requiredTier: "essential" },
+    { key: "explain_text_detail", requiredTier: "plus", creditFeatureKey: "explain_text_detail" },
+    { key: "ai_chat", requiredTier: "plus", creditFeatureKey: "document_ai_chat" },
+    { key: "deep_clean", requiredTier: "plus", creditFeatureKey: "junk_wiper_scan_report" },
+    { key: "storage_studio", requiredTier: "free" },
+    { key: "screenshot_cleaner", requiredTier: "free" },
+    { key: "large_video_finder", requiredTier: "free" },
+    { key: "blurry_detector", requiredTier: "essential", creditFeatureKey: "blurry_photo_scan" },
+    { key: "similar_photos", requiredTier: "plus", creditFeatureKey: "similar_photo_scan" },
+    { key: "advanced_reminders", requiredTier: "advance" },
+    { key: "household_assistant", requiredTier: "advance" },
+];
+
+describe("backend parity", () => {
+    it("mirrors every feature key the backend gates", () => {
+        const missing = BACKEND_FEATURES.map((f) => f.key).filter((k) => !getFeature(k));
+        expect(missing).toEqual([]);
+    });
+
+    it("agrees with the backend on the required tier of every feature", () => {
+        for (const backend of BACKEND_FEATURES) {
+            expect(getFeature(backend.key)?.requiredTier).toBe(backend.requiredTier);
+        }
+    });
+
+    it("agrees with the backend on every credit feature key", () => {
+        for (const backend of BACKEND_FEATURES) {
+            expect(getFeature(backend.key)?.creditFeatureKey).toBe(backend.creditFeatureKey);
+        }
+    });
+
+    it("does not gate a key the backend has never heard of", () => {
+        // The reverse direction: a mirror-only key would deny a feature the
+        // server is happy to serve.
+        const backendKeys = new Set(BACKEND_FEATURES.map((f) => f.key));
+        const extra = FEATURES.map((f) => f.key).filter((k) => !backendKeys.has(k));
+        expect(extra).toEqual([]);
+    });
+
+    it("keeps a Free user out of the paid Storage Studio scans", () => {
+        expect(isFeatureAllowed("storage_studio", "free")).toBe(true);
+        expect(isFeatureAllowed("blurry_detector", "free")).toBe(false);
+        expect(isFeatureAllowed("similar_photos", "free")).toBe(false);
+        expect(isFeatureAllowed("similar_photos", "essential")).toBe(false);
+        expect(isFeatureAllowed("similar_photos", "plus")).toBe(true);
     });
 });
