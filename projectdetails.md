@@ -214,7 +214,7 @@ Tiers: `free < essential < plus < advance`.
 | free | Upload Hub, Document Scanner, Code Scanner, Signature Editor, Usage Dashboard |
 | essential | AI Document Analysis, Image OCR, Summarize, Receipt Extraction, Smart Reminders |
 | plus | Explain in Detail, AI Chat, Deep Clean |
-| advance | Household Assistant |
+| advance | Custom Dates & Snooze (`advanced_reminders`), Household Assistant |
 
 `useFeatureAccess(key)` prefers the server-computed allow map and falls back to
 the local matrix. `GET /api/entitlements/check/{key}` is the authoritative
@@ -595,7 +595,8 @@ guideline 5.1.1 rejection.
 | Credits | `GET /balance`, `GET /feature-configs[/{key}]`, `POST /reserve`, `POST /complete`, `POST /refund` |
 | Entitlements | `GET /api/entitlements/me`, `GET /api/entitlements/check/{key}` |
 | Billing | `GET /api/billing/entitlement`, `POST /ios/verify-transaction-auto`, `/ios/verify-transaction`, `/ios/verify-receipt`, `/ios/sync-receipt`, `/mock-subscribe` (dev only), `POST /ios/notifications-v2` (public Apple webhook) |
-| Notifications | `POST /api/notifications/register-token` |
+| Push | `POST/DELETE /api/push/token`, `GET/PUT /api/push/preferences`, `POST /api/push/test` (admin), `POST /api/push/announce` (admin, `dryRun`) |
+| Notifications (legacy) | `POST /api/notifications/register-token` — still accepted; shipped builds call it |
 | Dev | `POST /api/dev/grant-credits` (404 in production) |
 
 Errors return `{ message, error }`; `client.js` maps every status to
@@ -626,8 +627,9 @@ LAN IP that would look broken to App Review (guideline 2.1) and trip ATS.
   `set-subscription-availability.js`, `upload-review-screenshots.js`
 - Tests: `__tests__/billingRetry.test.js` (IAP retry loop),
   `__tests__/featureMatrix.test.ts` (gating matrix),
-  `__tests__/reminderDates.test.js` (reminder date detection) — `npm test`,
-  jest-expo
+  `__tests__/reminderDates.test.js` (reminder date detection),
+  `__tests__/reminderScheduling.test.js` (one reminder per document per day) —
+  `npm test`, jest-expo
 - Expo Go convenience: a fresh account with a zero balance gets 500 test credits
   once; the endpoint 404s in production so it is safe to ship (`src/api/dev.js`).
 
@@ -663,6 +665,29 @@ secret.
 ## 8. Feature ideas
 
 Ordered by (my read of) value-per-effort.
+
+> **Next up: Deep Clean** (§8 #4) — chosen 2026-08-27 as the feature to build
+> next. Sketch, so the decisions are made before the code:
+> - Plus tier, key `deep_clean`, credit key `junk_wiper_scan_report` — both
+>   already declared in `featureMatrix.ts` and the backend `FeatureMatrix.cs`,
+>   so nothing new has to be registered.
+> - It is the **paid layer on top of Junk Wiper**, not a second scanner: Junk
+>   Wiper stays free and finds exact/filename/burst duplicates on-device
+>   (§4.4). Deep Clean adds the passes that need real work — blurry and
+>   near-identical shots, screenshots, large videos, and a **scan report** worth
+>   the credit.
+> - Ledger per §4.6: `getFeatureConfig` → `CreditConfirmModal` → `reserveCredits`
+>   → run the scan → `completeTransaction`, and `refundTransaction` on a scan
+>   that finds nothing or throws. Charging for an empty report is a refund
+>   request, not a sale.
+> - **Nothing is deleted without an explicit per-group confirmation**, same rule
+>   Junk Wiper holds to. Bulk-deleting a user's photos on the strength of an AI
+>   score is unrecoverable.
+> - New screen `DeepClean`, reached from `JunkWiperScanScreen` (an upsell row
+>   that stays visible to free users, per §4.5e's rule) and the Upload hub's
+>   **AI FEATURES** block, below the divider.
+> - No new permission strings: it reads the same `expo-media-library` grant the
+>   Junk Wiper scan already asks for.
 
 ### Close the gaps in what just shipped
 1. **Ship `summarize_text` / `explain_text_detail` backends** and un-comment the
