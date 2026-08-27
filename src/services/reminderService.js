@@ -31,6 +31,19 @@ export const LEAD_OPTIONS = [
     { key: "same", label: "On the day", days: 0 },
 ];
 
+/**
+ * Offsets for a reminder the user sets themselves, when the document has no
+ * detectable due date. Relative to today and fired at 09:00 like every other
+ * reminder, so behaviour is identical in dev, TestFlight and production — there
+ * is no build-flag-dependent path here to get wrong.
+ */
+export const CUSTOM_OFFSETS = [
+    { key: "tomorrow", label: "Tomorrow", days: 1 },
+    { key: "3d", label: "In 3 days", days: 3 },
+    { key: "1w", label: "In 1 week", days: 7 },
+    { key: "1m", label: "In 1 month", days: 30 },
+];
+
 /* ── date detection ──────────────────────────────────────────────────────────*/
 
 const MONTHS = {

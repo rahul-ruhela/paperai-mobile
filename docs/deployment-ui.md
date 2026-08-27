@@ -14,13 +14,13 @@
 ## Local development
 
 ```bash
-cd c:\Rahul\bsepall\paperworkai\paperai\paperai-mobile
+cd path/to/paperai-mobile
 
 # Install dependencies
 npm install
 
 # Copy env template
-copy .env.example .env.local
+cp .env.example .env.local
 # Edit .env.local — set EXPO_PUBLIC_API_BASE_URL to your local machine IP
 
 # Start Expo (Expo Go — no real IAP)
@@ -79,7 +79,7 @@ Before submitting, update [eas.json](../eas.json):
   "production": {
     "ios": {
       "appleId": "rahulruhela.net@gmail.com",
-      "ascAppId": "YOUR_NUMERIC_APP_ID",      ← from App Store Connect
+      "ascAppId": "6757206246",               ← this app's ASC App ID
       "appleTeamId": "YOUR_TEAM_ID"           ← from developer.apple.com
     }
   }
@@ -122,14 +122,32 @@ eas submit --platform android --latest
 
 Set at: GitHub → repo → Settings → Secrets and variables → Actions
 
+Referenced by `.github/workflows/ios-production.yml`:
+
 | Secret | Value |
 |--------|-------|
 | `EXPO_TOKEN` | From expo.dev → Account → Access Tokens |
-| `API_BASE_URL_STAGING` | `https://apis.bseptechnologies.com` |
 | `API_BASE_URL_PRODUCTION` | `https://apis.bseptechnologies.com` |
-| `APPLE_WEEKLY_PRODUCT_ID` | `com.bholeshankar.paperai.pro_weekly` |
-| `APPLE_MONTHLY_PRODUCT_ID` | `com.bholeshankar.paperai.pro_monthly` |
-| `APPLE_YEARLY_PRODUCT_ID` | `com.bholeshankar.paperai.pro_yearly` |
-| `APP_STORE_CONNECT_ISSUER_ID` | From App Store Connect → Keys |
-| `APP_STORE_CONNECT_KEY_ID` | From App Store Connect → Keys |
-| `APP_STORE_CONNECT_PRIVATE_KEY` | Contents of .p8 file |
+| `APP_STORE_CONNECT_PRIVATE_KEY` | Contents of the .p8 file |
+
+> **Subscription product IDs are not secrets and are not set here.** They live in
+> [`src/constants/api.ts`](../src/constants/api.ts) (`SUBSCRIPTION_TIERS`) and must
+> match App Store Connect exactly. This table previously listed
+> `APPLE_WEEKLY_PRODUCT_ID` / `APPLE_MONTHLY_PRODUCT_ID` /
+> `APPLE_YEARLY_PRODUCT_ID` as `com.bholeshankar.paperai.pro_weekly` and friends.
+> Those three `pro_*` IDs were **retired** — they no longer exist in App Store
+> Connect, nothing in the repo ever read those secrets, and a `pro_*` product ID
+> reaching live code grants zero credits to someone who has paid. The current
+> catalogue is nine SKUs, three tiers × three durations:
+>
+> | Tier | Weekly | Monthly | Yearly |
+> |---|---|---|---|
+> | Essential | `…essential_weekly` | `…essential_monthly` | `…essential_yearly` |
+> | Plus | `…plus_weekly` | `…plus_monthly` | `…plus_yearly` |
+> | Advance | `…advance_weekly` | `…advance_monthly` | `…advance_yearly` |
+>
+> all prefixed `com.bholeshankar.paperai.`
+
+`APP_STORE_CONNECT_ISSUER_ID` and `APP_STORE_CONNECT_KEY_ID` are not read by the
+workflow — submission credentials come from `eas.json`. Set them only if you wire
+up a workflow that uses them.

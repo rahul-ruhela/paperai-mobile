@@ -253,12 +253,12 @@ export default function HomeScreen({ navigation }) {
     // sits in the same header, so its element is memoized on the only inputs it
     // actually depends on. Without this every character re-renders an animated
     // subtree of a dozen driven nodes.
+    //
+    // The orb only claims to be working when something really is queued or
+    // processing on the server. Anything else — including documents sitting
+    // un-analysed — is the idle, invitational state.
     const orb = useMemo(
         () => (
-            {/* The orb only claims to be working when something really is
-                queued or processing on the server. Anything else — including
-                documents sitting un-analysed — is the idle, invitational
-                state. */}
             <AiOrb
                 size={132}
                 state={counts.analyzing > 0 ? "working" : "idle"}
@@ -272,7 +272,7 @@ export default function HomeScreen({ navigation }) {
                 style={S.orb}
             />
         ),
-        [counts.pending, navigation, S.orb]
+        [counts.analyzing, navigation, S.orb]
     );
 
     function highlightText(text) {

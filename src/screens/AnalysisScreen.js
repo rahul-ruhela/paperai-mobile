@@ -194,7 +194,7 @@ export default function AnalysisScreen({ route, navigation }) {
 
                                 {/* Smart Reminders — renders nothing at all
                                     when no actionable date is detected. */}
-                                <ReminderCard doc={doc} />
+                                <ReminderCard doc={doc} navigation={navigation} />
 
                                 {/* AI TASKS */}
                                 <Card style={styles.card}>
@@ -263,24 +263,27 @@ export default function AnalysisScreen({ route, navigation }) {
                                     actions in UploadScreen stay commented out. Flip USE_STUB
                                     to false in src/api/chat.js once the endpoint is live and
                                     this button appears on its own. */}
-                                {!CHAT_STUBBED && (
-                                    <AppButton
-                                        title="Ask AI about this document"
-                                        icon="chatbubble-ellipses-outline"
-                                        onPress={() =>
-                                            navigation.navigate("AiChat", {
-                                                docId,
-                                                title: doc?.title || title,
-                                            })
-                                        }
-                                    />
-                                )}
+                                <View style={styles.actions}>
+                                    {!CHAT_STUBBED && (
+                                        <AppButton
+                                            title="Ask AI about this document"
+                                            icon="chatbubble-ellipses-outline"
+                                            onPress={() =>
+                                                navigation.navigate("AiChat", {
+                                                    docId,
+                                                    title: doc?.title || title,
+                                                })
+                                            }
+                                        />
+                                    )}
 
-                                <AppButton
-                                    title="Re-run AI Analysis (uses credits)"
-                                    onPress={rerunAnalysis}
-                                    disabled={rerunning}
-                                />
+                                    <AppButton
+                                        title="Re-run AI Analysis (uses credits)"
+                                        icon="refresh-outline"
+                                        onPress={rerunAnalysis}
+                                        disabled={rerunning}
+                                    />
+                                </View>
                             </>
                         )}
                     </ScrollView>
@@ -311,6 +314,10 @@ const makeStyles = (t) =>
         padding: 18,
         paddingBottom: 80,
     },
+
+    // Stacked AppButtons have no margin of their own — the spacing lives here so
+    // every action on this screen sits on the same rhythm as the cards above.
+    actions: { gap: 10, marginTop: 4 },
 
     card: {
         marginBottom: 16,

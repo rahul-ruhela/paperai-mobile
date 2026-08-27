@@ -6,6 +6,8 @@ import {
     Alert,
     StyleSheet,
     Pressable,
+    Switch,
+    ActivityIndicator,
     ScrollView,
     Linking,
     KeyboardAvoidingView,
@@ -17,6 +19,7 @@ import GradientScreen from "../ui/GradientScreen";
 import { logout, deleteAccount } from "../api/auth";
 import { fetchEntitlements, invalidateEntitlements } from "../services/entitlementService";
 import { productInfoForSku } from "../constants/api";
+import { getPushPreferences, updatePushPreferences } from "../api/push";
 
 const DURATION_TITLE = { weekly: "Weekly", monthly: "Monthly", yearly: "Yearly" };
 
@@ -28,6 +31,11 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
 
     const [entitlement, setEntitlement] = useState(null);
     const [loadingPlan, setLoadingPlan] = useState(true);
+
+    // Push preferences. `null` while loading — the section renders a spinner
+    // rather than briefly showing every switch in the wrong position.
+    const [pushPrefs, setPushPrefs] = useState(null);
+    const [pushError, setPushError] = useState(false);
 
     // Re-read on every focus, and force past the service's 30s cache: coming
     // back from the paywall after subscribing must show the new plan straight
@@ -102,6 +110,52 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
                     },
                 },
             ]
+        );
+    }
+
+    useEffect(() => {
+        let alive = true;
+        getPushPreferences()
+            .then((p) => alive && setPushPrefs(p))
+            .catch(() => alive && setPushError(true));
+        return () => {
+            alive = false;
+        };
+    }, []);
+
+    /**
+     * Flips one switch optimistically and rolls back if the server refuses.
+     * A toggle that springs back is honest; one that stays on while the server
+     * still has it off would mean the user believes they opted out when they
+     * have not.
+     */
+    async function togglePush(key, value) {
+        const previous = pushPrefs;
+        setPushPrefs((p) => ({ ...p, [key]: value }));
+        try {
+            const saved = await updatePushPreferences({ [key]: value });
+            setPushPrefs(saved);
+        } catch {
+            setPushPrefs(previous);
+            Alert.alert("Could Not Save", "That setting was not saved. Please check your connection and try again.");
+        }
+    }
+
+    function PushToggle({ label, hint, prefKey }) {
+        const value = !!pushPrefs?.[prefKey];
+        return (
+            <View style={styles.toggleRow}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.rowTitle}>{label}</Text>
+                    <Text style={styles.rowSub}>{hint}</Text>
+                </View>
+                <Switch
+                    value={value}
+                    onValueChange={(v) => togglePush(prefKey, v)}
+                    trackColor={{ true: theme.colors.primary }}
+                    accessibilityLabel={label}
+                />
+            </View>
         );
     }
 
@@ -315,6 +369,51 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
                     </View>
 
                     <View style={styles.card}>
+                        <Text style={styles.section}>Notifications</Text>
+                        <Text style={styles.sectionHint}>
+                            Turn these off any time. You can also disable all notifications for
+                            Paper AI Assistant in {Platform.OS === "ios" ? "iOS" : "device"} Settings.
+                        </Text>
+
+                        {pushError ? (
+                            <Text style={styles.rowSub}>
+                                Notification settings are unavailable right now.
+                            </Text>
+                        ) : pushPrefs === null ? (
+                            <ActivityIndicator color={theme.colors.primary} style={{ marginVertical: 12 }} />
+                        ) : (
+                            <>
+                                <PushToggle
+                                    prefKey="analysisComplete"
+                                    label="Document ready"
+                                    hint="When AI analysis of a document finishes."
+                                />
+                                <PushToggle
+                                    prefKey="usageReminders"
+                                    label="Unused credits"
+                                    hint="An occasional nudge when credits are going unused."
+                                />
+                                <PushToggle
+                                    prefKey="renewalReminders"
+                                    label="Subscription renewal"
+                                    hint="A few days before your plan renews."
+                                />
+                                {/* Kept visually and functionally separate from the
+                                    three above. Guideline 4.5.4 requires explicit,
+                                    revocable opt-in for anything promotional —
+                                    accepting the OS prompt is not consent to
+                                    marketing. Defaults to off, server-side. */}
+                                <View style={styles.toggleDivider} />
+                                <PushToggle
+                                    prefKey="announcements"
+                                    label="Offers and announcements"
+                                    hint="New features, deals and product news. Off unless you turn it on."
+                                />
+                            </>
+                        )}
+                    </View>
+
+                    <View style={styles.card}>
                         <Text style={styles.section}>Support</Text>
 
                         <Row
@@ -444,6 +543,20 @@ const makeStyles = (t) =>
         paddingVertical: 10,
         minHeight: 44,
         borderRadius: 16,
+    },
+    toggleRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        paddingVertical: 10,
+        minHeight: 48,
+    },
+    // Separates the promotional opt-in from the transactional switches above it,
+    // so the two are not read as one undifferentiated group.
+    toggleDivider: {
+        height: 1,
+        backgroundColor: t.colors.separator,
+        marginVertical: 8,
     },
     rowIcon: {
         width: 38,

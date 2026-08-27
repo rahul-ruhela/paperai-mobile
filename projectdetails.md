@@ -144,8 +144,15 @@ Account deletion (`DELETE /api/account`) ships as an App Store requirement.
   `ListHeaderComponent`, passed as a React **element** rather than a component
   function — an inline function would remount the header on every render and the
   search field would lose focus on each keystroke. The orb element is memoized on
-  the pending count for the same reason: typing re-renders this screen per
+  the analysing count for the same reason: typing re-renders this screen per
   character, and the orb is a dozen driven Animated nodes.
+
+  The orb's "working" state is driven by `isAnalyzing` — `QUEUED` or
+  `PROCESSING` — **not** by `isPending`. `isPending` is merely "has no AI result",
+  which includes documents that were uploaded and never submitted and ones that
+  failed, so driving the orb off it made the app say "Analyzing…" indefinitely
+  for work nobody had started. The stat strip's "Pending" column still counts
+  `isPending`, matching the Pending tab.
 
 ### 4.3 Tasks
 `TasksScreen` over `/api/tasks` (list / create / patch / delete). Tasks can be
@@ -379,9 +386,62 @@ are not optional:
 simulator cannot deliver local notifications at all, and offering "Open Settings"
 there sends the user somewhere that cannot fix it.
 
+**Gated on `smart_reminders` (Essential)**, matching both `featureMatrix.ts` and
+the backend `FeatureMatrix.cs`. Free users get an upsell card rather than a
+silent no-op. The card renders nothing while the entitlement snapshot is still
+loading, so an upsell never flashes at a subscriber.
+
+**Two sources of dates, both real.** Detected dates from the document, and a
+date the user picks themselves (`CUSTOM_OFFSETS` — tomorrow / 3 days / 1 week /
+1 month). The second exists because plenty of real documents have no date next
+to an intent word, and without it the card is invisible on those documents and
+the feature looks broken.
+
+> An earlier revision rendered a fake **"Sample date (dev build)"** row under
+> `__DEV__` to make the card testable, alongside a `__DEV__` "In 1 minute" lead
+> option. Both are **removed**. A row that looks like it was found in the
+> document but was not is a misrepresentation, and build-flag-dependent
+> behaviour means the thing you tested is not the thing you shipped. The
+> user-chosen reminder covers the same need and behaves identically in dev,
+> TestFlight and production.
+
+Scheduling requires a **real device** — a simulator cannot deliver a local
+notification, which is what the "Needs A Real Device" alert says.
+
 ### 4.9 Push notifications
-`expo-notifications` + `UIBackgroundModes: remote-notification`. Token
-registration posts to `/api/notifications/register-token`.
+`expo-notifications` + `UIBackgroundModes: remote-notification`.
+
+`Notifications.setNotificationHandler` is registered at module scope in `App.js`.
+Without it, a notification arriving while the app is in the **foreground** is
+delivered silently — no banner, no sound — which makes Smart Reminders look
+broken to anyone who stays in the app waiting for one.
+
+**Registration.** `registerForPushNotifications()` runs after a successful
+sign-in and on every launch with a restored session; re-sending an unchanged
+token is a no-op server-side, and tokens do rotate on reinstall. It is
+deliberately *not* called at first launch — the OS permission prompt can only be
+shown once, and asking before the user has a reason to say yes is how it gets
+denied permanently. `projectId` is passed explicitly to
+`getExpoPushTokenAsync()`, which otherwise throws when it cannot infer it.
+Logout calls `unregisterPushNotifications()` so the next account on a shared
+device is not reachable at the previous owner's address.
+
+**Deep links.** `docIdFromResponse` in `App.js` accepts both producers: local
+reminders send `{ type: "reminder", docId }`, the server's analysis-complete push
+sends `{ type: "ANALYSIS_COMPLETE", docId }`. The server previously sent
+`{ screen, documentId }`, which the app did not read at all — tapping it opened
+the Documents tab and nothing else. That spelling is still accepted so
+notifications already sitting in Notification Centre still work.
+
+**Preferences (`src/api/push.js` → `/api/push`).** Four switches in Settings:
+Document ready, Unused credits, Subscription renewal, and — separated by a
+divider — Offers and announcements.
+
+> The promotional switch is **off by default and separately controllable** on
+> purpose. App Store guideline 4.5.4: push may not be used for advertising or
+> marketing unless the customer explicitly opted in. Accepting the OS permission
+> prompt is consent for transactional notifications only. Folding announcements
+> into the other three switches, or defaulting it on, is a rejection.
 
 ### 4.10 Theming and design system
 `ThemeProvider` persists System / Light / Dark, hydrates before first paint, and

@@ -9,24 +9,42 @@ import {
     hasReminderFor,
     formatDate,
     LEAD_OPTIONS,
+    CUSTOM_OFFSETS,
 } from "../services/reminderService";
+import { useFeatureAccess } from "../hooks/useFeatureAccess";
 import { useTheme } from "./ThemeProvider";
 import useThemedStyles from "./useThemedStyles";
 
 /**
- * ReminderCard — shown on a processed document when an actionable date is found.
- * Free feature: no credits, no network. See spec docs/roadmap/tier-1/02-smart-reminders.md
+ * ReminderCard — schedule a local notification ahead of a date in a document.
  *
- * Renders nothing at all when no date is detected, so it never occupies space
- * on documents it has nothing to say about.
+ * Two sources of dates, and both are real:
+ *   1. Dates detected in the document's AI output (backend `detectedDates`, else
+ *      the client-side parser in reminderService).
+ *   2. A date the user picks themselves, relative to today.
+ *
+ * (2) exists because detection needs a date sitting next to an intent word, and
+ * plenty of real documents don't have one. Without it the card is invisible on
+ * those documents and the feature looks broken — and it is the only way to
+ * exercise the feature on a TestFlight build, where no debug affordance exists.
+ *
+ * There is deliberately NO fake sample date. An earlier revision rendered one
+ * under __DEV__ to make the card testable; a row that looks like it was found in
+ * the document but wasn't is a misrepresentation, and it is not worth the risk of
+ * it ever rendering in front of a reviewer.
+ *
+ * Gated on `smart_reminders` (Essential), matching both featureMatrix.ts and the
+ * backend FeatureMatrix.cs. Free users get an upsell rather than a silent no-op.
  */
-export default function ReminderCard({ doc }) {
+export default function ReminderCard({ doc, navigation }) {
     const { theme } = useTheme();
     const styles = useThemedStyles(makeStyles);
+    const { allowed, loading: accessLoading } = useFeatureAccess("smart_reminders");
 
     const [dates, setDates] = useState([]);
     const [existing, setExisting] = useState({});
     const [picking, setPicking] = useState(null); // the date being scheduled
+    const [customOpen, setCustomOpen] = useState(false);
 
     const docId = doc?.id;
 
@@ -50,16 +68,13 @@ export default function ReminderCard({ doc }) {
         return () => {
             alive = false;
         };
-        // `doc` is the analysed document object; it changes identity only when
-        // the screen reloads it, which is exactly when this should re-run.
     }, [doc, docId]);
 
-    if (!doc || dates.length === 0) return null;
+    if (!doc) return null;
+    // Never flash an upsell while the entitlement snapshot is still loading.
+    if (accessLoading) return null;
 
-    async function confirm(lead) {
-        const target = picking;
-        setPicking(null);
-
+    async function schedule({ label, dateUtc, lead }) {
         const { granted, reason } = await ensurePermission();
         if (!granted) {
             // A simulator can't deliver local notifications at all, and sending
@@ -88,9 +103,9 @@ export default function ReminderCard({ doc }) {
             record = await scheduleReminder({
                 docId: doc.id,
                 docTitle: doc.title || "Document",
-                label: target.label,
-                dateUtc: target.dateUtc,
-                leadDays: lead.days,
+                label,
+                dateUtc,
+                leadDays: lead?.days ?? 0,
             });
         } catch {
             Alert.alert("Could Not Set Reminder", "Something went wrong scheduling that. Please try again.");
@@ -100,20 +115,63 @@ export default function ReminderCard({ doc }) {
         if (!record) {
             Alert.alert(
                 "Too Late To Remind",
-                `${lead.label} for this date has already passed. Choose a shorter lead time.`
+                `${lead?.label ?? "That lead time"} for this date has already passed. Choose a shorter lead time.`
             );
             return;
         }
 
-        setExisting((m) => ({ ...m, [target.dateUtc]: true }));
+        setExisting((m) => ({ ...m, [dateUtc]: true }));
         Alert.alert("Reminder Set", `We'll notify you on ${formatDate(record.fireAtUtc)} at 9:00 AM.`);
+    }
+
+    function confirm(lead) {
+        const target = picking;
+        setPicking(null);
+        schedule({ label: target.label, dateUtc: target.dateUtc, lead });
+    }
+
+    function confirmCustom(offset) {
+        setCustomOpen(false);
+        const when = new Date();
+        when.setDate(when.getDate() + offset.days);
+        when.setHours(9, 0, 0, 0);
+        // Fires on the day itself — the user picked when they want to be told,
+        // so there is no lead time to subtract.
+        schedule({ label: "Reminder", dateUtc: when.toISOString(), lead: { days: 0, label: "On the day" } });
+    }
+
+    if (!allowed) {
+        return (
+            <View style={[styles.card, styles.lockedCard]}>
+                <View style={styles.head}>
+                    <Ionicons name="alarm-outline" size={17} color={theme.colors.textMuted} />
+                    <Text style={styles.title}>Smart Reminders</Text>
+                    <View style={styles.tierBadge}>
+                        <Text style={styles.tierText}>ESSENTIAL</Text>
+                    </View>
+                </View>
+                <Text style={styles.lockedSub}>
+                    Get a notification before a bill, contract or warranty in this document comes due.
+                </Text>
+                <Pressable
+                    onPress={() => navigation?.navigate("Paywall")}
+                    style={styles.upsellBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel="View plans to unlock Smart Reminders"
+                >
+                    <Text style={styles.upsellText}>View plans</Text>
+                </Pressable>
+            </View>
+        );
     }
 
     return (
         <View style={styles.card}>
             <View style={styles.head}>
                 <Ionicons name="alarm-outline" size={17} color={theme.colors.warningText} />
-                <Text style={styles.title}>Dates found in this document</Text>
+                <Text style={styles.title}>
+                    {dates.length > 0 ? "Dates found in this document" : "Remind me about this"}
+                </Text>
                 <View style={styles.freeBadge}>
                     <Text style={styles.freeText}>FREE</Text>
                 </View>
@@ -158,7 +216,23 @@ export default function ReminderCard({ doc }) {
                 );
             })}
 
-            {/* Lead-time picker */}
+            {dates.length === 0 ? (
+                <Text style={styles.emptyNote}>
+                    No due date was found in this document. You can still set your own reminder for it.
+                </Text>
+            ) : null}
+
+            <Pressable
+                onPress={() => setCustomOpen(true)}
+                style={styles.customBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Set your own reminder for this document"
+            >
+                <Ionicons name="add-circle-outline" size={16} color={theme.colors.accentText} />
+                <Text style={styles.customText}>Set my own reminder</Text>
+            </Pressable>
+
+            {/* Lead-time picker for a detected date */}
             <Modal visible={!!picking} transparent animationType="fade" onRequestClose={() => setPicking(null)}>
                 <Pressable style={styles.overlay} onPress={() => setPicking(null)}>
                     <Pressable style={styles.sheet} onPress={() => {}}>
@@ -185,6 +259,32 @@ export default function ReminderCard({ doc }) {
                     </Pressable>
                 </Pressable>
             </Modal>
+
+            {/* User-chosen reminder, relative to today */}
+            <Modal visible={customOpen} transparent animationType="fade" onRequestClose={() => setCustomOpen(false)}>
+                <Pressable style={styles.overlay} onPress={() => setCustomOpen(false)}>
+                    <Pressable style={styles.sheet} onPress={() => {}}>
+                        <Text style={styles.sheetTitle}>Remind me about this</Text>
+                        <Text style={styles.sheetSub}>{doc.title || "This document"} · fires at 9:00 AM</Text>
+
+                        {CUSTOM_OFFSETS.map((opt) => (
+                            <Pressable
+                                key={opt.key}
+                                onPress={() => confirmCustom(opt)}
+                                style={styles.option}
+                                accessibilityRole="button"
+                            >
+                                <Ionicons name="time-outline" size={17} color={theme.colors.accentText} />
+                                <Text style={styles.optionText}>{opt.label}</Text>
+                            </Pressable>
+                        ))}
+
+                        <Pressable onPress={() => setCustomOpen(false)} style={styles.cancel} accessibilityRole="button">
+                            <Text style={styles.cancelText}>Cancel</Text>
+                        </Pressable>
+                    </Pressable>
+                </Pressable>
+            </Modal>
         </View>
     );
 }
@@ -192,14 +292,19 @@ export default function ReminderCard({ doc }) {
 const makeStyles = (t) =>
     StyleSheet.create({
         card: {
-            marginTop: 12,
+            // marginBottom matches the 16 the surrounding Cards use, so this
+            // does not sit tight against the AI Tasks card below it.
+            marginTop: 4,
+            marginBottom: 16,
             padding: 14,
             borderRadius: t.radius.lg,
             borderWidth: 1,
             borderColor: t.colors.warningBorder,
             backgroundColor: t.colors.warningBg,
-            gap: 10,
+            gap: 12,
         },
+        lockedCard: { borderColor: t.colors.border, backgroundColor: t.colors.glassSoft },
+
         head: { flexDirection: "row", alignItems: "center", gap: 8 },
         title: { flex: 1, color: t.colors.textPrimary, fontWeight: "900", fontSize: 14 },
         freeBadge: {
@@ -212,10 +317,32 @@ const makeStyles = (t) =>
         },
         freeText: { color: t.colors.successText, fontWeight: "900", fontSize: 9.5, letterSpacing: 0.4 },
 
+        tierBadge: {
+            paddingHorizontal: 8,
+            paddingVertical: 3,
+            borderRadius: 999,
+            backgroundColor: t.colors.infoBg,
+            borderWidth: 1,
+            borderColor: t.colors.border,
+        },
+        tierText: { color: t.colors.accentText, fontWeight: "900", fontSize: 9.5, letterSpacing: 0.4 },
+
+        lockedSub: { color: t.colors.textMuted, fontWeight: "600", fontSize: 12.5, lineHeight: 18 },
+        upsellBtn: {
+            alignSelf: "flex-start",
+            paddingHorizontal: 14,
+            paddingVertical: 9,
+            borderRadius: 999,
+            backgroundColor: t.colors.primary,
+        },
+        upsellText: { color: t.colors.white, fontWeight: "900", fontSize: 12.5 },
+
         row: { flexDirection: "row", alignItems: "center", gap: 10 },
         rowMain: { flex: 1, minWidth: 0 },
         rowLabel: { color: t.colors.textPrimary, fontWeight: "800", fontSize: 13 },
         rowDate: { color: t.colors.textMuted, fontWeight: "600", fontSize: 11.5, marginTop: 2 },
+
+        emptyNote: { color: t.colors.textMuted, fontWeight: "600", fontSize: 12, lineHeight: 17 },
 
         remindBtn: {
             paddingHorizontal: 12,
@@ -230,6 +357,19 @@ const makeStyles = (t) =>
 
         expiredPill: { paddingHorizontal: 10, paddingVertical: 6 },
         expiredText: { color: t.colors.textMuted, fontWeight: "700", fontSize: 11.5 },
+
+        customBtn: {
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 7,
+            paddingVertical: 11,
+            borderRadius: t.radius.md,
+            borderWidth: 1,
+            borderColor: t.colors.border,
+            backgroundColor: t.colors.glassSoft,
+        },
+        customText: { color: t.colors.accentText, fontWeight: "800", fontSize: 13 },
 
         overlay: { flex: 1, backgroundColor: t.colors.overlay, justifyContent: "center", padding: 28 },
         sheet: { backgroundColor: t.colors.sheet, borderRadius: 20, padding: 18, gap: 8 },

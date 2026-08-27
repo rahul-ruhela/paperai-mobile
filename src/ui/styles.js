@@ -64,7 +64,7 @@ export const makeHomeStyles = (t) =>
         },
         creditPillText: { color: t.colors.textPrimary, fontWeight: "900", fontSize: 13 },
 
-        orb: { alignSelf: "center", marginTop: 6, marginBottom: 18 },
+        orb: { alignSelf: "center", marginTop: 2, marginBottom: 12 },
 
         quickRow: { flexDirection: "row", gap: 10 },
         quickTile: {

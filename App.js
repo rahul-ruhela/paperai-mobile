@@ -7,6 +7,10 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { getAccessToken } from "./src/storage/tokenStore";
 import { ensureExpoGoTestCredits } from "./src/api/dev";
+import {
+    registerForPushNotifications,
+    unregisterPushNotifications,
+} from "./src/notifications/pushNotifications";
 import ErrorBoundary from "./src/components/ErrorBoundary";
 import { ThemeProvider, useTheme } from "./src/ui/ThemeProvider";
 
@@ -53,6 +57,27 @@ import BootScreen from "./src/screens/BootScreen";
 // the navigator has mounted, and navigating then throws.
 const navigationRef = createNavigationContainerRef();
 
+// Without a handler, a notification that arrives while the app is in the
+// FOREGROUND is delivered silently — no banner, no sound. That is exactly the
+// case when someone schedules a reminder and stays in the app to watch for it,
+// so the feature looks broken while working perfectly.
+//
+// One did exist in src/notifications/pushNotifications.js, but nothing ever
+// imports that module, so it never ran. Registering at module scope here means
+// it is in place before any notification can be delivered.
+Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+        // shouldShowBanner/shouldShowList are the SDK 54 names; shouldShowAlert
+        // is the pre-53 spelling, kept so behaviour does not depend on which
+        // one this version reads.
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+    }),
+});
+
 // A notification tapped while the app was terminated is delivered before the
 // navigator exists. Park the target and flush it from NavigationContainer's
 // onReady instead of dropping it — otherwise a cold launch from a reminder just
@@ -61,7 +86,21 @@ let pendingDeepLink = null;
 
 function docIdFromResponse(response) {
     const data = response?.notification?.request?.content?.data;
-    return data?.type === "reminder" && data?.docId ? data.docId : null;
+    if (!data) return null;
+
+    // Two producers, two shapes:
+    //   local Smart Reminders  → { type: "reminder", docId }
+    //   server analysis-complete → { type: "ANALYSIS_COMPLETE", docId }
+    // `documentId` is the older server spelling, kept so notifications already
+    // sitting in someone's Notification Centre still deep-link correctly.
+    const docId = data.docId ?? data.documentId;
+    if (!docId) return null;
+
+    const type = String(data.type ?? "");
+    const opensDocument =
+        type === "reminder" || type === "ANALYSIS_COMPLETE" || data.screen === "Analysis";
+
+    return opensDocument ? docId : null;
 }
 
 function openDocument(docId) {
@@ -172,7 +211,13 @@ function AppShell() {
                     setAuthed(!!token);
                 }
                 // Expo Go only: give fresh tester accounts dummy credits.
-                if (token) ensureExpoGoTestCredits();
+                if (token) {
+                    ensureExpoGoTestCredits();
+                    // Re-register every launch: tokens rotate on reinstall and
+                    // after long inactivity, and re-sending an unchanged one is
+                    // a no-op server-side.
+                    registerForPushNotifications();
+                }
             } catch {
                 if (mounted) {
                     setAuthed(false);
@@ -195,6 +240,10 @@ function AppShell() {
     const handleAuthed = () => {
         setAuthed(true);
         ensureExpoGoTestCredits();
+        // Deliberately after sign-in, never at first launch: the OS permission
+        // prompt can only be shown once, and asking before the user has any
+        // reason to say yes is how it gets denied permanently.
+        registerForPushNotifications();
     };
 
     // Smart Reminders: tapping a reminder notification opens the document it
@@ -322,7 +371,10 @@ function AppShell() {
                             {(props) => (
                                 <Tabs
                                     {...props}
-                                    onLoggedOut={() => setAuthed(false)}
+                                    onLoggedOut={() => {
+                                        unregisterPushNotifications();
+                                        setAuthed(false);
+                                    }}
                                 />
                             )}
                         </Stack.Screen>
