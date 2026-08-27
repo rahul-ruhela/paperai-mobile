@@ -3,6 +3,7 @@ import { View, Text, Pressable, Alert, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useFeatureAccess } from "../hooks/useFeatureAccess";
+import { isEntitlementDenial } from "../api/client";
 import useThemedStyles from "./useThemedStyles";
 
 /**
@@ -23,6 +24,46 @@ import useThemedStyles from "./useThemedStyles";
  * Neither one authorizes anything. The backend re-checks every paid action; this
  * decides only what the user is told.
  */
+
+/**
+ * Handles a tier denial that arrived from the server rather than from the local
+ * matrix — the 403 `POST /api/credits/reserve` now returns when a feature is
+ * above the caller's tier.
+ *
+ * A plain function, not a hook: this is called from inside `catch` blocks, where
+ * hooks cannot go. Returns true when it took ownership of the error, so callers
+ * read as `if (showEntitlementDenial(...)) return;` and fall through to their
+ * ordinary error handling otherwise.
+ *
+ * The local gate and this are not redundant. The matrix mirror can be stale, the
+ * snapshot is cached for 30 s, and a subscription can lapse between the two — the
+ * server is the authority, and this is what the user sees when it disagrees.
+ */
+export function showEntitlementDenial(err, navigation, featureKey) {
+    if (!isEntitlementDenial(err)) return false;
+
+    const expired = err.entitlement?.expired;
+    const buttons = [{ text: "Not now", style: "cancel" }];
+
+    if (expired) {
+        buttons.push({
+            text: "Restore purchases",
+            onPress: () => navigation?.navigate("Paywall", { featureKey, restore: true }),
+        });
+    }
+
+    buttons.push({
+        text: "View plans",
+        onPress: () => navigation?.navigate("Paywall", { featureKey }),
+    });
+
+    Alert.alert(
+        expired ? "Your plan has ended" : "Not on your plan",
+        err.userMessage ?? "This feature needs a higher plan.",
+        buttons
+    );
+    return true;
+}
 
 /**
  * Returns { allowed, prompt, ...access }. `prompt()` opens the correct sheet for

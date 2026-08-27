@@ -43,6 +43,7 @@ import {
 } from "../api/credits";
 import { useCreditBalance } from "../hooks/useCreditBalance";
 import { isFreeMessageUsed, markFreeMessageUsed } from "../services/chatFreeMessages";
+import { showEntitlementDenial } from "../ui/FeatureLock";
 
 const MAX_CHARS = 1000;
 const COUNTER_FROM = 800;
@@ -128,6 +129,8 @@ export default function AiChatScreen({ navigation, route }) {
                     setSending(false);
                     setMessages((m) => m.filter((x) => x.id !== localId));
                     setInput(body); // hand the text back so it isn't lost
+
+                    if (showEntitlementDenial(e, navigation, "ai_chat")) return;
 
                     if (e?.response?.status === 402) {
                         const p = e.response?.data;

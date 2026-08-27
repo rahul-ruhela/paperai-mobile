@@ -41,6 +41,7 @@ import {
 } from "../api/credits";
 import { saveExpense } from "../services/expenseStore";
 import { useCreditBalance } from "../hooks/useCreditBalance";
+import { showEntitlementDenial } from "../ui/FeatureLock";
 
 export default function ReceiptCaptureScreen({ navigation }) {
     const { theme } = useTheme();
@@ -95,6 +96,8 @@ export default function ReceiptCaptureScreen({ navigation }) {
             txnId = r.transactionId;
         } catch (e) {
             setBusy(false);
+            if (showEntitlementDenial(e, navigation, "receipt_extraction")) return;
+
             if (e?.response?.status === 402) {
                 const p = e.response?.data;
                 Alert.alert(

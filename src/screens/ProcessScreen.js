@@ -17,6 +17,7 @@ import { getFeatureConfig, reserveCredits, completeTransaction, refundTransactio
 
 import { useTheme } from "../ui/ThemeProvider";
 import useThemedStyles from "../ui/useThemedStyles";
+import { showEntitlementDenial } from "../ui/FeatureLock";
 // document_scan_ai_ready covers the "save as AI-ready + analyze" action
 const FEATURE_KEY = "document_scan_ai_ready";
 
@@ -100,6 +101,8 @@ export default function ProcessScreen({ route, navigation }) {
                 await refundTransaction(txnId, e?.message || "processing_failed").catch(() => {});
                 setReservedTxnId(null);
             }
+
+            if (showEntitlementDenial(e, navigation, "document_ai_analysis")) return;
 
             const code = e?.response?.status;
             if (code === 402) {

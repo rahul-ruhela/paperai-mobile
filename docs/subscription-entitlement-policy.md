@@ -182,29 +182,54 @@ for something already owned.
    have to run in CI that does not exist yet. Updating it is a required step when
    `FeatureMatrix.cs` changes, and the test names that obligation in a comment.
 
-### 6.1 Open gap — the matrix is not enforced on any paid route
+### 6.1 Enforcement — closed 2026-08-28
 
 **No controller calls `CheckAccessAsync`.** Grep for it and the only hit is
 `EntitlementsController` asking the question on the client's behalf. Every paid
 action today is gated by **credits alone**: `POST /api/credits/reserve` looks up a
 cost and checks the balance, and never looks at the caller's tier.
 
-Consequences, stated plainly:
+That was the state until 2026-08-28. **It is now enforced, with grandfathering.**
 
-- The tier column in §3 currently describes intent, not enforcement. An Essential
-  subscriber with credits can use `ai_chat`, which this document says is Plus.
-- The client-side gate added in this module is therefore the *only* thing
-  standing between a lower tier and a higher-tier feature, and principle §1.1
-  says it must never be that.
-- Closing this is a **behaviour and revenue change**, not a refactor: it removes
-  access some existing paying users have today. It needs an explicit decision
-  about grandfathering before a line of it is written, so Module 1 stops here and
-  records the gap rather than silently enforcing it.
+**Where.** One check, at the top of `POST /api/credits/reserve`. Reserve is the
+only path to a charge — "never charge outside the ledger" was already the rule —
+so a single gate there covers every credit-bearing feature, rather than the same
+check scattered across a dozen controllers where one omission is invisible.
+Reserve is addressed by *credit* key, so the matrix is consulted through the new
+`FeatureMatrix.GetByCreditKey`. A credit key no feature claims —
+`duplicate_delete_selected` is a billing step inside a flow the user has already
+been authorized for — is not tier-gated, and gating it would have blocked the
+delete half of a scan someone had just paid to run.
 
-Recommended when that decision is taken: a small action filter or one
-`CheckAccessAsync` call at the top of each credit-bearing action, returning the
-same structured 403 the check route already returns — the client understands that
-shape already.
+**Grandfathering.** `Entitlements:GrandfatherBeforeUtc` (config, not a constant).
+A subscription created before that instant keeps the wider access credits-only
+gating gave it, for as long as it stays **continuously active**. Keyed on
+`UserSubscription.CreatedAtUtc` — the original purchase — not `UpdatedAtUtc`,
+which moves on every renewal and would quietly expire the grace after one cycle.
+A lapsed old plan is *not* grandfathered: the exemption protects continuity of
+something being paid for, not a permanent claim earned by having once subscribed.
+`Entitlements:Enforce=false` restores the old behaviour without a deploy if the
+rollout goes wrong.
+
+**[as-built] Set the cutover to the actual deploy date before deploying.** It
+currently reads `2026-08-28T00:00:00Z`, which was written while the API was still
+undeployed. Anyone who subscribes between that instant and the real deploy would
+be enforced without ever having had the old behaviour — harmless, but not what
+the setting is for.
+
+**[as-built] A timezone trap, found by the tests.** The JSON configuration binder
+parses `"2026-08-28T00:00:00Z"` into a **local** `DateTime`. Compared against
+`CreatedAtUtc`, which is genuinely UTC, that moved the cutover by the host's
+offset — 5.5 hours on an IST machine — and briefly grandfathered subscriptions
+bought after it. `EntitlementService.NormalizeToUtc` now forces the comparison to
+UTC, reading `Unspecified` as UTC because the setting says so in its name.
+
+**Client.** A denial arrives as the same structured 403 the check route returns,
+so `client.js` already understood it. `showEntitlementDenial(err, navigation,
+featureKey)` in `FeatureLock.js` turns it into the policy sheet and is wired into
+all five paid actions (`UploadScreen`, `ProcessScreen`, `AiChatScreen`,
+`ReceiptCaptureScreen`, `JunkWiperScanScreen`). It is a plain function, not a
+hook, because it is called from inside `catch` blocks.
 
 **[as-built]** The backend deliberately still fails **open** on an unknown key
 (`CheckAccessAsync` allows anything not in the matrix), while the mobile mirror

@@ -24,6 +24,7 @@ import { API } from "../constants/api";
 
 import { useTheme } from "../ui/ThemeProvider";
 import useThemedStyles from "../ui/useThemedStyles";
+import { showEntitlementDenial } from "../ui/FeatureLock";
 const FK = {
     OCR: "image_ocr_extract_text",
     SUMMARIZE: "summarize_text",
@@ -197,6 +198,8 @@ export default function UploadScreen({ navigation }) {
             refreshCredits();
         } catch (e) {
             if (txnId) await refundTransaction(txnId, e.message).catch(() => {});
+            if (showEntitlementDenial(e, navigation, "image_ocr")) return;
+
             if (e?.response?.status === 402 || e?.message?.includes("402")) {
                 Alert.alert(
                     "Not enough credits",

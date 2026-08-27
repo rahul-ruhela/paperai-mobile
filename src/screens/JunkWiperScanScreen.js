@@ -25,6 +25,7 @@ import { listDocuments, deleteDocument } from "../api/documents";
 
 import { useTheme } from "../ui/ThemeProvider";
 import useThemedStyles from "../ui/useThemedStyles";
+import { showEntitlementDenial } from "../ui/FeatureLock";
 // ── Duplicate detection strategies ────────────────────────────────────────────
 // Strategy 1 — Exact duplicate: same fileSize + same pixel dimensions + same mediaType
 //   Catches: screenshots saved twice, downloaded photos saved multiple times,
@@ -305,6 +306,8 @@ export default function JunkWiperScanScreen({ navigation }) {
             stopAnimations();
             setPhase("idle");
             setProgress(0);
+            if (showEntitlementDenial(e, navigation, "deep_clean")) return;
+
             if (e?.response?.status === 402) {
                 const p = e.response?.data;
                 Alert.alert(
