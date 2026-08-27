@@ -38,6 +38,7 @@ import {
     SNOOZE_OPTIONS,
 } from "../services/reminderService";
 import { useFeatureAccess } from "../hooks/useFeatureAccess";
+import { speakTask, stopSpeaking } from "../services/taskSpeech";
 
 /**
  * AssistantScreen — the Assistant tab.
@@ -56,11 +57,30 @@ import { useFeatureAccess } from "../hooks/useFeatureAccess";
 
 const TAB_AI = "ai";
 const TAB_MINE = "mine";
+const TAB_REMINDERS = "reminders";
 
 // How long a loaded list stays fresh. Re-fetching on every tab focus made four
 // tab switches cost four full loads; this keeps the list warm and still picks up
 // tasks created elsewhere.
 const STALE_AFTER_MS = 60_000;
+
+const EMPTY_STATES = {
+    [TAB_MINE]: {
+        icon: "checkbox-outline",
+        title: "No tasks yet",
+        body: "Add a task above, or use “Add with details” for a due date and priority.",
+    },
+    [TAB_AI]: {
+        icon: "sparkles-outline",
+        title: "No AI tasks yet",
+        body: "Analyse a document and Paper AI will suggest the actions it finds.",
+    },
+    [TAB_REMINDERS]: {
+        icon: "alarm-outline",
+        title: "No document reminders",
+        body: "Open a document and set a reminder — it will show up here.",
+    },
+};
 
 const makeStyles = (t) =>
     StyleSheet.create({
@@ -92,12 +112,31 @@ export default function AssistantScreen({ navigation }) {
     const [editor, setEditor] = useState({ visible: false, task: null });
     const [saving, setSaving] = useState(false);
 
+    // id of the task being read aloud, so exactly one card shows a stop icon.
+    const [speakingId, setSpeakingId] = useState(null);
+
     const [reminders, setReminders] = useState({ upcoming: [], past: [] });
     const [showPast, setShowPast] = useState(false);
     // { kind: "reminder" | "task", item } — one sheet serves both.
     const [snoozing, setSnoozing] = useState(null);
 
     const loadedAt = useRef(0);
+
+    // Per-tab scroll offset (spec §8.7).
+    //
+    // One FlatList serves all three tabs, so swapping `data` leaves the single
+    // scroll offset untouched: scrolling deep into AI Tasks and switching to My
+    // Tasks landed you in the middle of a list you had never scrolled. The
+    // offsets are kept per tab and restored on switch.
+    //
+    // A ref, not state: these change on every scroll frame and must never
+    // trigger a re-render of the list they describe.
+    const listRef = useRef(null);
+    const scrollOffsets = useRef({});
+    // Set while a restore is in flight, so the programmatic scroll — and the
+    // clamped offset the list reports mid-swap — cannot overwrite the value we
+    // are on our way to restoring.
+    const restoringScroll = useRef(false);
 
     // Custom dates, repeat and snooze are Advance-tier; the controls stay visible
     // and prompt instead of vanishing.
@@ -130,8 +169,35 @@ export default function AssistantScreen({ navigation }) {
         useCallback(() => {
             loadReminders();
             if (Date.now() - loadedAt.current > STALE_AFTER_MS) load();
+
+            // Navigating away mid-sentence must not leave the phone talking to
+            // a screen nobody is looking at.
+            return () => {
+                stopSpeaking();
+                setSpeakingId(null);
+            };
         }, [loadReminders, load])
     );
+
+    // Restore this tab's offset once the swapped-in rows have been laid out.
+    // A frame later, not synchronously: at switch time the list still holds the
+    // outgoing tab's content height, and scrolling against that gets clamped.
+    useEffect(() => {
+        restoringScroll.current = true;
+        const offset = scrollOffsets.current[tab] ?? 0;
+
+        const frame = requestAnimationFrame(() => {
+            // A shorter list clamps the offset itself, which is the right
+            // behaviour — the tab simply lands at its own end.
+            listRef.current?.scrollToOffset({ offset, animated: false });
+            restoringScroll.current = false;
+        });
+
+        return () => {
+            cancelAnimationFrame(frame);
+            restoringScroll.current = false;
+        };
+    }, [tab]);
 
     const { aiTasks, myTasks, doneToday } = useMemo(() => {
         const ai = [];
@@ -152,7 +218,10 @@ export default function AssistantScreen({ navigation }) {
         return { aiTasks: ai, myTasks: mine, doneToday: done };
     }, [tasks]);
 
-    const visibleTasks = tab === TAB_AI ? aiTasks : myTasks;
+    // The reminders tab renders through ListHeaderComponent, so its task list
+    // is deliberately empty.
+    const visibleTasks = tab === TAB_AI ? aiTasks : tab === TAB_MINE ? myTasks : [];
+    const reminderCount = reminders.upcoming.length + reminders.past.length;
 
     function requireAdvanced(what) {
         Alert.alert(
@@ -186,11 +255,32 @@ export default function AssistantScreen({ navigation }) {
             const completing = task.status !== "DONE";
 
             try {
-                await completeTask(task.id, completing);
+                const result = await completeTask(task.id, completing);
                 // A completed task must not still buzz. Reopening does not restore
                 // the alert: the due time has usually passed by then, and a silent
                 // reschedule behind the user's back is worse than none.
                 if (completing) await cancelTaskAlert(task.id);
+
+                // Completing a repeating task makes the server create the next
+                // occurrence and hand it back as `next`. Its alert has to be
+                // scheduled here, because the notification is local: without this
+                // a WEEKLY task fired once and then went silent for ever, which
+                // looked like the repeat itself was broken.
+                const next = result?.next;
+                if (next?.id && next?.dueAtUtc) {
+                    const scheduled = await scheduleTaskAlert({
+                        taskId: next.id,
+                        title: next.title,
+                        description: next.description,
+                        dueAtUtc: next.dueAtUtc,
+                    });
+                    // `past` only means the next occurrence is already overdue —
+                    // not worth interrupting a tick-the-box gesture with an alert.
+                    if (scheduled && !scheduled.error) {
+                        setAlerts((map) => ({ ...map, [next.id]: scheduled }));
+                    }
+                }
+
                 await load();
             } catch (e) {
                 Alert.alert("Update task failed", e?.userMessage || e?.message || "Please try again.");
@@ -263,6 +353,35 @@ export default function AssistantScreen({ navigation }) {
     const toggleWhy = useCallback((task) => {
         setExpandedId((current) => (current === task.id ? null : task.id));
     }, []);
+
+    // Tapping the row opens the editor. The "..." menu still offers Edit, but a
+    // task row that does nothing when tapped reads as a broken list.
+    const openTask = useCallback((task) => {
+        setEditor({ visible: true, task });
+    }, []);
+
+    /**
+     * Reads a task aloud, or stops if that task is already being read.
+     * On-device TTS: no request, no credits, so it is not gated by plan.
+     */
+    const speak = useCallback(
+        async (task) => {
+            if (speakingId === task.id) {
+                await stopSpeaking();
+                setSpeakingId(null);
+                return;
+            }
+
+            setSpeakingId(task.id);
+            const { spoken } = await speakTask(task, {
+                // Fires on finish, stop and error alike, so the icon can never
+                // stay stuck showing "playing".
+                onDone: () => setSpeakingId((current) => (current === task.id ? null : current)),
+            });
+            if (!spoken) setSpeakingId(null);
+        },
+        [speakingId]
+    );
 
     async function saveTask(fields) {
         setSaving(true);
@@ -420,15 +539,108 @@ export default function AssistantScreen({ navigation }) {
                 task={item}
                 expanded={expandedId === item.id}
                 hasAlert={!!alerts[item.id]}
+                speaking={speakingId === item.id}
                 onToggleDone={toggleDone}
                 onOpenActions={openActions}
                 onToggleWhy={toggleWhy}
+                onPress={openTask}
+                onSpeak={speak}
             />
         ),
-        [expandedId, alerts, toggleDone, openActions, toggleWhy]
+        [expandedId, alerts, speakingId, toggleDone, openActions, toggleWhy, openTask, speak]
     );
 
     const keyExtractor = useCallback((item) => String(item.id), []);
+
+    const onScroll = useCallback(
+        (event) => {
+            if (restoringScroll.current) return;
+            scrollOffsets.current[tab] = event.nativeEvent.contentOffset.y;
+        },
+        [tab]
+    );
+
+    /**
+     * Document reminders — created over on the Analysis screen.
+     *
+     * These are not tasks and never were: they belong to a document, they carry
+     * no status and cannot be completed. Rendering them as the task list's
+     * header put the identical block above BOTH task tabs, which read as a
+     * duplicate and left them belonging to neither. They now own a tab.
+     */
+    const remindersSection = (
+        <View style={S.remWrap}>
+            <View style={S.remHead}>
+                <Ionicons name="alarm-outline" size={16} color={theme.colors.warningText} />
+                <Text style={S.remHeadTitle}>Document reminders</Text>
+                {reminders.past.length > 0 ? (
+                    <Pressable
+                        onPress={() => setShowPast((v) => !v)}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                    >
+                        <Text style={S.remToggle}>
+                            {showPast ? "Hide past" : `Past (${reminders.past.length})`}
+                        </Text>
+                    </Pressable>
+                ) : null}
+            </View>
+
+            {(showPast ? reminders.past : reminders.upcoming).map((r) => (
+                <Card key={r.id} style={S.remCard}>
+                    <View style={S.remRow}>
+                        <Ionicons
+                            name={showPast ? "time-outline" : "notifications-outline"}
+                            size={18}
+                            color={showPast ? theme.colors.textMuted : theme.colors.warningText}
+                        />
+                        <View style={S.remMain}>
+                            <Text style={S.remTitle} numberOfLines={1}>
+                                {r.docTitle}
+                            </Text>
+                            <Text style={S.remMeta}>
+                                {r.label} · {formatDate(r.dateUtc)}
+                            </Text>
+                        </View>
+                        {!showPast && (
+                            <Pressable
+                                onPress={() => openReminderSnooze(r)}
+                                hitSlop={8}
+                                accessibilityRole="button"
+                                accessibilityLabel={
+                                    advanced
+                                        ? `Snooze the reminder for ${r.docTitle}`
+                                        : "Snooze. Advance plan feature."
+                                }
+                            >
+                                <Ionicons
+                                    name="alarm-outline"
+                                    size={19}
+                                    color={advanced ? theme.colors.accentText : theme.colors.textMuted}
+                                />
+                            </Pressable>
+                        )}
+                        <Pressable
+                            onPress={() => removeReminder(r)}
+                            hitSlop={8}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Cancel the reminder for ${r.docTitle}`}
+                        >
+                            <Ionicons
+                                name="close-circle-outline"
+                                size={19}
+                                color={theme.colors.textMuted}
+                            />
+                        </Pressable>
+                    </View>
+                </Card>
+            ))}
+
+            {showPast && reminders.past.length === 0 ? (
+                <Text style={S.remEmpty}>No past reminders.</Text>
+            ) : null}
+        </View>
+    );
 
     return (
         <GradientScreen>
@@ -439,6 +651,9 @@ export default function AssistantScreen({ navigation }) {
                         subtitle={doneToday > 0 ? `🔥 ${doneToday} done today` : "Your tasks and reminders"}
                     />
 
+                    {/* Reminders are created on a document, not here, so the
+                        task composer would be a dead end on that tab. */}
+                    {tab !== TAB_REMINDERS ? (
                     <Card style={S.addCard}>
                         <View style={S.addRow}>
                             <TextInput
@@ -464,6 +679,7 @@ export default function AssistantScreen({ navigation }) {
                             <Text style={S.remToggle}>+ Add with details</Text>
                         </Pressable>
                     </Card>
+                    ) : null}
 
                     <SegmentedTabs
                         value={tab}
@@ -471,109 +687,38 @@ export default function AssistantScreen({ navigation }) {
                         options={[
                             { key: TAB_MINE, label: "My Tasks", badge: myTasks.length },
                             { key: TAB_AI, label: "AI Tasks", badge: aiTasks.length },
+                            { key: TAB_REMINDERS, label: "Reminders", badge: reminderCount },
                         ]}
                     />
 
                     <FlatList
+                        ref={listRef}
                         data={visibleTasks}
                         keyExtractor={keyExtractor}
                         renderItem={renderItem}
+                        onScroll={onScroll}
+                        scrollEventThrottle={16}
                         contentContainerStyle={{ paddingBottom: 90 }}
                         initialNumToRender={8}
                         maxToRenderPerBatch={8}
                         windowSize={7}
                         removeClippedSubviews
-                        ListHeaderComponent={
-                            reminders.upcoming.length > 0 || reminders.past.length > 0 ? (
-                                <View style={S.remWrap}>
-                                    <View style={S.remHead}>
-                                        <Ionicons name="alarm-outline" size={16} color={theme.colors.warningText} />
-                                        <Text style={S.remHeadTitle}>Document reminders</Text>
-                                        {reminders.past.length > 0 ? (
-                                            <Pressable
-                                                onPress={() => setShowPast((v) => !v)}
-                                                hitSlop={8}
-                                                accessibilityRole="button"
-                                            >
-                                                <Text style={S.remToggle}>
-                                                    {showPast ? "Hide past" : `Past (${reminders.past.length})`}
-                                                </Text>
-                                            </Pressable>
-                                        ) : null}
-                                    </View>
-
-                                    {(showPast ? reminders.past : reminders.upcoming).map((r) => (
-                                        <Card key={r.id} style={S.remCard}>
-                                            <View style={S.remRow}>
-                                                <Ionicons
-                                                    name={showPast ? "time-outline" : "notifications-outline"}
-                                                    size={18}
-                                                    color={showPast ? theme.colors.textMuted : theme.colors.warningText}
-                                                />
-                                                <View style={S.remMain}>
-                                                    <Text style={S.remTitle} numberOfLines={1}>
-                                                        {r.docTitle}
-                                                    </Text>
-                                                    <Text style={S.remMeta}>
-                                                        {r.label} · {formatDate(r.dateUtc)}
-                                                    </Text>
-                                                </View>
-                                                {!showPast && (
-                                                    <Pressable
-                                                        onPress={() => openReminderSnooze(r)}
-                                                        hitSlop={8}
-                                                        accessibilityRole="button"
-                                                        accessibilityLabel={
-                                                            advanced
-                                                                ? `Snooze the reminder for ${r.docTitle}`
-                                                                : "Snooze. Advance plan feature."
-                                                        }
-                                                    >
-                                                        <Ionicons
-                                                            name="alarm-outline"
-                                                            size={19}
-                                                            color={advanced ? theme.colors.accentText : theme.colors.textMuted}
-                                                        />
-                                                    </Pressable>
-                                                )}
-                                                <Pressable
-                                                    onPress={() => removeReminder(r)}
-                                                    hitSlop={8}
-                                                    accessibilityRole="button"
-                                                    accessibilityLabel={`Cancel the reminder for ${r.docTitle}`}
-                                                >
-                                                    <Ionicons
-                                                        name="close-circle-outline"
-                                                        size={19}
-                                                        color={theme.colors.textMuted}
-                                                    />
-                                                </Pressable>
-                                            </View>
-                                        </Card>
-                                    ))}
-
-                                    {showPast && reminders.past.length === 0 ? (
-                                        <Text style={S.remEmpty}>No past reminders.</Text>
-                                    ) : null}
-                                </View>
-                            ) : null
-                        }
+                        ListHeaderComponent={tab === TAB_REMINDERS ? remindersSection : null}
                         ListEmptyComponent={
-                            <View style={styles.empty}>
-                                <Ionicons
-                                    name={tab === TAB_AI ? "sparkles-outline" : "checkbox-outline"}
-                                    size={34}
-                                    color={Theme.colors.primary2}
-                                />
-                                <Text style={styles.emptyTitle}>
-                                    {tab === TAB_AI ? "No AI tasks yet" : "No tasks yet"}
-                                </Text>
-                                <Text style={styles.emptyBody}>
-                                    {tab === TAB_AI
-                                        ? "Analyse a document and Paper AI will suggest the actions it finds."
-                                        : "Add a task above, or use “Add with details” for a due date and priority."}
-                                </Text>
-                            </View>
+                            // On the reminders tab the section above IS the content,
+                            // so an empty task list must not draw a second empty state
+                            // underneath a list of reminders.
+                            tab === TAB_REMINDERS && reminderCount > 0 ? null : (
+                                <View style={styles.empty}>
+                                    <Ionicons
+                                        name={EMPTY_STATES[tab].icon}
+                                        size={34}
+                                        color={Theme.colors.primary2}
+                                    />
+                                    <Text style={styles.emptyTitle}>{EMPTY_STATES[tab].title}</Text>
+                                    <Text style={styles.emptyBody}>{EMPTY_STATES[tab].body}</Text>
+                                </View>
+                            )
                         }
                     />
                 </View>

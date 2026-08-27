@@ -89,7 +89,17 @@ const makeStyles = (t) =>
         },
     });
 
-function TaskCard({ task, expanded, hasAlert, onToggleDone, onOpenActions, onToggleWhy }) {
+function TaskCard({
+    task,
+    expanded,
+    hasAlert,
+    speaking,
+    onToggleDone,
+    onOpenActions,
+    onToggleWhy,
+    onPress,
+    onSpeak,
+}) {
     const styles = useThemedStyles(makeStyles);
     const { colors } = useTheme();
 
@@ -115,7 +125,15 @@ function TaskCard({ task, expanded, hasAlert, onToggleDone, onOpenActions, onTog
                     />
                 </Pressable>
 
-                <View style={styles.titleWrap}>
+                {/* The title block opens the editor. Tapping a task row and
+                    having nothing happen reads as a broken list, and the "..."
+                    menu alone is not discoverable. */}
+                <Pressable
+                    style={styles.titleWrap}
+                    onPress={() => onPress?.(task)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Edit ${task.title}`}
+                >
                     <Text style={[styles.title, done && styles.titleDone]} numberOfLines={2}>
                         {task.title}
                     </Text>
@@ -125,7 +143,20 @@ function TaskCard({ task, expanded, hasAlert, onToggleDone, onOpenActions, onTog
                             {task.description}
                         </Text>
                     ) : null}
-                </View>
+                </Pressable>
+
+                <Pressable
+                    onPress={() => onSpeak?.(task)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={speaking ? `Stop reading ${task.title}` : `Read ${task.title} aloud`}
+                >
+                    <Ionicons
+                        name={speaking ? "stop-circle" : "volume-high-outline"}
+                        size={19}
+                        color={speaking ? colors.accentText : colors.textMuted}
+                    />
+                </Pressable>
 
                 <Pressable
                     onPress={() => onOpenActions(task)}
