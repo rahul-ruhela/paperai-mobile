@@ -35,7 +35,7 @@ export const FEATURES: FeatureDefinition[] = [
     { key: "document_ai_analysis", name: "AI Document Analysis", requiredTier: "essential", onDevice: false, backendVerified: true, creditFeatureKey: "document_scan_ai_ready" },
     { key: "image_ocr", name: "Image OCR", requiredTier: "essential", onDevice: false, backendVerified: true, creditFeatureKey: "image_ocr_extract_text" },
     { key: "summarize_text", name: "Summarize Text", requiredTier: "essential", onDevice: false, backendVerified: true, creditFeatureKey: "summarize_text" },
-    { key: "receipt_extraction", name: "Receipt Extraction", requiredTier: "essential", onDevice: false, backendVerified: true, creditFeatureKey: "image_ocr_extract_text" },
+    { key: "receipt_extraction", name: "Receipt Extraction", requiredTier: "essential", onDevice: false, backendVerified: true, creditFeatureKey: "receipt_extract" },
     { key: "smart_reminders", name: "Smart Reminders", requiredTier: "essential", onDevice: false, backendVerified: true },
 
     // Plus tier

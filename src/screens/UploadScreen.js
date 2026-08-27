@@ -236,6 +236,14 @@ export default function UploadScreen({ navigation }) {
         navigation.navigate("CodeScanner");
     }
 
+    function openSignature() {
+        navigation.navigate("Signature");
+    }
+
+    function openReceipts() {
+        navigation.navigate("ReceiptCapture");
+    }
+
     return (
         <GradientScreen>
             <SafeAreaView style={{ flex: 1 }}>
@@ -300,6 +308,25 @@ export default function UploadScreen({ navigation }) {
                     </View>
 
 
+                    {/* 3. Sign & Fill — FREE, fully on-device */}
+                    <View style={styles.card}>
+                        <View style={styles.cardHeader}>
+                            <View style={[styles.cardIcon, { backgroundColor: theme.colors.successBg }]}>
+                                <Ionicons name="create-outline" size={20} color={theme.colors.successText} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.cardTitle}>Sign &amp; Fill</Text>
+                                <Text style={styles.cardSubtitle}>
+                                    Draw your signature, place it on a page, add text and export a PDF
+                                </Text>
+                            </View>
+                            <FreeBadge />
+                        </View>
+                        <ActionBtn icon="create-outline" label="Sign a Document"
+                            onPress={openSignature} color={theme.colors.successText} full />
+                    </View>
+
+
                     {/* ── AI FEATURES ── */}
                     <View style={styles.sectionDivider}>
                         <View style={styles.dividerLine} />
@@ -308,6 +335,27 @@ export default function UploadScreen({ navigation }) {
                     </View>
 
                     {/* Everything below spends credits. */}
+
+                    {/* Scan Receipt — 1 credit per successful extraction */}
+                    <View style={styles.card}>
+                        <View style={styles.cardHeader}>
+                            <View style={[styles.cardIcon, { backgroundColor: theme.colors.warningBg }]}>
+                                <Ionicons name="receipt-outline" size={20} color={theme.colors.warningText} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.cardTitle}>Scan Receipt</Text>
+                                <Text style={styles.cardSubtitle}>
+                                    Pull out merchant, date, total and tax — then export the month as CSV
+                                </Text>
+                            </View>
+                            {/* configFor falls back to 0 when the backend has no row for this key
+                                yet, which would read as "free" — default to the real 1-credit cost. */}
+                            <CreditBadge cost={configFor("receipt_extract").creditCost || 1} />
+                        </View>
+                        <ActionBtn icon="receipt-outline" label="Scan a Receipt"
+                            onPress={openReceipts} color={theme.colors.warningText} full />
+                    </View>
+
 
                     {/* 3. Upload Document (PDF) — costs credits */}
                     <SectionCard

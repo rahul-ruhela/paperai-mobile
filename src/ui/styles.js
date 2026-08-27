@@ -39,6 +39,69 @@ export const makeCommon = (t) =>
 
 export const makeHomeStyles = (t) =>
     StyleSheet.create({
+        // ── Home hero (greeting, AI orb, quick actions, stat strip) ──────────
+        headerWrap: { paddingTop: 4 },
+
+        greetRow: {
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 12,
+            marginBottom: 6,
+        },
+        greetHi: { color: t.colors.textPrimary, fontWeight: "900", fontSize: 22 },
+        greetSub: { color: t.colors.textMuted, fontWeight: "700", fontSize: 12.5, marginTop: 2 },
+
+        creditPill: {
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 5,
+            paddingHorizontal: 12,
+            paddingVertical: 7,
+            borderRadius: 999,
+            borderWidth: 1,
+            borderColor: t.colors.border,
+            backgroundColor: t.colors.glassSoft,
+        },
+        creditPillText: { color: t.colors.textPrimary, fontWeight: "900", fontSize: 13 },
+
+        orb: { alignSelf: "center", marginTop: 6, marginBottom: 18 },
+
+        quickRow: { flexDirection: "row", gap: 10 },
+        quickTile: {
+            flex: 1,
+            alignItems: "center",
+            gap: 7,
+            paddingVertical: 14,
+            borderRadius: t.radius.lg,
+            borderWidth: 1,
+            borderColor: t.colors.border,
+            backgroundColor: t.colors.glassSoft,
+        },
+        quickIcon: {
+            width: 38,
+            height: 38,
+            borderRadius: 38,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: t.colors.infoBg,
+        },
+        quickLabel: { color: t.colors.textSecondary, fontWeight: "800", fontSize: 12 },
+
+        statStrip: {
+            flexDirection: "row",
+            alignItems: "center",
+            marginTop: 12,
+            paddingVertical: 12,
+            borderRadius: t.radius.lg,
+            borderWidth: 1,
+            borderColor: t.colors.border,
+            backgroundColor: t.colors.glassSoft,
+        },
+        statCell: { flex: 1, alignItems: "center", gap: 2 },
+        statValue: { color: t.colors.textPrimary, fontWeight: "900", fontSize: 17 },
+        statLabel: { color: t.colors.textMuted, fontWeight: "700", fontSize: 11 },
+        statDivider: { width: 1, height: 26, backgroundColor: t.colors.separator },
+
         searchBox: {
             flexDirection: "row",
             alignItems: "center",
@@ -222,18 +285,34 @@ export const makeHomeStyles = (t) =>
             elevation: 20,
             backgroundColor: t.colors.primary,
             borderRadius: 999,
+            // An absolutely positioned child inherits the parent's
+            // `alignItems: stretch`, which blows the pill out to the full screen
+            // width — the label then centres across the screen instead of
+            // sitting next to the icon. flex-start makes the width content-sized.
+            alignSelf: "flex-start",
+            // Row here as well as on `fabPressable`, so the pill still lays out
+            // as icon-then-label if this style is ever applied to the touchable
+            // directly. Without it the two stack and the label wraps onto its
+            // own line, which is exactly how the button read before.
+            flexDirection: "row",
+            alignItems: "center",
+            // Never wider than the screen on a large accessibility text size.
+            maxWidth: "88%",
             ...shadowIOS(t),
         },
         fabPressable: {
-            paddingHorizontal: 14,
+            paddingHorizontal: 16,
             paddingVertical: 12,
             minHeight: 44,
             flexDirection: "row",
             alignItems: "center",
             justifyContent: "center",
+            flexShrink: 1,
             gap: 8,
         },
-        fabText: { color: t.colors.white, fontWeight: "800", fontSize: 13 },
+        // flexShrink so an over-long label ellipsises inside the pill instead of
+        // pushing the icon out; numberOfLines={1} on the Text keeps it one line.
+        fabText: { color: t.colors.white, fontWeight: "800", fontSize: 13, flexShrink: 1 },
     });
 
 export const makeTaskStyles = (t) =>

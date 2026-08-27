@@ -17,7 +17,7 @@ import { useFocusEffect } from "@react-navigation/native";
 
 import GradientScreen from "../ui/GradientScreen";
 import Card from "../ui/Card";
-import AiHeader from "../ui/AiHeader";
+import AiOrb from "../ui/AiOrb";
 import BottomFade from "../ui/BottomFade";
 
 import { useLegacyTheme } from "../ui/theme";
@@ -27,6 +27,7 @@ import { useTheme } from "../ui/ThemeProvider";
 import useReduceMotion from "../ui/useReduceMotion";
 
 import { listDocuments, deleteDocument } from "../api/documents";
+import { useCreditBalance } from "../hooks/useCreditBalance";
 
 const TABS = {
     INBOX: "inbox",
@@ -50,6 +51,12 @@ function isProcessed(doc) {
 }
 function isPending(doc) {
     return !isProcessed(doc);
+}
+function greeting() {
+    const h = new Date().getHours();
+    if (h < 12) return "Good morning";
+    if (h < 17) return "Good afternoon";
+    return "Good evening";
 }
 function escapeRegExp(s) {
     return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -114,6 +121,7 @@ export default function HomeScreen({ navigation }) {
 
     const [selectedDoc, setSelectedDoc] = useState(null);
     const [pinnedIds, setPinnedIds] = useState([]);
+    const { credits } = useCreditBalance();
 
     // Search field + tab pills settle in just ahead of the first rows, so the
     // screen assembles top-down instead of appearing all at once.
@@ -217,6 +225,39 @@ export default function HomeScreen({ navigation }) {
 
         return filtered;
     }, [docs, tab, query, pinnedIds]);
+
+    // Counts come off the full document set, not the filtered view — the strip
+    // reports the library, so it must not change as the user types a search.
+    const counts = useMemo(
+        () => ({
+            total: docs.length,
+            ready: docs.filter(isProcessed).length,
+            pending: docs.filter(isPending).length,
+        }),
+        [docs]
+    );
+
+    // The search field re-renders this screen on every keystroke and the orb
+    // sits in the same header, so its element is memoized on the only inputs it
+    // actually depends on. Without this every character re-renders an animated
+    // subtree of a dozen driven nodes.
+    const orb = useMemo(
+        () => (
+            <AiOrb
+                size={170}
+                state={counts.pending > 0 ? "working" : "idle"}
+                onPress={() => navigation.navigate("Upload")}
+                label={counts.pending > 0 ? "Analyzing…" : "Tap to analyze"}
+                sublabel={
+                    counts.pending > 0
+                        ? `${counts.pending} ${counts.pending === 1 ? "document" : "documents"} in progress`
+                        : "Scan, upload or ask anything"
+                }
+                style={S.orb}
+            />
+        ),
+        [counts.pending, navigation, S.orb]
+    );
 
     function highlightText(text) {
         const t = safeStr(text);
@@ -363,38 +404,81 @@ export default function HomeScreen({ navigation }) {
         <GradientScreen>
             <SafeAreaView style={Common.flex1}>
                 <View style={Common.screen}>
-                    <AiHeader title="Document AI" subtitle="Workspace" />
-
-                    {/* Search */}
-                    <Animated.View style={[S.searchBox, chromeEnter]}>
-                        <Ionicons name="search" size={14} color={Theme.colors.muted} />
-                        <TextInput
-                            value={query}
-                            onChangeText={setQuery}
-                            placeholder="Search"
-                            placeholderTextColor={Theme.colors.muted}
-                            keyboardAppearance={theme.keyboardAppearance}
-                            style={S.searchInput}
-                        />
-                        {!!query && (
-                            <Pressable onPress={() => setQuery("")} hitSlop={10}>
-                                <Ionicons name="close-circle" size={18} color={Theme.colors.muted} />
-                            </Pressable>
-                        )}
-                    </Animated.View>
-
-                    {/* Tabs */}
-                    <Animated.View style={[S.tabsRow, chromeEnter]}>
-                        <TabPill active={tab === TABS.INBOX} text="Inbox" onPress={() => setTab(TABS.INBOX)} />
-                        <TabPill active={tab === TABS.AI_READY} text="AI-ready" onPress={() => setTab(TABS.AI_READY)} />
-                        <TabPill active={tab === TABS.PENDING} text="Pending" onPress={() => setTab(TABS.PENDING)} />
-                        <TabPill active={tab === TABS.PINNED} text="Pinned" onPress={() => setTab(TABS.PINNED)} />
-                    </Animated.View>
-
                     <FlatList
                         data={visibleDocs}
                         keyExtractor={(i) => i.id}
                         renderItem={renderItem}
+                        // A React *element*, not a component function: passing a
+                        // function defined inline would remount the header on
+                        // every render and the search field would lose focus on
+                        // each keystroke.
+                        ListHeaderComponent={
+                            <Animated.View style={[S.headerWrap, chromeEnter]}>
+                                {/* Greeting + credit pill */}
+                                <View style={S.greetRow}>
+                                    <View style={{ flex: 1, minWidth: 0 }}>
+                                        <Text style={S.greetHi}>{greeting()}</Text>
+                                        <Text style={S.greetSub}>Paper AI Assistant</Text>
+                                    </View>
+                                    <Pressable
+                                        onPress={() => navigation.navigate("Paywall")}
+                                        style={S.creditPill}
+                                        accessibilityRole="button"
+                                        accessibilityLabel="Credits. Tap to view plans."
+                                    >
+                                        <Ionicons name="flash" size={13} color={Theme.colors.primary2} />
+                                        <Text style={S.creditPillText}>{credits ?? "—"}</Text>
+                                    </Pressable>
+                                </View>
+
+                                {/* The orb — tap to start */}
+                                {orb}
+
+                                {/* Quick actions */}
+                                <View style={S.quickRow}>
+                                    <QuickTile icon="camera-outline" label="Scan" onPress={() => navigation.navigate("CameraScanner")} />
+                                    <QuickTile icon="create-outline" label="Sign" onPress={() => navigation.navigate("Signature")} />
+                                    <QuickTile icon="receipt-outline" label="Receipt" onPress={() => navigation.navigate("ReceiptCapture")} />
+                                    <QuickTile icon="qr-code-outline" label="Code" onPress={() => navigation.navigate("CodeScanner")} />
+                                </View>
+
+                                {/* Live stat strip */}
+                                <View style={S.statStrip}>
+                                    <StatCell value={counts.total} label="Documents" />
+                                    <View style={S.statDivider} />
+                                    <StatCell value={counts.ready} label="AI-ready" />
+                                    <View style={S.statDivider} />
+                                    <StatCell value={counts.pending} label="Pending" />
+                                </View>
+
+                                {/* Search */}
+                                <View style={S.searchBox}>
+                                    <Ionicons name="search" size={14} color={Theme.colors.muted} />
+                                    <TextInput
+                                        value={query}
+                                        onChangeText={setQuery}
+                                        placeholder="Search"
+                                        placeholderTextColor={Theme.colors.muted}
+                                        keyboardAppearance={theme.keyboardAppearance}
+                                        style={S.searchInput}
+                                    />
+                                    {!!query && (
+                                        <Pressable onPress={() => setQuery("")} hitSlop={10}>
+                                            <Ionicons name="close-circle" size={18} color={Theme.colors.muted} />
+                                        </Pressable>
+                                    )}
+                                </View>
+
+                                {/* Tabs */}
+                                <View style={S.tabsRow}>
+                                    <TabPill active={tab === TABS.INBOX} text="Inbox" onPress={() => setTab(TABS.INBOX)} />
+                                    <TabPill active={tab === TABS.AI_READY} text="AI-ready" onPress={() => setTab(TABS.AI_READY)} />
+                                    <TabPill active={tab === TABS.PENDING} text="Pending" onPress={() => setTab(TABS.PENDING)} />
+                                    <TabPill active={tab === TABS.PINNED} text="Pinned" onPress={() => setTab(TABS.PINNED)} />
+                                </View>
+                            </Animated.View>
+                        }
+                        keyboardShouldPersistTaps="handled"
                         refreshControl={
                             <RefreshControl
                                 refreshing={refreshing}
@@ -519,7 +603,9 @@ function IntelligenceFab({ onPress }) {
                 accessibilityLabel="Apply Intelligence"
             >
                 <Ionicons name="add" size={22} color="#FFFFFF" />
-                <Text style={S.fabText}>Apply Intelligence</Text>
+                <Text style={S.fabText} numberOfLines={1}>
+                    Apply Intelligence
+                </Text>
             </Pressable>
         </Animated.View>
     );
@@ -531,6 +617,36 @@ function TabPill({ text, active, onPress }) {
         <Pressable onPress={onPress} style={[S.tab, active && S.tabActive]}>
             <Text style={[S.tabText, active && S.tabTextActive]}>{text}</Text>
         </Pressable>
+    );
+}
+
+function QuickTile({ icon, label, onPress }) {
+    const Theme = useLegacyTheme();
+    const S = useThemedStyles(makeHomeStyles);
+    return (
+        <Pressable
+            onPress={onPress}
+            accessibilityRole="button"
+            accessibilityLabel={label}
+            style={({ pressed }) => [S.quickTile, pressed && { opacity: 0.85, transform: [{ scale: 0.97 }] }]}
+        >
+            <View style={S.quickIcon}>
+                <Ionicons name={icon} size={19} color={Theme.colors.primary2} />
+            </View>
+            <Text style={S.quickLabel} numberOfLines={1}>
+                {label}
+            </Text>
+        </Pressable>
+    );
+}
+
+function StatCell({ value, label }) {
+    const S = useThemedStyles(makeHomeStyles);
+    return (
+        <View style={S.statCell}>
+            <Text style={S.statValue}>{value}</Text>
+            <Text style={S.statLabel}>{label}</Text>
+        </View>
     );
 }
 

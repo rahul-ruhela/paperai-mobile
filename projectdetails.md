@@ -14,9 +14,10 @@ summaries, extracted action items), and the results come back as searchable
 documents plus a task list. Paid usage is metered in **credits**, sold through
 nine Apple auto-renewable subscriptions across three tiers.
 
-Alongside the AI core there are two free on-device utilities — a **QR / barcode
-scanner** and **Junk Wiper** (duplicate photo/video/document cleanup) — which
-give a non-subscriber a reason to open the app.
+Alongside the AI core there are three free on-device utilities — a **QR / barcode
+scanner**, **Junk Wiper** (duplicate photo/video/document cleanup) and
+**Sign & Fill** (sign a page and export a PDF) — which give a non-subscriber a
+reason to open the app.
 
 | | |
 |---|---|
@@ -38,12 +39,14 @@ give a non-subscriber a reason to open the app.
 │  App.js  ThemeProvider → ErrorBoundary → NavigationContainer              │
 │          auth gate on SecureStore token → Auth stack | Main stack         │
 │                                                                          │
-│  src/screens/    26 screens (tabs + modal/detail stack)                   │
-│  src/ui/         design system: theme tokens, GlassCard, GradientScreen…  │
+│  src/screens/    25 screens (tabs + modal/detail stack)                   │
+│  src/ui/         design system: theme tokens, GlassCard, GradientScreen,  │
+│                  AiOrb, SignaturePad…                                     │
 │  src/hooks/      useAccessTier · useCreditBalance · useFeatureAccess      │
-│  src/services/   entitlementService (cached snapshot, 30s TTL)            │
+│  src/services/   entitlementService (cached snapshot, 30s TTL) ·          │
+│                  signatureStore · expenseStore (both on-device)           │
 │  src/api/        axios client + auth/billing/credits/documents/tasks/    │
-│                  chat/receipts/dev                                       │
+│                  receipts/dev                                            │
 │  src/storage/    tokenStore (SecureStore) · pendingPurchases              │
 │  src/config/     featureMatrix.ts — mirror of backend FeatureMatrix.cs    │
 │  src/constants/  api.ts — base URL resolution + 9 IAP SKUs                │
@@ -79,9 +82,10 @@ Two authority rules the codebase holds to:
 - Pushed screens: `Process`, `Document`, `Analysis`, `Paywall`, `Profile`,
   `Analytics` (credit analytics), `Privacy`, `Terms`, `HelpCenter`,
   `ContactSupport`, `JunkWiper`, `CameraScanner`, `CodeScanner`, `Signature`,
-  `AiChat`, `ReceiptCapture`, `Expenses`
-- A shared `navigationRef` lets a tapped reminder notification deep-link straight
-  to `Analysis` for that document, gated on `isReady()` (`App.js`).
+  `ReceiptCapture`, `Expenses` (`AiChat` only on `future/tier1-features` — see §7)
+- On `future/tier1-features` a shared `navigationRef` lets a tapped reminder
+  notification deep-link straight to `Analysis` for that document, gated on
+  `isReady()`. That listener ships with Smart Reminders and is not in this branch.
 - `BootScreen` renders until both the token check and the stored theme
   preference have hydrated, so the first paint is already in the right palette
   (`App.js`).
@@ -109,8 +113,11 @@ Account deletion (`DELETE /api/account`) ships as an App Store requirement.
 
 ### 4.2 Document capture and processing
 - **Upload Hub** (`UploadScreen`) — PDF via `expo-document-picker`, image via
-  `expo-image-picker`, plus entry points to the scanner utilities. Uploads go to
-  `POST /api/documents/upload` as multipart.
+  `expo-image-picker`, plus entry points to the scanner utilities, Sign & Fill
+  (§4.5b) and Scan Receipt (§4.5d). Uploads go to `POST /api/documents/upload`
+  as multipart. The hub is split by a **FREE TOOLS / AI FEATURES** divider and
+  everything below that divider spends credits — Scan Receipt sits below it,
+  Sign & Fill above.
 - **Camera Document Scanner** (`CameraDocumentScanScreen`) — multi-page capture,
   builds a **PDF fully on-device** via `expo-print`, saves/shares it. Free.
   Uploading it for AI analysis is the optional paid step.
@@ -121,8 +128,17 @@ Account deletion (`DELETE /api/account`) ships as an App Store requirement.
 - **Analysis** (`AnalysisScreen`) — renders the AI output, links extracted tasks,
   supports reprocess (`/reprocess`), share, and polls while status is
   `QUEUED` / `PROCESSING`.
-- **Documents list** (`HomeScreen`) — tabs Inbox / AI-Ready / Pending / Pinned,
-  search, pull-to-refresh, delete.
+- **Documents list** (`HomeScreen`) — a hero header (greeting, credit pill that
+  routes to the Paywall, the `AiOrb`, four quick-action tiles — Scan / Sign /
+  Receipt / Code — and a live Documents / AI-ready / Pending stat strip), then
+  tabs Inbox / AI-Ready / Pending / Pinned, search, pull-to-refresh, delete.
+
+  The hero, search field and tab pills are the `FlatList`'s
+  `ListHeaderComponent`, passed as a React **element** rather than a component
+  function — an inline function would remount the header on every render and the
+  search field would lose focus on each keystroke. The orb element is memoized on
+  the pending count for the same reason: typing re-renders this screen per
+  character, and the orb is a dozen driven Animated nodes.
 
 ### 4.3 Tasks
 `TasksScreen` over `/api/tasks` (list / create / patch / delete). Tasks can be
@@ -162,7 +178,12 @@ refundTransaction(id, r)  on failure or cancel
 
 Feature keys in use: `image_ocr_extract_text`, `summarize_text`,
 `explain_text_detail`, `document_scan_ai_ready`, `junk_wiper_scan_report`,
-`document_ai_chat`, `receipt_extract`.
+`receipt_extract`. (`document_ai_chat` is declared in the matrix but nothing in
+this branch reserves against it — see §7.)
+
+`receipt_extraction` in `featureMatrix.ts` points at `receipt_extract`. It
+previously pointed at `image_ocr_extract_text`, which would have quoted and
+charged the OCR feature's cost for a receipt scan.
 
 `CreditAnalyticsScreen` shows the balance plus every enabled paid feature sorted
 by cost, so the user can see what their credits buy.
@@ -228,11 +249,28 @@ this literally — that wording is App Store review surface.
 > Retired IDs: `pro_weekly` / `pro_monthly` / `pro_yearly` no longer exist. Any
 > `pro_*` reference anywhere is a bug that grants zero credits to a payer.
 
-### 4.5b Signature editor (free, on-device)
+### 4.5b Sign & Fill — signature editor (free, on-device)
 `SignatureScreen` + `SignaturePad` — draw a signature, place it on a page, add
-text boxes, export a PDF, share it. No credits, no network. The page is embedded
-as a base64 `<img>` and the signature as an **inline SVG `<path>`**, so
-`expo-print` renders it vector-crisp instead of as a screenshot of the editor.
+text boxes, export a PDF, share it. No credits, no network. Reached from the
+Upload hub's FREE TOOLS block and the Home **Sign** quick tile; route `Signature`,
+optional params `{ imageUri, title }`.
+
+The page is embedded as a base64 `<img>` and the signature as an **inline SVG
+`<path>`**, so `expo-print` renders it vector-crisp instead of as a screenshot of
+the editor. Overlays are positioned in **percentages of the editor frame**, and
+`frameFor()` forces that frame to the page image's own aspect ratio — if the
+frame were a fixed A4 rectangle with the image letterboxed inside it, those
+percentages would describe a different box than the PDF's and the signature would
+land somewhere else vertically on export.
+
+`SignaturePad` deliberately avoids `react-native-svg`: it is a native module, so
+adding it would force a new dev-client / EAS build. Each stroke segment is a thin
+rotated `<View>` between consecutive touch points instead — invisible joins at
+2–3px, and export goes through the real SVG path anyway. Touches are converted
+from `pageX/pageY` against the pad's measured origin, not `locationX/locationY`,
+which are reported relative to whichever view holds the touch and break once the
+pad has children.
+
 `signatureStore` keeps up to 3 saved signatures as raw stroke JSON in the app
 document directory (stroke data is a few KB — past SecureStore's practical
 limit, and a signature is not a credential).
@@ -251,15 +289,31 @@ a tier, and the backend does the same), so showing an upsell to someone holding
 credits they already paid for would be wrong. `USE_STUB` in `src/api/chat.js` is
 an offline escape hatch for UI work, currently `false`.
 
-### 4.5d Receipts and expenses
+### 4.5d Scan Receipt — receipts and expenses
 - `ReceiptCaptureScreen` — capture a receipt, `POST /api/receipts/extract`
   (multipart + `X-Transaction-Id`), review structured fields. **1 credit per
   successful extraction, auto-refunded on a failed read** (no merchant AND no
   total). Every field is editable and low-confidence fields are pre-highlighted
   rather than presented as fact — thermal-receipt OCR is wrong often enough that
-  a read-only result feels broken. Feature key `receipt_extract`.
+  a read-only result feels broken. Feature key `receipt_extract`. Reached from
+  the Upload hub's AI FEATURES block and the Home **Receipt** quick tile.
+- Full reserve → extract → settle ledger per §4.6: `reserveCredits` first, then
+  `completeTransaction` on a good read, `refundTransaction` on a failed read or a
+  thrown request. A 402 routes to the Paywall. `isFailedRead()` must stay in
+  agreement with `ReceiptExtraction.IsFailedRead` on the server, or the app will
+  tell the user something was free that they were actually charged for.
+- The upload goes through `authedFetch`, **not** the axios instance — setting
+  `Content-Type: multipart/form-data` by hand strips the boundary the server
+  needs, and the file arrives null. Same path as `/api/documents/upload`.
+- `USE_STUB` in `src/api/receipts.js` is an offline escape hatch for UI work,
+  currently `false`. It must be false in anything that ships.
+- **No subscription-tier gate**, for the same reason given in §4.5c: credits are
+  the entitlement throughout this product, and Junk Wiper and OCR both charge
+  credits without checking a tier.
 - `ExpensesScreen` — saved receipts grouped by month with totals and **CSV
-  export**. Free to view; only extraction costs credits.
+  export** (RFC 4180 escaped, because accountants open it in Excel and a merchant
+  name with a comma would shift every following column). Free to view; only
+  extraction costs credits.
 - `expenseStore` persists records (including the receipt image URI) on-device
   until the backend has an expenses table.
 
@@ -284,14 +338,27 @@ registration posts to `/api/notifications/register-token`.
 hands the palette to React Navigation so headers and card transitions match.
 `src/ui/` holds the shared kit: `tokens.js`, `theme.js`, `GlassCard`,
 `GlassModal`, `GradientScreen`, `AppButton`, `StatusBadge`, `ConfirmActionSheet`,
-`CreditConfirmModal`, `CameraPermissionGate`, plus `useReduceMotion` for
-accessibility.
+`CreditConfirmModal`, `CameraPermissionGate`, `AiOrb`, `SignaturePad`, plus
+`useReduceMotion` for accessibility.
+
+`AiOrb` is the shared "AI is alive" visual — breathing glow, orbiting particles,
+sweeping scan line, in `idle` / `working` / `done` states. Built on the RN
+`Animated` API with `useNativeDriver` like the rest of the codebase, so it runs
+anywhere Expo Go does, and it honours Reduce Motion by rendering as a static
+badge. Used by `HomeScreen`'s hero and `ReceiptCaptureScreen`'s empty state.
 
 ### 4.11 Compliance surface
 `PrivacyScreen`, `TermsScreen`, `HelpCenterScreen`, `ContactSupportScreen`,
 account deletion, and `CameraPermissionGate` — a single shared component that
 satisfies guideline 5.1.1(iv); the comment in `CodeScannerScreen` explicitly
 forbids re-inlining a custom pre-prompt.
+
+The iOS purpose strings in `app.json` must name every reason the app reaches for
+a resource, so `photosPermission` (on both `expo-image-picker` and
+`expo-media-library`) covers OCR images, **picking a page to sign**, **adding a
+receipt** and the Junk Wiper duplicate scan, and `cameraPermission` names
+documents **and receipts**. Adding a capture path without widening these is a
+guideline 5.1.1 rejection.
 
 ---
 
@@ -304,7 +371,7 @@ forbids re-inlining a custom pre-prompt.
 | Auth | `register`, `login`, `email-otp/send·verify`, `otp/send·verify`, `apple`, `refresh`, `logout` |
 | Account | `DELETE /api/account`, `GET/POST /api/profile` |
 | Documents | `GET /api/documents`, `GET /api/documents/{id}`, `POST /upload`, `POST /{id}/process`, `POST /{id}/ocr`, `POST /{id}/reprocess`, `DELETE /{id}` |
-| Chat | `GET/POST /api/documents/{id}/chat` |
+| Chat | `GET/POST /api/documents/{id}/chat` — **not called from this branch**, see §7 |
 | Receipts | `POST /api/receipts/extract` (multipart + `X-Transaction-Id`) |
 | Tasks | `GET/POST /api/tasks`, `PATCH/DELETE /api/tasks/{id}` |
 | Credits | `GET /balance`, `GET /feature-configs[/{key}]`, `POST /reserve`, `POST /complete`, `POST /refund` |
@@ -362,6 +429,11 @@ secret.
   have no screen yet.
 - Expenses live only on-device; there is no backend expenses table, so they do
   not survive a reinstall or sync across devices.
+- **AI Chat (§4.5c) and Smart Reminders (§4.5e) are not in this branch.** They
+  exist only on `future/tier1-features`, along with `src/api/chat.js`,
+  `AiChatScreen`, `reminderService` and `ReminderCard`. Sign & Fill (§4.5b) and
+  Receipts / Expenses (§4.5d) have been ported over; those two have not, so the
+  `AiChat` route and the reminder deep-link in `App.js` do not exist here yet.
 - Android is unstarted.
 
 ---
