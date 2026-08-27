@@ -69,11 +69,31 @@ had gone stale as new advisories moved past them (29 -> 23 advisories):
 | `postcss` | `>=8.5.26` | advisory covers `<=8.5.22` |
 | `fast-uri` | `^3.1.6` | advisory covers `<3.1.5` |
 
-Deliberately **not** overridden: `js-yaml` and `brace-expansion` (the tree holds
-several incompatible majors, so one forced version breaks build tooling),
-`image-size` (no fixed version published — latest 2.0.2 is itself the
-advisory's upper bound), `uuid` (the fix is v11; `xcode` expects the v7 API).
-All four are build-time only.
+Then fixed the rest (23 -> 8, **zero moderate remaining**). The multi-major
+ones need npm's version-selector override syntax — a plain `"js-yaml": "..."`
+forces one version onto every consumer and breaks the build; `"js-yaml@3"` and
+`"js-yaml@4"` patch each major in place:
+
+| Package | Pin | Note |
+|---|---|---|
+| `brace-expansion@1` | `^1.1.18` | three majors live in the tree at once |
+| `brace-expansion@2` | `^2.1.4` | |
+| `brace-expansion@5` | `^5.0.9` | |
+| `js-yaml@3` | `^3.15.2` | `@expo/config` uses 3.x, other tooling 4.x |
+| `js-yaml@4` | `^4.3.2` | |
+| `uuid` | `^11.1.1` | `xcode` declares `^7.0.3` but only ever calls `uuid.v4()`, which v11 still exports. Verified by parsing the real `project.pbxproj` and generating a UUID — do not assume this, re-test it if the pin moves. |
+
+**The 8 that remain are all one root cause: `image-size`.** The other seven
+(`metro`, `metro-config`, `metro-transform-worker`, `@expo/metro`,
+`@expo/metro-config`, `@expo/cli`, `expo`) are just the dependency chain above
+it. Its advisory range is `*` — **every published version is affected, and no
+fixed release exists**, so there is nothing to pin to. npm's only offered fix is
+`expo@57`, i.e. the SDK upgrade.
+
+In practice it is Metro reading image dimensions from your own asset files at
+build time; the DoS needs a hostile ICNS/JXL/HEIF input, which would mean
+someone already put a malicious file in `assets/`. Re-check when SDK 57 is
+planned; do not force it before then.
 
 ---
 
