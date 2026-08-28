@@ -17,6 +17,7 @@
 import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
 import * as FileSystem from "expo-file-system/legacy";
+import { composeTaskBody } from "./recallNotification";
 
 const FILE = "reminders.json";
 
@@ -526,7 +527,17 @@ export async function cancelTaskAlert(taskId) {
  *
  * @returns the stored record, or { error: "past" } when the due time has gone by.
  */
-export async function scheduleTaskAlert({ taskId, title, description, dueAtUtc }) {
+export async function scheduleTaskAlert({
+    taskId,
+    title,
+    description,
+    dueAtUtc,
+    // Smart Recall (Module 6). Absent means "no memories", and the body falls
+    // back to the description — so every existing caller keeps its behaviour
+    // without being changed.
+    memories = null,
+    hideRecallDetails = true,
+}) {
     if (!taskId || !dueAtUtc) return { error: "past" };
 
     const fire = new Date(dueAtUtc);
@@ -543,8 +554,16 @@ export async function scheduleTaskAlert({ taskId, title, description, dueAtUtc }
         content: {
             title: title || "PaperAI task",
             // The description is what makes the reminder useful — it is the line
-            // the user wrote to their future self.
-            body: description ? String(description).slice(0, 180) : "Task due now.",
+            // the user wrote to their future self. Smart Recall can replace it
+            // with the memories pulled out of that line, but only when the user
+            // has allowed lock-screen detail and only for memories the server
+            // was confident about. See services/recallNotification.js — the
+            // rules live there, pure, rather than in this scheduling call.
+            body: composeTaskBody({
+                description,
+                memories,
+                hideDetails: hideRecallDetails,
+            }),
             data: { type: "task", taskId },
         },
         trigger: { type: "date", date: fire },

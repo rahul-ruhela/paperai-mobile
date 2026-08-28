@@ -39,6 +39,7 @@ import {
 } from "../services/reminderService";
 import { useUpgradePrompt } from "../ui/FeatureLock";
 import { speakTask, stopSpeaking } from "../services/taskSpeech";
+import { getRecallPreferences, listMemories } from "../api/recall";
 
 /**
  * AssistantScreen — the Assistant tab.
@@ -235,6 +236,27 @@ export default function AssistantScreen({ navigation }) {
 
     /* ── tasks ──────────────────────────────────────────────────────────────*/
 
+
+    // Smart Recall (Module 6). Fetches a task's memories so they can be folded
+    // into the notification body — but only when the feature is on AND the user
+    // has allowed lock-screen detail. Everything fails soft to "no memories",
+    // which is the current behaviour: a reminder must still be scheduled when
+    // recall is off, unavailable, or the request simply fails.
+    async function recallFor(taskId) {
+        try {
+            const prefs = await getRecallPreferences();
+            if (!prefs?.enabled || !prefs?.available) {
+                return { memories: null, hideRecallDetails: true };
+            }
+            return {
+                memories: await listMemories(taskId).catch(() => null),
+                hideRecallDetails: prefs.hideDetailsOnLockScreen !== false,
+            };
+        } catch {
+            return { memories: null, hideRecallDetails: true };
+        }
+    }
+
     async function quickAdd() {
         const clean = title.trim();
         if (!clean) return;
@@ -272,6 +294,7 @@ export default function AssistantScreen({ navigation }) {
                         title: next.title,
                         description: next.description,
                         dueAtUtc: next.dueAtUtc,
+                        ...(await recallFor(next.id)),
                     });
                     // `past` only means the next occurrence is already overdue —
                     // not worth interrupting a tick-the-box gesture with an alert.
@@ -423,6 +446,7 @@ export default function AssistantScreen({ navigation }) {
                         title: fields.title,
                         description: fields.description,
                         dueAtUtc: fields.dueAtUtc,
+                        ...(await recallFor(taskId)),
                     });
                     if (result?.error === "past") {
                         Alert.alert(
@@ -496,6 +520,7 @@ export default function AssistantScreen({ navigation }) {
                 title: task.title,
                 description: task.description,
                 dueAtUtc: until.toISOString(),
+                ...(await recallFor(task.id)),
             });
 
             if (result?.error === "past") {

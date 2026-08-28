@@ -43,6 +43,7 @@ import PrivacyScreen from "./src/screens/PrivacyScreen";
 import PermissionCenterScreen from "./src/screens/PermissionCenterScreen";
 import PrivacyCenterScreen from "./src/screens/PrivacyCenterScreen";
 import VaultScreen from "./src/screens/VaultScreen";
+import MemoriesScreen from "./src/screens/MemoriesScreen";
 import TermsScreen from "./src/screens/TermsScreen";
 import HelpCenterScreen from "./src/screens/HelpCenterScreen";
 import ContactSupportScreen from "./src/screens/ContactSupportScreen";
@@ -416,6 +417,11 @@ function AppShell() {
                             name="Vault"
                             component={VaultScreen}
                             options={{ title: "Private Vault" }}
+                        />
+                        <Stack.Screen
+                            name="Memories"
+                            component={MemoriesScreen}
+                            options={{ title: "Smart Recall" }}
                         />
                         {/* Standalone for now; Module 5 embeds the same panel
                             as a section inside the Privacy centre. */}

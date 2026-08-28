@@ -99,7 +99,7 @@ const BACKEND_FEATURES: { key: string; requiredTier: string; creditFeatureKey?: 
     { key: "storage_prediction", requiredTier: "advance" },
     { key: "advanced_reminders", requiredTier: "advance" },
     { key: "household_assistant", requiredTier: "advance" },
-    { key: "smart_recall", requiredTier: "advance" },
+    { key: "smart_recall", requiredTier: "advance", creditFeatureKey: "recall_extract" },
     { key: "voice_companion", requiredTier: "advance" },
 ];
 

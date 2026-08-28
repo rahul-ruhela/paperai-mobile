@@ -396,6 +396,13 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
                         />
 
                         <Row
+                            icon="sparkles-outline"
+                            title="Smart Recall"
+                            subtitle="What Paper AI remembers from your notes"
+                            onPress={() => navigation.navigate("Memories")}
+                        />
+
+                        <Row
                             icon="shield-checkmark-outline"
                             title="Privacy & Security"
                             subtitle="Vault, privacy score and what stays on this device"

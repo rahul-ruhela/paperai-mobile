@@ -1,6 +1,6 @@
 # Paper AI Assistant — Product Roadmap v2
 
-Status: **in progress — Modules 0–5 shipped; Module 6 is next.**
+Status: **in progress — Modules 0–6 shipped; Module 7 is next.**
 Written: 2026-08-27. Last synced to the repository: 2026-08-28. Branch: `chore/release-hardening`.
 Basis: the mobile repo (`paperai-mobile`) + API repo (`PaperAiApis`).
 
@@ -54,6 +54,10 @@ deployed. See §11 for what is live in production.
 - **Essential** — AI document analysis, image OCR, summarize text, receipt extraction, smart reminders.
 - **Plus** — explain in detail, AI chat (`AiChatScreen` + `DocumentChatController`), deep clean (`junk_wiper_scan_report`, 30 credits).
 - **Advance** — custom reminder dates + snooze (`advanced_reminders`), household assistant (declared in the matrix, not built).
+- **Smart Recall** *(Module 6, merged 2026-08-29)* — Advance, opt-in, off by
+  default. Pulls short reminders out of a task's own note and folds them into
+  that task's reminder. Settings → Smart Recall lists everything stored, with
+  per-item undo and a typed-confirmation "forget everything".
 - **Privacy & Security** *(Module 5, merged 2026-08-28)* — Settings → Privacy &
   Security: the privacy score, the sensitive-document suggestions, and the
   Private Vault (AES-256-GCM, key in the Keychain behind Face ID / Touch ID /
@@ -91,7 +95,7 @@ Ordered by dependency, not desirability. Each row is one approval gate.
 | 3 | Assistant module (Tasks → Assistant; My Tasks / AI Tasks / Reminders) | `assistant-module-spec.md` | Free base, Advance extras | Yes | Medium | **Shipped** 2026-08-28 |
 | 4 | Smart Cleaner layers (Basic / Deep / Pro) | `smart-cleaner-spec.md` | Free → Advance | Seeds only | Medium | **Shipped** 2026-08-28 |
 | 5 | Privacy & Security module (Vault, sensitive detection, privacy score) | `privacy-security-module.md` | Free | Local only | Medium | **Shipped** 2026-08-28 |
-| 6 | Smart Recall engine | `smart-recall-engine.md` | Advance | Yes | High | Not started |
+| 6 | Smart Recall engine | `smart-recall-engine.md` | Advance | Yes | High | **Shipped** 2026-08-29 |
 | 7 | AI Voice Companion | `voice-assistant-spec.md` | Advance | Yes (prefs) | Medium | Not started |
 | 8 | Performance pass | `performance-optimization-plan.md` | all | No | Low | Not started |
 
@@ -102,7 +106,7 @@ Ordered by dependency, not desirability. Each row is one approval gate.
 ```
 Module 0  (matrix repair + tasks API)            [DONE]
    │
-   ├── Module 3  Assistant ──┬── Module 6  Smart Recall ── Module 7  Voice Companion
+   ├── Module 3  Assistant ──┬── Module 6  Smart Recall [DONE] ── Module 7  Voice Companion
    │              [DONE]     └── (reuses reminderService)
    ├── Module 1  Entitlement policy   (informs every gate below)  [DONE]
    ├── Module 4  Smart Cleaner        [DONE]
@@ -153,7 +157,17 @@ a purely on-device one — least-squares arithmetic over a local history file �
 it has no credit key and there is no server work to bill. A zero-cost row would
 only invite a future Reserve for a computation the server never performs.
 
-**Module 6** — new table `RecallMemories` (`Id, UserId, SourceType, SourceId, Kind, Content, Confidence, CreatedAt, ExpiresAtUtc, DeletedAt`), index on `(UserId, SourceId)`.
+**Module 6 — `RecallMemories` + two preference columns — MIGRATION WRITTEN, NOT APPLIED.**
+Migration `20260828182850_AddRecallMemories` creates `RecallMemories`
+(`Id, UserId, SourceType, SourceId, Kind, Content, Confidence, CreatedAt, ExpiresAtUtc, DeletedAt`)
+with indexes on `(UserId, SourceId)` and `(UserId, ExpiresAtUtc)`, adds
+`SmartRecallEnabled` (default 0) and `HideRecallDetailsOnLockScreen` (default 1)
+to `UserNotificationPreferences`, and seeds the `recall_extract` credit config.
+Every statement is `IF NOT EXISTS`-guarded and `Down` reverses in order.
+
+The preference columns go on the existing table rather than into a new
+`UserRecallPreferences`, which is the same call this document already recommends
+for Module 7.
 
 **Module 7** — voice preferences. Recommendation: add columns to the existing `UserNotificationPreferences` rather than create `UserVoicePreferences` — fewer joins and a smaller migration surface. Confirmed in the voice spec.
 
@@ -176,7 +190,8 @@ Additive only; no existing route or response shape changes.
 | 4 | *(deferred)* | `ai_storage_analysis` and `screenshot_intelligence` need a route this module does not add. Both are registered in the matrix and priced, but have **no entry point** until that route exists — see `smart-cleaner-spec.md` §10.2. | Deferred |
 | 5 | none | Local-only by design. | **Implemented** — no route added, and none needed. |
 | 5 | *(deferred)* | The PLUS AI-assisted classification pass in `privacy-security-module.md` §3 needs a route this module does not add. No matrix key was registered for it, so nothing advertises it — see §8.2 there. | Deferred |
-| 6 | `GET/POST/DELETE /api/recall/memories`, `DELETE /api/recall/memories/all` | Memory CRUD plus the mandatory "forget everything" control. | Not started |
+| 6 | `GET /api/recall/memories`, `DELETE /api/recall/memories/{id}`, `POST /api/recall/memories/{id}/restore`, `DELETE /api/recall/memories/source/{id}`, `DELETE /api/recall/memories/all` | Memory CRUD, the undo half of the soft delete, and the mandatory "forget everything". | **Implemented** |
+| 6 | `GET/PUT /api/recall/preferences` | The master switch and the lock-screen-detail switch. Deliberately NOT tier-gated for reads or for turning recall *off* — a lapsed subscriber must never be locked out of stopping the feature or deleting what it stored. | **Implemented** |
 | 7 | `GET/PUT /api/voice/preferences` | Voice on/off, voice id, rate, tone. | Not started |
 
 Every new endpoint is `[Authorize]`, scopes by `GetUserId()`, and calls `EntitlementService.CheckAccessAsync` for its feature key before doing work.
@@ -210,6 +225,10 @@ Every new endpoint is `[Authorize]`, scopes by `GetUserId()`, and calls `Entitle
 - `app.json` — `NSFaceIDUsageDescription`, plus `expo-local-authentication` and `expo-crypto` plugin entries. *(Module 5)*
 - New dependencies: `expo-local-authentication`, `expo-crypto`, and **`@noble/ciphers`** — `expo-crypto` has no symmetric cipher, so there was nothing in the SDK to do AES with. **A new native build is required.** *(Module 5)*
 - 60 tests across `sensitiveDetection`, `privacyScore`, `vaultCrypto` and `vaultStore`, including a `fetch` spy asserting the vault paths reach nothing. *(Module 5)*
+
+- `App.js` — `Memories` stack route; `SettingsScreen` gains **Account → Smart Recall**. *(Module 6)*
+- New: `src/api/recall.js`, `src/services/recallNotification.js` (the lock-screen rules, pure and tested), `src/screens/MemoriesScreen.js`. `reminderService.scheduleTaskAlert` takes optional `memories` / `hideRecallDetails` — absent means today's behaviour, so no existing caller changed meaning. *(Module 6)*
+- No new mobile dependencies for Module 6. *(Module 6)*
 
 **Remaining**
 
@@ -249,6 +268,7 @@ Merged is not deployed. Track the two separately.
 | 1 — Entitlement policy | Yes (2026-08-28) | **No** | No schema and no new routes, but the `SUBSCRIPTION_EXPIRED` correction is server-side: until the API deploys, a never-subscribed user on a production build would still be told their plan ended. |
 | 2 — Device Permission Center | Yes (2026-08-28) | **n/a** | Mobile-only and entirely on-device: no schema, no route, no backend change at all. It is the one module here with no API dependency, so it is safe to ship in a mobile build ahead of the API deploy. |
 | 3 — Assistant | Yes (2026-08-28) | **No** | The Assistant screen works only against a local backend until the API is deployed. Do not ship the mobile build to TestFlight/App Store before the API deploy. |
+| 6 — Smart Recall | Yes (2026-08-29) | **No** | Migration `20260828182850` is written but **NOT applied** to `PaperAiDb`. Until it is, `/api/recall/*` fails at the database and extraction never runs — the mobile screen degrades to "off" rather than crashing, but the feature does not exist. Apply the migration and deploy together. |
 | 5 — Privacy & Security | Yes (2026-08-28) | **n/a** | Mobile-only and entirely on-device: no schema, no route, no backend change at all. Like Module 2 it has no API dependency — but it **does** need a new native build (`expo-local-authentication`, `expo-crypto`), so the Vault does not exist in the current TestFlight binary. |
 | 4 — Smart Cleaner | Yes (2026-08-28) | **No** | The free layers (Screenshots, Large Files) and the Storage Forecast are entirely on-device and work against any backend. The two paid scans need migration `20260828120000` applied and the API deployed, or their Reserve 404s on an unpriced key. Also needs a **new native build** — `expo-image-manipulator` was added — so neither paid scan runs in the current TestFlight binary. |
 

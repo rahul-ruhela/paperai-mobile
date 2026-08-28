@@ -71,7 +71,7 @@ export const FEATURES: FeatureDefinition[] = [
     // once, here, rather than invented twice when those modules land. Both are
     // unreachable until their screens exist; a declared-but-unbuilt feature is
     // locked, not open — which is the whole point of the change below.
-    { key: "smart_recall", name: "Smart Recall", requiredTier: "advance", onDevice: false, backendVerified: true },
+    { key: "smart_recall", name: "Smart Recall", requiredTier: "advance", onDevice: false, backendVerified: true, creditFeatureKey: "recall_extract" },
     { key: "voice_companion", name: "AI Voice Companion", requiredTier: "advance", onDevice: true, backendVerified: true },
 ];
 
