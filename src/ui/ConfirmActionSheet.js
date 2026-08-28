@@ -9,7 +9,8 @@ import {
     Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Theme } from "./theme";
+import { useTheme } from "./ThemeProvider";
+import useThemedStyles from "./useThemedStyles";
 
 export default function ConfirmActionSheet({
     visible,
@@ -22,6 +23,10 @@ export default function ConfirmActionSheet({
     onConfirm,
     onCancel,
 }) {
+    const { theme } = useTheme();
+    const c = theme.colors;
+    const styles = useThemedStyles(makeStyles);
+
     const sheet = useRef(new Animated.Value(0)).current;
     const backdrop = useRef(new Animated.Value(0)).current;
 
@@ -73,6 +78,8 @@ export default function ConfirmActionSheet({
     const handleCancel = () => close(onCancel);
     const handleConfirm = () => close(onConfirm);
 
+    const accentColor = theme.isDark ? c.primaryLight : c.primaryDark;
+
     return (
         <Modal transparent visible={!!visible} animationType="none">
             <View style={styles.root}>
@@ -86,12 +93,14 @@ export default function ConfirmActionSheet({
                         <Pressable
                             onPress={handleCancel}
                             hitSlop={12}
+                            accessibilityRole="button"
+                            accessibilityLabel="Close"
                             style={({ pressed }) => [
                                 styles.closeBtn,
                                 pressed && { opacity: 0.75 },
                             ]}
                         >
-                            <Ionicons name="close" size={18} color={Theme.colors.text} />
+                            <Ionicons name="close" size={18} color={c.textPrimary} />
                         </Pressable>
                     </View>
 
@@ -102,7 +111,11 @@ export default function ConfirmActionSheet({
                                 destructive && styles.iconWrapDestructive,
                             ]}
                         >
-                            <Ionicons name={icon} size={18} color="#fff" />
+                            <Ionicons
+                                name={icon}
+                                size={18}
+                                color={destructive ? c.dangerDark : accentColor}
+                            />
                         </View>
 
                         <View style={{ flex: 1 }}>
@@ -113,6 +126,7 @@ export default function ConfirmActionSheet({
 
                     <Pressable
                         onPress={handleConfirm}
+                        accessibilityRole="button"
                         style={({ pressed }) => [
                             styles.confirmBtn,
                             destructive ? styles.confirmBtnDestructive : styles.confirmBtnNormal,
@@ -124,114 +138,128 @@ export default function ConfirmActionSheet({
 
                     <Pressable
                         onPress={handleCancel}
+                        accessibilityRole="button"
                         style={({ pressed }) => [styles.cancelBtn, pressed && { opacity: 0.9 }]}
                     >
                         <Text style={styles.cancelText}>{cancelText}</Text>
                     </Pressable>
 
-                    <Text style={styles.legal}>
-                        This action can’t be undone.
-                    </Text>
+                    <Text style={styles.legal}>This action cannot be undone.</Text>
                 </Animated.View>
             </View>
         </Modal>
     );
 }
 
-const styles = StyleSheet.create({
-    root: { flex: 1, justifyContent: "flex-end" },
-    backdrop: {
-        ...StyleSheet.absoluteFillObject,
-        backgroundColor: "rgba(0,0,0,0.70)", // darker (your request)
-    },
+const makeStyles = (t) =>
+    StyleSheet.create({
+        root: { flex: 1, justifyContent: "flex-end" },
+        backdrop: {
+            ...StyleSheet.absoluteFillObject,
+            backgroundColor: t.colors.overlay,
+        },
 
-    sheet: {
-        backgroundColor: "rgba(13,20,38,0.98)",
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
-        borderWidth: 1,
-        borderColor: Theme.colors.border,
-        padding: 16,
-        paddingBottom: 18,
-        ...(Platform.OS === "ios"
-            ? { shadowColor: "#000", shadowOpacity: 0.22, shadowRadius: 18, shadowOffset: { width: 0, height: -6 } }
-            : { elevation: 8 }),
-    },
+        sheet: {
+            backgroundColor: t.colors.sheet,
+            borderTopLeftRadius: 24,
+            borderTopRightRadius: 24,
+            borderWidth: 1,
+            borderColor: t.colors.border,
+            padding: 16,
+            paddingBottom: 18,
+            ...(Platform.OS === "ios"
+                ? {
+                      shadowColor: t.colors.shadowColor,
+                      shadowOpacity: t.isDark ? 0.5 : 0.22,
+                      shadowRadius: 18,
+                      shadowOffset: { width: 0, height: -6 },
+                  }
+                : { elevation: 8 }),
+        },
 
-    topRow: { height: 18, justifyContent: "center" },
-    handle: {
-        alignSelf: "center",
-        width: 46,
-        height: 5,
-        borderRadius: 999,
-        backgroundColor: "rgba(255,255,255,0.18)",
-    },
-    closeBtn: {
-        position: "absolute",
-        right: 0,
-        top: -4,
-        width: 34,
-        height: 34,
-        borderRadius: 12,
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: "rgba(255,255,255,0.06)",
-        borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.10)",
-    },
+        topRow: { height: 18, justifyContent: "center" },
+        handle: {
+            alignSelf: "center",
+            width: 46,
+            height: 5,
+            borderRadius: 999,
+            backgroundColor: t.isDark ? "rgba(255,255,255,0.22)" : "#D1D5DB",
+        },
+        closeBtn: {
+            position: "absolute",
+            right: 0,
+            top: -4,
+            width: 34,
+            height: 34,
+            borderRadius: 12,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: t.isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.04)",
+            borderWidth: 1,
+            borderColor: t.colors.border,
+        },
 
-    header: { flexDirection: "row", gap: 12, alignItems: "flex-start", marginTop: 12, marginBottom: 12 },
-    iconWrap: {
-        width: 38,
-        height: 38,
-        borderRadius: 14,
-        backgroundColor: "rgba(255,255,255,0.08)",
-        borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.12)",
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    iconWrapDestructive: {
-        backgroundColor: "rgba(239,68,68,0.22)",
-        borderColor: "rgba(239,68,68,0.28)",
-    },
+        header: {
+            flexDirection: "row",
+            gap: 12,
+            alignItems: "flex-start",
+            marginTop: 12,
+            marginBottom: 12,
+        },
+        iconWrap: {
+            width: 38,
+            height: 38,
+            borderRadius: 14,
+            backgroundColor: t.colors.infoBg,
+            borderWidth: 1,
+            borderColor: t.isDark ? "rgba(110,168,255,0.30)" : "rgba(79,140,255,0.25)",
+            alignItems: "center",
+            justifyContent: "center",
+        },
+        iconWrapDestructive: {
+            backgroundColor: t.colors.dangerBg,
+            borderColor: t.isDark ? "rgba(255,107,112,0.35)" : "rgba(255,90,95,0.30)",
+        },
 
-    title: { color: "#fff", fontSize: 16, fontWeight: "900" },
-    message: { marginTop: 4, color: Theme.colors.text2, fontWeight: "700", lineHeight: 18 },
+        title: { color: t.colors.textPrimary, fontSize: 16, fontWeight: "800" },
+        message: { marginTop: 4, color: t.colors.textSecondary, fontWeight: "700", lineHeight: 18 },
 
-    confirmBtn: {
-        marginTop: 8,
-        borderRadius: 18,
-        paddingVertical: 14,
-        alignItems: "center",
-        borderWidth: 1,
-    },
-    confirmBtnDestructive: {
-        backgroundColor: "rgba(239,68,68,0.92)",
-        borderColor: "rgba(239,68,68,0.25)",
-    },
-    confirmBtnNormal: {
-        backgroundColor: "rgba(165,180,252,0.25)",
-        borderColor: "rgba(165,180,252,0.28)",
-    },
-    confirmText: { color: "#fff", fontWeight: "900" },
+        confirmBtn: {
+            marginTop: 8,
+            borderRadius: 18,
+            paddingVertical: 14,
+            alignItems: "center",
+            borderWidth: 1,
+        },
+        confirmBtnDestructive: {
+            backgroundColor: t.colors.danger,
+            borderColor: t.isDark ? "rgba(255,107,112,0.45)" : "rgba(255,90,95,0.4)",
+        },
+        confirmBtnNormal: {
+            backgroundColor: t.colors.primary,
+            borderColor: t.isDark ? "rgba(110,168,255,0.45)" : "rgba(79,140,255,0.4)",
+        },
+        confirmText: { color: t.colors.white, fontWeight: "700" },
 
-    cancelBtn: {
-        marginTop: 10,
-        borderRadius: 18,
-        paddingVertical: 14,
-        alignItems: "center",
-        backgroundColor: "rgba(255,255,255,0.06)",
-        borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.10)",
-    },
-    cancelText: { color: "rgba(255,255,255,0.85)", fontWeight: "900" },
+        cancelBtn: {
+            marginTop: 10,
+            borderRadius: 18,
+            paddingVertical: 14,
+            alignItems: "center",
+            backgroundColor: t.isDark ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.72)",
+            borderWidth: 1,
+            borderColor: t.colors.primary,
+        },
+        cancelText: {
+            color: t.isDark ? t.colors.primaryLight : t.colors.primaryDark,
+            fontWeight: "700",
+        },
 
-    legal: {
-        marginTop: 10,
-        color: "rgba(255,255,255,0.45)",
-        fontSize: 12,
-        textAlign: "center",
-        fontWeight: "700",
-    },
-});
+        legal: {
+            marginTop: 10,
+            color: t.colors.textMuted,
+            fontSize: 12,
+            textAlign: "center",
+            fontWeight: "500",
+        },
+    });

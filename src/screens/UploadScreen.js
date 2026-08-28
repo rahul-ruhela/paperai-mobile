@@ -19,8 +19,12 @@ import * as SecureStore from "expo-secure-store";
 import GradientScreen from "../ui/GradientScreen";
 import CreditConfirmModal from "../ui/CreditConfirmModal";
 import { getCreditsBalance, getFeatureConfigs, reserveCredits, completeTransaction, refundTransaction } from "../api/credits";
+import { authedFetch } from "../api/client";
 import { API } from "../constants/api";
 
+import { useTheme } from "../ui/ThemeProvider";
+import useThemedStyles from "../ui/useThemedStyles";
+import { showEntitlementDenial } from "../ui/FeatureLock";
 const FK = {
     OCR: "image_ocr_extract_text",
     SUMMARIZE: "summarize_text",
@@ -29,6 +33,8 @@ const FK = {
 };
 
 export default function UploadScreen({ navigation }) {
+    const { theme } = useTheme();
+    const styles = useThemedStyles(makeStyles);
     const [credits, setCredits] = useState(null);
     const [featureConfigs, setFeatureConfigs] = useState({});
     const [busy, setBusy] = useState(false);
@@ -97,13 +103,10 @@ export default function UploadScreen({ navigation }) {
 
     // ── Upload helper (shared by PDF, image, camera) ─────────────────────────
     async function uploadFile(uri, name, mimeType) {
-        const token = await SecureStore.getItemAsync("accessToken");
-        if (!token) throw new Error("Authentication required. Please log in again.");
         const form = new FormData();
         form.append("file", { uri, name: name || "upload", type: mimeType || "application/octet-stream" });
-        const res = await fetch(`${API.BASE_URL}/api/documents/upload`, {
+        const res = await authedFetch(`/api/documents/upload`, {
             method: "POST",
-            headers: { Authorization: `Bearer ${token}` },
             body: form,
         });
         const text = await res.text();
@@ -177,11 +180,9 @@ export default function UploadScreen({ navigation }) {
             const reservation = await reserveCredits(FK.OCR, uploaded.id);
             txnId = reservation.transactionId;
             // 3. Call OCR-only endpoint (no full AI analysis)
-            const token = await SecureStore.getItemAsync("accessToken");
-            const res = await fetch(`${API.BASE_URL}/api/documents/${uploaded.id}/ocr`, {
+            const res = await authedFetch(`/api/documents/${uploaded.id}/ocr`, {
                 method: "POST",
                 headers: {
-                    Authorization: `Bearer ${token}`,
                     "Content-Type": "application/json",
                     "X-Transaction-Id": txnId,
                 },
@@ -197,8 +198,17 @@ export default function UploadScreen({ navigation }) {
             refreshCredits();
         } catch (e) {
             if (txnId) await refundTransaction(txnId, e.message).catch(() => {});
+            if (showEntitlementDenial(e, navigation, "image_ocr")) return;
+
             if (e?.response?.status === 402 || e?.message?.includes("402")) {
-                Alert.alert("Not enough credits", `You need ${cfg.creditCost} credits for OCR. Please top up.`);
+                Alert.alert(
+                    "Not enough credits",
+                    `You need ${cfg.creditCost} credits for OCR. Choose a plan to get more credits.`,
+                    [
+                        { text: "Not now", style: "cancel" },
+                        { text: "View plans", onPress: () => navigation.navigate("Paywall") },
+                    ]
+                );
             } else {
                 Alert.alert("OCR failed", e.message || "Processing failed. Your credits were not charged or have been refunded.");
             }
@@ -225,6 +235,18 @@ export default function UploadScreen({ navigation }) {
         navigation.navigate("CameraScanner");
     }
 
+    function openCodeScanner() {
+        navigation.navigate("CodeScanner");
+    }
+
+    function openSignature() {
+        navigation.navigate("Signature");
+    }
+
+    function openReceipts() {
+        navigation.navigate("ReceiptCapture");
+    }
+
     return (
         <GradientScreen>
             <SafeAreaView style={{ flex: 1 }}>
@@ -237,12 +259,108 @@ export default function UploadScreen({ navigation }) {
                     <View style={styles.header}>
                         <Text style={styles.hTitle}>Upload</Text>
                         <Pressable style={styles.creditBadge} onPress={() => navigation.navigate("Paywall")}>
-                            <Ionicons name="flash" size={14} color="#FBBF24" />
+                            <Ionicons name="flash" size={14} color={theme.colors.warning} />
                             <Text style={styles.creditText}>{credits === null ? "…" : `${credits} credits`}</Text>
                         </Pressable>
                     </View>
 
-                    {/* 1. Upload Document (PDF) */}
+                    {/* Free, on-device tools first — nothing here costs a credit. */}
+
+                    {/* ── FREE TOOLS ── */}
+                    <View style={styles.sectionDivider}>
+                        <View style={styles.dividerLine} />
+                        <Text style={styles.sectionLabel}>FREE TOOLS</Text>
+                        <View style={styles.dividerLine} />
+                    </View>
+
+                    {/* 1. Scan Document — FREE (scan + save/PDF; AI optional) */}
+                    <View style={styles.card}>
+                        <View style={styles.cardHeader}>
+                            <View style={[styles.cardIcon, { backgroundColor: theme.colors.infoBg }]}>
+                                <Ionicons name="camera-outline" size={20} color={theme.colors.primary} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.cardTitle}>Scan Document</Text>
+                                <Text style={styles.cardSubtitle}>
+                                    Capture pages with your camera, then save to Photos or export as PDF
+                                </Text>
+                            </View>
+                            <FreeBadge />
+                        </View>
+                        <ActionBtn icon="camera-outline" label="Open Document Scanner"
+                            onPress={openCameraScanner} color={theme.colors.primary} full />
+                    </View>
+
+
+                    {/* 2. Scan QR & Codes — FREE general utility */}
+                    <View style={styles.card}>
+                        <View style={styles.cardHeader}>
+                            <View style={[styles.cardIcon, { backgroundColor: theme.colors.infoBg }]}>
+                                <Ionicons name="qr-code-outline" size={20} color={theme.colors.accentText} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.cardTitle}>Scan QR &amp; Codes</Text>
+                                <Text style={styles.cardSubtitle}>
+                                    Read QR codes and barcodes — view, copy, and open links instantly
+                                </Text>
+                            </View>
+                            <FreeBadge />
+                        </View>
+                        <ActionBtn icon="scan-outline" label="Open Code Scanner"
+                            onPress={openCodeScanner} color={theme.colors.accentText} full />
+                    </View>
+
+
+                    {/* 3. Sign & Fill — FREE, fully on-device */}
+                    <View style={styles.card}>
+                        <View style={styles.cardHeader}>
+                            <View style={[styles.cardIcon, { backgroundColor: theme.colors.successBg }]}>
+                                <Ionicons name="create-outline" size={20} color={theme.colors.successText} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.cardTitle}>Sign &amp; Fill</Text>
+                                <Text style={styles.cardSubtitle}>
+                                    Draw your signature, place it on a page, add text and export a PDF
+                                </Text>
+                            </View>
+                            <FreeBadge />
+                        </View>
+                        <ActionBtn icon="create-outline" label="Sign a Document"
+                            onPress={openSignature} color={theme.colors.successText} full />
+                    </View>
+
+
+                    {/* ── AI FEATURES ── */}
+                    <View style={styles.sectionDivider}>
+                        <View style={styles.dividerLine} />
+                        <Text style={styles.sectionLabel}>AI FEATURES</Text>
+                        <View style={styles.dividerLine} />
+                    </View>
+
+                    {/* Everything below spends credits. */}
+
+                    {/* Scan Receipt — 1 credit per successful extraction */}
+                    <View style={styles.card}>
+                        <View style={styles.cardHeader}>
+                            <View style={[styles.cardIcon, { backgroundColor: theme.colors.warningBg }]}>
+                                <Ionicons name="receipt-outline" size={20} color={theme.colors.warningText} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.cardTitle}>Scan Receipt</Text>
+                                <Text style={styles.cardSubtitle}>
+                                    Pull out merchant, date, total and tax — then export the month as CSV
+                                </Text>
+                            </View>
+                            {/* configFor falls back to 0 when the backend has no row for this key
+                                yet, which would read as "free" — default to the real 1-credit cost. */}
+                            <CreditBadge cost={configFor("receipt_extract").creditCost || 1} />
+                        </View>
+                        <ActionBtn icon="receipt-outline" label="Scan a Receipt"
+                            onPress={openReceipts} color={theme.colors.warningText} full />
+                    </View>
+
+
+                    {/* 3. Upload Document (PDF) — costs credits */}
                     <SectionCard
                         icon="document-text-outline"
                         title="Upload Document"
@@ -253,11 +371,12 @@ export default function UploadScreen({ navigation }) {
                         actionIcon="cloud-upload-outline"
                     />
 
-                    {/* 2. Extract Text from Image (OCR) */}
+
+                    {/* 4. Extract Text from Image (OCR) — costs credits */}
                     <View style={styles.card}>
                         <View style={styles.cardHeader}>
-                            <View style={[styles.cardIcon, { backgroundColor: "rgba(251,191,36,0.12)" }]}>
-                                <Ionicons name="scan-outline" size={20} color="#FBBF24" />
+                            <View style={[styles.cardIcon, { backgroundColor: theme.colors.warningBg }]}>
+                                <Ionicons name="scan-outline" size={20} color={theme.colors.warning} />
                             </View>
                             <View style={{ flex: 1 }}>
                                 <Text style={styles.cardTitle}>Extract Text from Image</Text>
@@ -268,10 +387,10 @@ export default function UploadScreen({ navigation }) {
 
                         {ocrImage && (
                             <View style={styles.ocrPreviewRow}>
-                                <Ionicons name="image" size={16} color="#A5B4FC" />
+                                <Ionicons name="image" size={16} color={theme.colors.accentText} />
                                 <Text style={styles.ocrFileName} numberOfLines={1}>{ocrImage.name}</Text>
                                 <Pressable onPress={() => { setOcrImage(null); setOcrText(null); }} hitSlop={10}>
-                                    <Ionicons name="close-circle" size={18} color="rgba(255,255,255,0.4)" />
+                                    <Ionicons name="close-circle" size={18} color={theme.colors.placeholder} />
                                 </Pressable>
                             </View>
                         )}
@@ -281,14 +400,14 @@ export default function UploadScreen({ navigation }) {
                                 icon="images-outline"
                                 label={ocrImage ? "Change Image" : "Select Image"}
                                 onPress={pickImageForOCR}
-                                color="#A5B4FC"
+                                color={theme.colors.accentText}
                             />
                             {ocrImage && !ocrText && (
                                 <ActionBtn
                                     icon="text-outline"
                                     label={ocrRunning ? "Extracting…" : "Extract Text"}
                                     onPress={requestOCR}
-                                    color="#FBBF24"
+                                    color={theme.colors.warning}
                                     disabled={ocrRunning}
                                 />
                             )}
@@ -296,7 +415,7 @@ export default function UploadScreen({ navigation }) {
 
                         {ocrRunning && (
                             <View style={styles.ocrLoading}>
-                                <ActivityIndicator size="small" color="#FBBF24" />
+                                <ActivityIndicator size="small" color={theme.colors.warning} />
                                 <Text style={styles.ocrLoadingText}>Extracting text…</Text>
                             </View>
                         )}
@@ -310,7 +429,7 @@ export default function UploadScreen({ navigation }) {
                                         hitSlop={10}
                                         style={({ pressed }) => [styles.copyBtn, pressed && { opacity: 0.65 }]}
                                     >
-                                        <Ionicons name="copy-outline" size={16} color="#A5B4FC" />
+                                        <Ionicons name="copy-outline" size={16} color={theme.colors.accentText} />
                                         <Text style={styles.copyBtnText}>Copy</Text>
                                     </Pressable>
                                 </View>
@@ -321,6 +440,11 @@ export default function UploadScreen({ navigation }) {
                                 >
                                     <Text style={styles.ocrResultText}>{ocrText}</Text>
                                 </ScrollView>
+                                {/* Summarize / Explain / Ask AI are hidden until their
+                                    backend endpoints ship. They rendered a "soon" badge and
+                                    answered with a "coming soon" alert, which is a guideline
+                                    2.1 rejection (App Completeness — no placeholder features).
+                                    Re-enable this block once the actions actually run.
                                 <View style={styles.aiActionsRow}>
                                     <AiActionBtn icon="sparkles-outline" label="Summarize"
                                         onPress={() => requestAiAction("Summarize")} />
@@ -328,16 +452,23 @@ export default function UploadScreen({ navigation }) {
                                         onPress={() => requestAiAction("Explain in Detail")} />
                                     <AiActionBtn icon="chatbubble-ellipses-outline" label="Ask AI"
                                         onPress={() => requestAiAction("Ask AI")} />
-                                </View>
+                                </View> */}
                             </View>
                         )}
                     </View>
 
-                    {/* 3. Junk Wiper */}
+                    {/* ── Advanced ── */}
+                    <View style={styles.sectionDivider}>
+                        <View style={styles.dividerLine} />
+                        <Text style={styles.sectionLabel}>ADVANCED</Text>
+                        <View style={styles.dividerLine} />
+                    </View>
+
+                    {/* 5. Junk Wiper — advanced, credit-based */}
                     <View style={styles.card}>
                         <View style={styles.cardHeader}>
-                            <View style={[styles.cardIcon, { backgroundColor: "rgba(239,68,68,0.12)" }]}>
-                                <Ionicons name="trash-bin-outline" size={20} color="#F87171" />
+                            <View style={[styles.cardIcon, { backgroundColor: theme.colors.dangerBg }]}>
+                                <Ionicons name="trash-bin-outline" size={20} color={theme.colors.danger} />
                             </View>
                             <View style={{ flex: 1 }}>
                                 <Text style={styles.cardTitle}>Junk Wiper</Text>
@@ -346,38 +477,18 @@ export default function UploadScreen({ navigation }) {
                             <CreditBadge cost={configFor("junk_wiper_scan_report").creditCost} />
                         </View>
                         <View style={styles.safetyNote}>
-                            <Ionicons name="shield-checkmark-outline" size={13} color="#34D399" />
+                            <Ionicons name="shield-checkmark-outline" size={13} color={theme.colors.primary} />
                             <Text style={styles.safetyText}>Nothing is deleted without your review and confirmation.</Text>
                         </View>
                         <ActionBtn icon="search-outline" label="Start Duplicate Scan"
-                            onPress={openJunkWiper} color="#F87171" full />
-                    </View>
-
-                    {/* 4. Camera Document Scanner (last — in progress) */}
-                    <View style={styles.card}>
-                        <View style={styles.cardHeader}>
-                            <View style={[styles.cardIcon, { backgroundColor: "rgba(52,211,153,0.12)" }]}>
-                                <Ionicons name="camera-outline" size={20} color="#34D399" />
-                            </View>
-                            <View style={{ flex: 1 }}>
-                                <Text style={styles.cardTitle}>Scan Document</Text>
-                                <Text style={styles.cardSubtitle}>
-                                    Use camera to capture a document — AI will analyse it
-                                    {configFor(FK.SCAN_AI).creditCost > 0
-                                        ? ` · ${configFor(FK.SCAN_AI).creditCost} credits on analysis`
-                                        : ""}
-                                </Text>
-                            </View>
-                        </View>
-                        <ActionBtn icon="camera-outline" label="Open Camera Scanner"
-                            onPress={openCameraScanner} color="#34D399" full />
+                            onPress={openJunkWiper} color={theme.colors.danger} full />
                     </View>
 
                     <Pressable
                         style={({ pressed }) => [styles.upgradeBanner, pressed && { opacity: 0.8 }]}
                         onPress={() => navigation.navigate("Paywall")}
                     >
-                        <Ionicons name="sparkles-outline" size={16} color="#FBCFE8" />
+                        <Ionicons name="sparkles-outline" size={16} color={theme.colors.accentText} />
                         <Text style={styles.upgradeText}>Need more credits? Upgrade your plan →</Text>
                     </Pressable>
                 </ScrollView>
@@ -397,12 +508,17 @@ export default function UploadScreen({ navigation }) {
     );
 }
 
-function SectionCard({ icon, title, subtitle, onPress, disabled, actionLabel, actionIcon, accentColor = "#A5B4FC" }) {
+function SectionCard({ icon, title, subtitle, onPress, disabled, actionLabel, actionIcon, accentColor }) {
+    const { theme } = useTheme();
+    const styles = useThemedStyles(makeStyles);
+    // Default from the theme rather than a literal so the accent follows the
+    // active appearance when a caller doesn't override it.
+    const accent = accentColor ?? theme.colors.accentText;
     return (
         <View style={styles.card}>
             <View style={styles.cardHeader}>
-                <View style={[styles.cardIcon, { backgroundColor: `${accentColor}18` }]}>
-                    <Ionicons name={icon} size={20} color={accentColor} />
+                <View style={[styles.cardIcon, { backgroundColor: `${accent}18` }]}>
+                    <Ionicons name={icon} size={20} color={accent} />
                 </View>
                 <View style={{ flex: 1 }}>
                     <Text style={styles.cardTitle}>{title}</Text>
@@ -410,12 +526,15 @@ function SectionCard({ icon, title, subtitle, onPress, disabled, actionLabel, ac
                 </View>
             </View>
             <ActionBtn icon={actionIcon} label={actionLabel} onPress={onPress}
-                disabled={disabled} color={accentColor} full />
+                disabled={disabled} color={accent} full />
         </View>
     );
 }
 
-function ActionBtn({ icon, label, onPress, disabled, color = "#A5B4FC", full }) {
+function ActionBtn({ icon, label, onPress, disabled, color, full }) {
+    const { theme } = useTheme();
+    const styles = useThemedStyles(makeStyles);
+    const tint = color ?? theme.colors.accentText;
     return (
         <Pressable
             onPress={onPress}
@@ -425,20 +544,22 @@ function ActionBtn({ icon, label, onPress, disabled, color = "#A5B4FC", full }) 
                 full && { alignSelf: "stretch" },
                 pressed && !disabled && { opacity: 0.75 },
                 disabled && { opacity: 0.45 },
-                { borderColor: `${color}55` },
+                { borderColor: `${tint}55` },
             ]}
         >
-            <Ionicons name={icon} size={16} color={color} />
-            <Text style={[styles.actionBtnText, { color }]}>{label}</Text>
+            <Ionicons name={icon} size={16} color={tint} />
+            <Text style={[styles.actionBtnText, { color: tint }]}>{label}</Text>
         </Pressable>
     );
 }
 
 function AiActionBtn({ icon, label, onPress }) {
+    const { theme } = useTheme();
+    const styles = useThemedStyles(makeStyles);
     return (
         <Pressable onPress={onPress}
             style={({ pressed }) => [styles.aiBtn, pressed && { opacity: 0.75 }]}>
-            <Ionicons name={icon} size={15} color="#A5B4FC" />
+            <Ionicons name={icon} size={15} color={theme.colors.accentText} />
             <Text style={styles.aiBtnLabel}>{label}</Text>
             <Text style={styles.aiBtnSoon}>soon</Text>
         </Pressable>
@@ -446,83 +567,106 @@ function AiActionBtn({ icon, label, onPress }) {
 }
 
 function CreditBadge({ cost }) {
+    const { theme } = useTheme();
+    const styles = useThemedStyles(makeStyles);
     if (!cost) return null;
     return (
         <View style={styles.creditBadgeSmall}>
-            <Ionicons name="flash" size={11} color="#FBBF24" />
+            <Ionicons name="flash" size={11} color={theme.colors.warning} />
             <Text style={styles.creditBadgeSmallText}>{cost}</Text>
         </View>
     );
 }
 
-const styles = StyleSheet.create({
+function FreeBadge() {
+    const styles = useThemedStyles(makeStyles);
+    return (
+        <View style={styles.freeBadge}>
+            <Text style={styles.freeBadgeText}>FREE</Text>
+        </View>
+    );
+}
+
+const makeStyles = (t) =>
+    StyleSheet.create({
     container: { padding: 16, gap: 14, paddingBottom: 40 },
     header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 2 },
-    hTitle: { color: "#fff", fontSize: 26, fontWeight: "900" },
+    hTitle: { color: t.colors.textPrimary, fontSize: 26, fontWeight: "800" },
     creditBadge: {
         flexDirection: "row", alignItems: "center", gap: 5,
-        backgroundColor: "rgba(251,191,36,0.12)",
-        borderWidth: 1, borderColor: "rgba(251,191,36,0.25)",
+        backgroundColor: t.colors.accentBg,
+        borderWidth: 1, borderColor: t.colors.warningBorder,
         paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999,
     },
-    creditText: { color: "#FBBF24", fontWeight: "800", fontSize: 13 },
+    creditText: { color: t.colors.warningText, fontWeight: "700", fontSize: 13 },
     card: {
-        backgroundColor: "rgba(255,255,255,0.05)",
-        borderWidth: 1, borderColor: "rgba(255,255,255,0.10)",
+        backgroundColor: t.colors.glass,
+        borderWidth: 1, borderColor: t.colors.glassBorder,
         borderRadius: 20, padding: 14, gap: 12,
+        shadowColor: t.colors.primary, shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.1, shadowRadius: 18, elevation: 4,
     },
     cardHeader: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
     cardIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-    cardTitle: { color: "#fff", fontWeight: "900", fontSize: 15 },
-    cardSubtitle: { color: "rgba(255,255,255,0.60)", fontWeight: "700", fontSize: 12, marginTop: 3, lineHeight: 16 },
+    cardTitle: { color: t.colors.textPrimary, fontWeight: "700", fontSize: 15 },
+    cardSubtitle: { color: t.colors.textMuted, fontWeight: "500", fontSize: 12, marginTop: 3, lineHeight: 16 },
     cardActions: { flexDirection: "row", gap: 10, flexWrap: "wrap" },
     actionBtn: {
         flexDirection: "row", alignItems: "center", gap: 7,
-        backgroundColor: "rgba(255,255,255,0.06)",
-        borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10,
+        backgroundColor: t.colors.glassButton,
+        borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12,
+        minHeight: 44,
         alignSelf: "flex-start",
     },
-    actionBtnText: { fontWeight: "800", fontSize: 13 },
+    actionBtnText: { fontWeight: "700", fontSize: 13 },
     ocrPreviewRow: {
         flexDirection: "row", alignItems: "center", gap: 8,
-        backgroundColor: "rgba(165,180,252,0.08)", borderRadius: 10, padding: 8,
+        backgroundColor: t.colors.infoBg, borderRadius: 10, padding: 8,
     },
-    ocrFileName: { flex: 1, color: "#A5B4FC", fontWeight: "700", fontSize: 13 },
+    ocrFileName: { flex: 1, color: t.colors.accentText, fontWeight: "700", fontSize: 13 },
     ocrLoading: { flexDirection: "row", alignItems: "center", gap: 8 },
-    ocrLoadingText: { color: "#FBBF24", fontWeight: "700", fontSize: 13 },
-    ocrResultBox: { backgroundColor: "rgba(0,0,0,0.22)", borderRadius: 14, padding: 12, gap: 10 },
+    ocrLoadingText: { color: t.colors.warningText, fontWeight: "700", fontSize: 13 },
+    ocrResultBox: { backgroundColor: t.colors.glassButton, borderWidth: 1, borderColor: t.colors.border, borderRadius: 14, padding: 12, gap: 10 },
     ocrResultHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-    ocrResultLabel: { color: "#A5B4FC", fontWeight: "900", fontSize: 13 },
+    ocrResultLabel: { color: t.colors.accentText, fontWeight: "800", fontSize: 13 },
     copyBtn: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 5,
-        backgroundColor: "rgba(165,180,252,0.10)", borderRadius: 8,
-        borderWidth: 1, borderColor: "rgba(165,180,252,0.20)" },
-    copyBtnText: { color: "#A5B4FC", fontWeight: "800", fontSize: 12 },
-    ocrScrollArea: { maxHeight: 240, backgroundColor: "rgba(255,255,255,0.04)", borderRadius: 10, padding: 10 },
-    ocrResultText: { color: "rgba(255,255,255,0.85)", fontWeight: "500", fontSize: 13, lineHeight: 20 },
+        backgroundColor: t.colors.infoBg, borderRadius: 8,
+        borderWidth: 1, borderColor: t.colors.infoBorder },
+    copyBtnText: { color: t.colors.accentText, fontWeight: "700", fontSize: 12 },
+    ocrScrollArea: { maxHeight: 240, backgroundColor: t.colors.glassSoft, borderWidth: 1, borderColor: t.colors.border, borderRadius: 10, padding: 10 },
+    ocrResultText: { color: t.colors.textSecondary, fontWeight: "500", fontSize: 13, lineHeight: 20 },
     aiActionsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
     aiBtn: {
         flexDirection: "row", alignItems: "center", gap: 5,
-        backgroundColor: "rgba(99,102,241,0.15)",
-        borderWidth: 1, borderColor: "rgba(165,180,252,0.25)",
+        backgroundColor: t.colors.infoBg,
+        borderWidth: 1, borderColor: t.colors.infoBorder,
         borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7,
     },
-    aiBtnLabel: { color: "#A5B4FC", fontWeight: "800", fontSize: 12 },
-    aiBtnSoon: { color: "rgba(165,180,252,0.45)", fontWeight: "700", fontSize: 10, fontStyle: "italic" },
+    aiBtnLabel: { color: t.colors.accentText, fontWeight: "700", fontSize: 12 },
+    aiBtnSoon: { color: t.colors.textMuted, fontWeight: "600", fontSize: 10, fontStyle: "italic" },
     safetyNote: {
         flexDirection: "row", alignItems: "center", gap: 6,
-        backgroundColor: "rgba(52,211,153,0.07)", borderRadius: 10, padding: 8,
+        backgroundColor: t.colors.infoBg, borderRadius: 10, padding: 8,
     },
-    safetyText: { flex: 1, color: "rgba(255,255,255,0.60)", fontWeight: "700", fontSize: 12 },
+    safetyText: { flex: 1, color: t.colors.textMuted, fontWeight: "600", fontSize: 12 },
     creditBadgeSmall: {
         flexDirection: "row", alignItems: "center", gap: 2,
-        backgroundColor: "rgba(251,191,36,0.12)", borderRadius: 8, paddingHorizontal: 7, paddingVertical: 3,
+        backgroundColor: t.colors.accentBg, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 3,
     },
-    creditBadgeSmallText: { color: "#FBBF24", fontWeight: "900", fontSize: 11 },
+    creditBadgeSmallText: { color: t.colors.warningText, fontWeight: "800", fontSize: 11 },
+    freeBadge: {
+        backgroundColor: t.colors.infoBg, borderWidth: 1, borderColor: t.colors.infoBorder,
+        borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3,
+    },
+    freeBadgeText: { color: t.colors.accentText, fontWeight: "800", fontSize: 11, letterSpacing: 0.5 },
+    sectionDivider: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 6, marginBottom: 2 },
+    dividerLine: { flex: 1, height: 1, backgroundColor: t.colors.separator },
+    sectionLabel: { color: t.colors.textMuted, fontWeight: "700", fontSize: 11, letterSpacing: 1.5 },
     upgradeBanner: {
         flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-        backgroundColor: "rgba(251,207,232,0.06)",
-        borderWidth: 1, borderColor: "rgba(251,207,232,0.15)",
-        borderRadius: 16, paddingVertical: 13,
+        backgroundColor: t.colors.infoBg,
+        borderWidth: 1, borderColor: t.colors.infoBorder,
+        borderRadius: 16, paddingVertical: 14,
     },
-    upgradeText: { color: "#FBCFE8", fontWeight: "900" },
+    upgradeText: { color: t.colors.accentText, fontWeight: "700" },
 });

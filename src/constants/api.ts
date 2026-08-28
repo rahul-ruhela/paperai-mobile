@@ -2,12 +2,19 @@
 // to __DEV__-based defaults so local dev works without any configuration.
 const envUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
 
+// The live, publicly reachable API. Anything that is not explicitly pointed
+// somewhere else must land here: a build that falls back to a LAN address is
+// dead on any device outside that Wi-Fi — including every App Review device,
+// which reads as "app doesn't work" (guideline 2.1). Cleartext http:// would
+// also trip App Transport Security.
+const PRODUCTION_API = "https://apis.bseptechnologies.com";
+
 function resolveBaseUrl(): string {
     if (envUrl && envUrl.trim().length > 0) return envUrl.trim();
     // Default to the LIVE API in every environment so the app never silently
     // hits a stale LAN IP. To use a local backend, set EXPO_PUBLIC_API_BASE_URL
     // (e.g. in .env.local) to your machine's LAN IP.
-    return "https://apis.bseptechnologies.com";
+    return PRODUCTION_API;
 }
 
 export const API = {
@@ -50,9 +57,9 @@ export const SUBSCRIPTION_TIERS: SubscriptionTier[] = [
         name: "Essential",
         tagline: "For getting started",
         products: {
-            weekly:  { sku: `${BID}.essential_weekly`,  credits: 15,  fallbackPrice: "$15.99" },
-            monthly: { sku: `${BID}.essential_monthly`, credits: 60,  fallbackPrice: "$57.90" },
-            yearly:  { sku: `${BID}.essential_yearly`,  credits: 560, fallbackPrice: "$459.00" },
+            weekly:  { sku: `${BID}.essential_weekly`,  credits: 13,  fallbackPrice: "$12.99" },
+            monthly: { sku: `${BID}.essential_monthly`, credits: 40,  fallbackPrice: "$39.99" },
+            yearly:  { sku: `${BID}.essential_yearly`,  credits: 353, fallbackPrice: "$299.99" },
         },
     },
     {
@@ -61,9 +68,9 @@ export const SUBSCRIPTION_TIERS: SubscriptionTier[] = [
         tagline: "Most popular",
         highlight: true,
         products: {
-            weekly:  { sku: `${BID}.plus_weekly`,  credits: 40,  fallbackPrice: "$42.49" },
-            monthly: { sku: `${BID}.plus_monthly`, credits: 160, fallbackPrice: "$153.99" },
-            yearly:  { sku: `${BID}.plus_yearly`,  credits: 850, fallbackPrice: "$699.00" },
+            weekly:  { sku: `${BID}.plus_weekly`,  credits: 20,  fallbackPrice: "$19.99" },
+            monthly: { sku: `${BID}.plus_monthly`, credits: 60, fallbackPrice: "$59.99" },
+            yearly:  { sku: `${BID}.plus_yearly`,  credits: 471, fallbackPrice: "$399.99" },
         },
     },
     {
@@ -71,9 +78,9 @@ export const SUBSCRIPTION_TIERS: SubscriptionTier[] = [
         name: "Advance",
         tagline: "Maximum power",
         products: {
-            weekly:  { sku: `${BID}.advance_weekly`,  credits: 80,   fallbackPrice: "$85.00" },
-            monthly: { sku: `${BID}.advance_monthly`, credits: 320,  fallbackPrice: "$309.00" },
-            yearly:  { sku: `${BID}.advance_yearly`,  credits: 1100, fallbackPrice: "$899.00" },
+            weekly:  { sku: `${BID}.advance_weekly`,  credits: 30,   fallbackPrice: "$29.99" },
+            monthly: { sku: `${BID}.advance_monthly`, credits: 100,  fallbackPrice: "$99.99" },
+            yearly:  { sku: `${BID}.advance_yearly`,  credits: 706, fallbackPrice: "$599.99" },
         },
     },
 ];

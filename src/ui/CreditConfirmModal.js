@@ -11,6 +11,8 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
+import { useTheme } from "./ThemeProvider";
+import useThemedStyles from "./useThemedStyles";
 /**
  * CreditConfirmModal
  *
@@ -42,6 +44,8 @@ export default function CreditConfirmModal({
     onCancel,
     safetyNote,
 }) {
+    const { theme } = useTheme();
+    const styles = useThemedStyles(makeStyles);
     const sheet = useRef(new Animated.Value(0)).current;
     const backdrop = useRef(new Animated.Value(0)).current;
 
@@ -98,20 +102,20 @@ export default function CreditConfirmModal({
                             hitSlop={12}
                             style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.7 }]}
                         >
-                            <Ionicons name="close" size={17} color="rgba(255,255,255,0.7)" />
+                            <Ionicons name="close" size={17} color={theme.colors.textMuted} />
                         </Pressable>
                     </View>
 
                     {/* Header row */}
                     <View style={styles.headerRow}>
                         <View style={styles.iconWrap}>
-                            <Ionicons name="flash" size={20} color="#A5B4FC" />
+                            <Ionicons name="flash" size={20} color={theme.colors.accentText} />
                         </View>
                         <View style={{ flex: 1 }}>
                             <Text style={styles.title}>{title}</Text>
                             {creditCost > 0 && (
                                 <View style={styles.costRow}>
-                                    <Ionicons name="flash-outline" size={13} color="#FBBF24" />
+                                    <Ionicons name="flash-outline" size={13} color={theme.colors.warning} />
                                     <Text style={styles.costText}>{creditCost} credits will be used</Text>
                                 </View>
                             )}
@@ -125,7 +129,7 @@ export default function CreditConfirmModal({
 
                     {/* Safety notice */}
                     <View style={styles.safetyBox}>
-                        <Ionicons name="shield-checkmark-outline" size={14} color="#34D399" />
+                        <Ionicons name="shield-checkmark-outline" size={14} color={theme.colors.primary} />
                         <Text style={styles.safetyText}>{resolvedSafetyNote}</Text>
                     </View>
 
@@ -140,10 +144,10 @@ export default function CreditConfirmModal({
                         ]}
                     >
                         {loading ? (
-                            <ActivityIndicator size="small" color="#fff" />
+                            <ActivityIndicator size="small" color={theme.colors.white} />
                         ) : (
                             <>
-                                <Ionicons name="flash" size={16} color="#fff" />
+                                <Ionicons name="flash" size={16} color={theme.colors.white} />
                                 <Text style={styles.confirmText}>{confirmLabel}</Text>
                             </>
                         )}
@@ -162,23 +166,24 @@ export default function CreditConfirmModal({
     );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t) =>
+    StyleSheet.create({
     root: { flex: 1, justifyContent: "flex-end" },
     backdrop: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: "rgba(0,0,0,0.72)",
+        backgroundColor: t.colors.overlay,
     },
     sheet: {
-        backgroundColor: "rgba(13,20,38,0.98)",
+        backgroundColor: t.colors.sheet,
         borderTopLeftRadius: 26,
         borderTopRightRadius: 26,
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.10)",
+        borderColor: t.colors.border,
         padding: 18,
         paddingBottom: Platform.OS === "ios" ? 32 : 20,
         gap: 12,
         ...(Platform.OS === "ios"
-            ? { shadowColor: "#000", shadowOpacity: 0.25, shadowRadius: 20, shadowOffset: { width: 0, height: -8 } }
+            ? { shadowColor: t.colors.shadowColor, shadowOpacity: 0.25, shadowRadius: 20, shadowOffset: { width: 0, height: -8 } }
             : { elevation: 10 }),
     },
     handleWrap: {
@@ -190,7 +195,7 @@ const styles = StyleSheet.create({
         width: 44,
         height: 5,
         borderRadius: 999,
-        backgroundColor: "rgba(255,255,255,0.18)",
+        backgroundColor: t.colors.disabled,
     },
     closeBtn: {
         position: "absolute",
@@ -201,9 +206,9 @@ const styles = StyleSheet.create({
         borderRadius: 10,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "rgba(255,255,255,0.07)",
+        backgroundColor: t.colors.ghostFill,
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.10)",
+        borderColor: t.colors.border,
     },
     headerRow: {
         flexDirection: "row",
@@ -215,16 +220,16 @@ const styles = StyleSheet.create({
         width: 42,
         height: 42,
         borderRadius: 14,
-        backgroundColor: "rgba(99,102,241,0.22)",
+        backgroundColor: t.colors.infoBg,
         borderWidth: 1,
-        borderColor: "rgba(165,180,252,0.30)",
+        borderColor: t.colors.infoBorder,
         alignItems: "center",
         justifyContent: "center",
     },
     title: {
-        color: "#fff",
+        color: t.colors.textPrimary,
         fontSize: 17,
-        fontWeight: "900",
+        fontWeight: "800",
     },
     costRow: {
         flexDirection: "row",
@@ -233,13 +238,13 @@ const styles = StyleSheet.create({
         marginTop: 3,
     },
     costText: {
-        color: "#FBBF24",
-        fontWeight: "800",
+        color: t.colors.warningText,
+        fontWeight: "700",
         fontSize: 13,
     },
     message: {
-        color: "rgba(255,255,255,0.75)",
-        fontWeight: "700",
+        color: t.colors.textSecondary,
+        fontWeight: "500",
         lineHeight: 20,
         fontSize: 14,
     },
@@ -247,17 +252,17 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "flex-start",
         gap: 8,
-        backgroundColor: "rgba(52,211,153,0.08)",
+        backgroundColor: t.colors.infoBg,
         borderWidth: 1,
-        borderColor: "rgba(52,211,153,0.20)",
+        borderColor: t.colors.infoBorder,
         borderRadius: 12,
         padding: 10,
     },
     safetyText: {
         flex: 1,
-        color: "rgba(255,255,255,0.65)",
+        color: t.colors.textMuted,
         fontSize: 12,
-        fontWeight: "700",
+        fontWeight: "500",
         lineHeight: 17,
     },
     confirmBtn: {
@@ -265,29 +270,31 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "center",
         gap: 8,
-        backgroundColor: "rgba(99,102,241,0.85)",
-        borderRadius: 18,
-        paddingVertical: 15,
+        backgroundColor: t.colors.primary,
+        borderRadius: 14,
+        paddingVertical: 16,
+        minHeight: 52,
         borderWidth: 1,
-        borderColor: "rgba(165,180,252,0.30)",
+        borderColor: t.colors.infoBorder,
     },
     confirmText: {
-        color: "#fff",
-        fontWeight: "900",
+        color: t.colors.white,
+        fontWeight: "700",
         fontSize: 15,
     },
     cancelBtn: {
         alignItems: "center",
         justifyContent: "center",
-        paddingVertical: 13,
-        borderRadius: 18,
-        backgroundColor: "rgba(255,255,255,0.06)",
+        paddingVertical: 15,
+        borderRadius: 14,
+        minHeight: 52,
+        backgroundColor: t.colors.glassButton,
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.10)",
+        borderColor: t.colors.primary,
     },
     cancelText: {
-        color: "rgba(255,255,255,0.80)",
-        fontWeight: "900",
+        color: t.colors.accentText,
+        fontWeight: "700",
         fontSize: 15,
     },
 });

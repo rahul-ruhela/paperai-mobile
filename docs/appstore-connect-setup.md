@@ -28,17 +28,28 @@ Go to: App Store Connect → your app → Monetization → In-App Purchases → 
 - Name: **Pro Plans**
 - Reference Name: `pro_plans`
 
-### Create 3 products inside the group
+### Create 9 products inside the group
 
-| Product ID | Reference Name | Duration | Price |
+Source of truth for IDs, credits and prices: `SUBSCRIPTION_TIERS` in `src/constants/api.ts`.
+All 9 must live in the **same** group so users can upgrade/downgrade between tiers.
+
+| Product ID (prefix `com.bholeshankar.paperai.`) | Reference Name | Duration | Price |
 |-----------|---------------|----------|-------|
-| `com.bholeshankar.paperai.pro_weekly` | Pro Weekly | 1 week | $8.99/week |
-| `com.bholeshankar.paperai.pro_monthly` | Pro Monthly | 1 month | $29.90/month |
-| `com.bholeshankar.paperai.pro_yearly` | Pro Yearly | 1 year | $279/year |
+| `essential_weekly` | Essential Weekly | 1 week | $15.99/week |
+| `essential_monthly` | Essential Monthly | 1 month | $57.90/month |
+| `essential_yearly` | Essential Yearly | 1 year | $459.00/year |
+| `plus_weekly` | Plus Weekly | 1 week | $42.49/week |
+| `plus_monthly` | Plus Monthly | 1 month | $153.99/month |
+| `plus_yearly` | Plus Yearly | 1 year | $699.00/year |
+| `advance_weekly` | Advance Weekly | 1 week | $85.00/week |
+| `advance_monthly` | Advance Monthly | 1 month | $309.00/month |
+| `advance_yearly` | Advance Yearly | 1 year | $899.00/year |
 
 For each product:
 - Add display name and description in English (required — without this, status stays "Missing Metadata")
-- Set price
+- Set the price **schedule for all territories**, not just the base one — a partial schedule
+  also leaves the product in "Missing Metadata", and such products are dropped from the
+  StoreKit fetch so the paywall shows "UNAVAILABLE"
 - Status must be **Ready to Submit** before you can submit the app
 
 ---
@@ -120,18 +131,40 @@ Use this account when testing subscriptions in TestFlight.
 
 ---
 
-## 9. Privacy Policy URL (required for subscriptions)
+## 9. Legal URLs (required for subscriptions)
+
+Both of these are live and already linked from inside the app (Help Center, Paywall):
+
+- Privacy Policy: `https://bseptechnologies.com/paper-ai/privacy`
+- Terms of Use: `https://bseptechnologies.com/paper-ai/terms`
+- Support: `https://bseptechnologies.com/paper-ai/support`
+
+### Privacy Policy URL
 
 Apple requires a Privacy Policy URL for any app with subscriptions. Without it, Apple **will reject** your submission.
 
-Options:
-- Use a GitHub Pages site: `https://yourname.github.io/paperai-privacy`
-- Use a hosted HTML page on your domain
-- Use a Notion public page
+Add it in App Store Connect → App Information → Privacy Policy URL, **and** in the
+App Store listing → English (U.S.) localization → Privacy Policy URL.
 
-Add the URL in App Store Connect → App Information → Privacy Policy URL.
+### Terms of Use (EULA) — guideline 3.1.2
 
-Also add it in the App Store listing → English (U.S.) localization → Privacy Policy URL.
+Apple's automated reviewer scans the **App Description text** for a Terms of Use link.
+Linking Terms from inside the app is required but does not satisfy this check — the first
+submission was rejected for exactly this reason.
+
+Append to the end of the English (U.S.) Description:
+
+```
+Terms of Use (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
+Privacy Policy: https://bseptechnologies.com/paper-ai/privacy
+```
+
+Apple's standard EULA URL above is the safe choice. To use the custom terms page instead,
+you must also paste the full EULA **text** into App Information → License Agreement — a URL
+on its own is not accepted there.
+
+This is metadata-only. A rejection for it needs no new build: edit the Description, save,
+reply to the review message, and resubmit the same binary.
 
 ---
 
@@ -199,8 +232,9 @@ Test these flows specifically in TestFlight before submitting:
 - [ ] Subtitle: AI Document Scanner & Analyzer (optional, 30 chars)
 - [ ] Description (4000 chars max) — see README Section 6 for full copy
 - [ ] Keywords (100 chars): `AI,document,scanner,PDF,analyzer,OCR,paper,assistant,extract,summarize,receipt,invoice`
-- [ ] Support URL: `https://bseptechnologies.com/support`
-- [ ] Privacy Policy URL: `https://bseptechnologies.com/privacy`
+- [ ] Support URL: `https://bseptechnologies.com/paper-ai/support`
+- [ ] Privacy Policy URL: `https://bseptechnologies.com/paper-ai/privacy`
+- [ ] Terms of Use (EULA) link present in the Description body — see Section 9
 - [ ] Screenshots: 6.9" required — see [screenshots-guide.md](./screenshots-guide.md)
 - [ ] Age Rating: 4+ (complete the questionnaire — all answers are "None")
 - [ ] Content Rights: "No, it does not contain third-party content"
@@ -215,7 +249,7 @@ Test these flows specifically in TestFlight before submitting:
 ## 12. Submitting for Review
 
 1. All sections above must be complete and show a green checkmark in App Store Connect
-2. All 3 IAP products must be in **Ready to Submit** status
+2. All 9 IAP products must be in **Ready to Submit** status
 3. Click **"Add for Review"** at the top right
 4. Answer export compliance: **No** (PaperAI uses HTTPS only)
 5. Click **"Submit to App Review"**

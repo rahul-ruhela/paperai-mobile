@@ -16,13 +16,20 @@ import GradientScreen from "../ui/GradientScreen";
 import Card from "../ui/Card";
 import AiHeader from "../ui/AiHeader";
 import AppButton from "../ui/AppButton";
+import ReminderCard from "../ui/ReminderCard";
+import { USE_STUB as CHAT_STUBBED } from "../api/chat";
 import { api } from "../api/client";
 import { listTasks } from "../api/tasks";
+import { useTheme } from "../ui/ThemeProvider";
+import useThemedStyles from "../ui/useThemedStyles";
 import { useFocusEffect } from "@react-navigation/native"; // 🔹 NEW
+import { recordDetection } from "../services/sensitiveStore";
 
 
 export default function AnalysisScreen({ route, navigation }) {
-    const { docId, title } = route.params;
+    const { theme } = useTheme();
+    const styles = useThemedStyles(makeStyles);
+    const { docId, title } = route.params || {};
 
     const [loading, setLoading] = useState(true);
     const [rerunning, setRerunning] = useState(false);
@@ -54,6 +61,16 @@ export default function AnalysisScreen({ route, navigation }) {
 
             const { data } = await api.get(`/api/documents/${docId}`);
             setDoc(data);
+
+            // Sensitive-document detection (Module 5, §3) runs here because this
+            // is where the app already holds the text — no extra fetch, and the
+            // classifier is pure regex over a string in memory. The result is
+            // written to a local file and nowhere else; it is never sent to the
+            // server and never logged. Failures are swallowed on purpose: a
+            // classifier is an advisory extra and must not break the screen the
+            // user actually opened.
+            recordDetection(docId, `${data?.title ?? ""}\n${data?.summary ?? ""}\n${data?.extractedText ?? ""}`)
+                .catch(() => {});
 
             if (data?.status === "PROCESSED") {
                 const allTasks = await listTasks();
@@ -128,7 +145,7 @@ export default function AnalysisScreen({ route, navigation }) {
                                 <View style={styles.centerBox}>
                                     <ActivityIndicator
                                         size="large"
-                                        color="#A5B4FC"
+                                        color={theme.colors.accentText}
                                     />
                                     <Text style={styles.inProgressTitle}>
                                         {doc.status === "QUEUED"
@@ -175,7 +192,7 @@ export default function AnalysisScreen({ route, navigation }) {
                                             <Ionicons
                                                 name="share-outline"
                                                 size={18}
-                                                color="#004aad"
+                                                color={theme.colors.accentText}
                                             />
                                         </Pressable>
                                     </View>
@@ -185,6 +202,10 @@ export default function AnalysisScreen({ route, navigation }) {
                                             "No summary available."}
                                     </Text>
                                 </Card>
+
+                                {/* Smart Reminders — renders nothing at all
+                                    when no actionable date is detected. */}
+                                <ReminderCard doc={doc} navigation={navigation} />
 
                                 {/* AI TASKS */}
                                 <Card style={styles.card}>
@@ -235,7 +256,7 @@ export default function AnalysisScreen({ route, navigation }) {
                                                     : "chevron-down"
                                             }
                                             size={18}
-                                            color="#004aad"
+                                            color={theme.colors.accentText}
                                         />
                                     </Pressable>
 
@@ -247,11 +268,33 @@ export default function AnalysisScreen({ route, navigation }) {
                                     )}
                                 </Card>
 
-                                <AppButton
-                                    title="Re-run AI Analysis (uses credits)"
-                                    onPress={rerunAnalysis}
-                                    disabled={rerunning}
-                                />
+                                {/* Hidden while chat runs against the stub. Shipping a
+                                    visible feature that answers with placeholder text is an
+                                    App Review 2.1 rejection — the same reason the OCR AI
+                                    actions in UploadScreen stay commented out. Flip USE_STUB
+                                    to false in src/api/chat.js once the endpoint is live and
+                                    this button appears on its own. */}
+                                <View style={styles.actions}>
+                                    {!CHAT_STUBBED && (
+                                        <AppButton
+                                            title="Ask AI about this document"
+                                            icon="chatbubble-ellipses-outline"
+                                            onPress={() =>
+                                                navigation.navigate("AiChat", {
+                                                    docId,
+                                                    title: doc?.title || title,
+                                                })
+                                            }
+                                        />
+                                    )}
+
+                                    <AppButton
+                                        title="Re-run AI Analysis (uses credits)"
+                                        icon="refresh-outline"
+                                        onPress={rerunAnalysis}
+                                        disabled={rerunning}
+                                    />
+                                </View>
                             </>
                         )}
                     </ScrollView>
@@ -261,7 +304,7 @@ export default function AnalysisScreen({ route, navigation }) {
                         <View style={styles.overlay}>
                             <ActivityIndicator
                                 size="large"
-                                color="#A5B4FC"
+                                color={theme.colors.accentText}
                             />
                             <Text style={styles.overlayText}>
                                 {rerunning
@@ -276,16 +319,21 @@ export default function AnalysisScreen({ route, navigation }) {
     );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t) =>
+    StyleSheet.create({
     container: {
         padding: 18,
         paddingBottom: 80,
     },
 
+    // Stacked AppButtons have no margin of their own — the spacing lives here so
+    // every action on this screen sits on the same rhythm as the cards above.
+    actions: { gap: 10, marginTop: 4 },
+
     card: {
         marginBottom: 16,
-        backgroundColor: "rgba(255,255,255,0.94)",
-        borderColor: "rgba(0,0,0,0.06)",
+        backgroundColor: t.colors.surface,
+        borderColor: t.colors.border,
     },
 
     cardHeader: {
@@ -295,28 +343,31 @@ const styles = StyleSheet.create({
         marginBottom: 6,
     },
 
+    // Card headings ("Summary", "AI Action Tasks", "Extracted Text"). These were
+    // a hardcoded navy that vanished against the dark card — they must follow
+    // the theme, and stay distinct from the blue `verb` accent below.
     heading: {
         fontSize: 16,
         fontWeight: "900",
-        color: "#020c45",
+        color: t.colors.textPrimary,
     },
 
     body: {
         fontSize: 14,
         lineHeight: 22,
-        color: "#334155",
+        color: t.colors.textSecondary,
         fontWeight: "600",
     },
 
     muted: {
-        color: "#64748B",
+        color: t.colors.textMuted,
         fontWeight: "600",
     },
 
     timestamp: {
         marginBottom: 10,
-        color: "rgba(255,255,255,0.65)",
-        fontWeight: "700",
+        color: t.colors.textMuted,
+        fontWeight: "600",
         fontSize: 12,
     },
 
@@ -326,17 +377,17 @@ const styles = StyleSheet.create({
 
     taskTitle: {
         fontWeight: "700",
-        color: "#020c45",
+        color: t.colors.textPrimary,
     },
 
     verb: {
-        color: "#004aad",
+        color: t.colors.accentText,
         fontWeight: "900",
     },
 
     taskReason: {
         marginTop: 0,
-        color: "#475569",
+        color: t.colors.textMuted,
         fontWeight: "600",
     },
 
@@ -348,12 +399,12 @@ const styles = StyleSheet.create({
 
     inProgressTitle: {
         fontWeight: "900",
-        color: "#020c45",
+        color: t.colors.textPrimary,
         fontSize: 16,
     },
 
     inProgressText: {
-        color: "#475569",
+        color: t.colors.textMuted,
         fontWeight: "600",
         textAlign: "center",
     },
@@ -364,14 +415,15 @@ const styles = StyleSheet.create({
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: "rgba(15,23,42,0.35)",
+        backgroundColor: t.colors.overlay,
         justifyContent: "center",
         alignItems: "center",
         gap: 12,
     },
 
+    // Sits on the dark scrim above, so it stays light in BOTH themes.
     overlayText: {
-        color: "#E0E7FF",
+        color: t.colors.white,
         fontWeight: "800",
     },
 });

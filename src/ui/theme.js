@@ -1,25 +1,63 @@
-export const Theme = {
-    colors: {
-        bg0: "#050816",
-        bg1: "#070B1E",
-        bg2: "#0B1228",
+/**
+ * Legacy theme bridge.
+ *
+ * The app originally shipped a dark palette exposed through `Theme.colors`.
+ * The design system now lives in ./tokens, and the active appearance comes
+ * from ./ThemeProvider. This module keeps the old `Theme` *shape* alive so
+ * screens written against `Theme.colors.text` can be migrated one at a time.
+ *
+ * Use `useLegacyTheme()` (reactive, follows the user's appearance choice)
+ * rather than the static `Theme` export, which is frozen to the light palette.
+ *
+ * New code should use `useTheme()` / `useThemedStyles()` directly.
+ */
+import { useTheme } from "./ThemeProvider";
+import { getTheme, Radius, Spacing } from "./tokens";
 
-        surface: "rgba(255,255,255,0.08)",
-        surface2: "rgba(255,255,255,0.06)",
-        border: "rgba(255,255,255,0.12)",
+export function makeLegacyTheme(t) {
+    const c = t.colors;
 
-        text: "#EAF0FF",
-        text2: "rgba(234,240,255,0.78)",
-        muted: "rgba(234,240,255,0.55)",
+    return {
+        colors: {
+            bg0: c.background,
+            bg1: t.gradients.background[1],
+            bg2: c.surfaceAlt,
 
-        primary: "#6366F1",
-        primary2: "#A5B4FC",
+            surface: c.glass,
+            surface2: c.glassSoft,
+            border: c.border,
 
-        danger: "#EF4444",
-        ok: "#22C55E",
-        warn: "#F59E0B",
-    },
+            text: c.textPrimary,
+            text2: c.textSecondary,
+            muted: c.textMuted,
 
-    radius: { xl: 22, lg: 18, md: 14, sm: 12 },
-    space: { s1: 6, s2: 10, s3: 14, s4: 18 },
+            primary: c.primary,
+            // The old `primary2` was the *readable* variant used for icons and
+            // emphasis text, so it has to flip direction between appearances.
+            primary2: t.isDark ? c.primaryLight : c.primaryDark,
+
+            danger: c.danger,
+            ok: c.success,
+            warn: c.warning,
+        },
+
+        radius: { xl: Radius.xl, lg: Radius.lg, md: Radius.md, sm: Radius.sm },
+        space: { s1: Spacing.xs, s2: Spacing.sm, s3: Spacing.md, s4: Spacing.lg },
+    };
+}
+
+const LEGACY = {
+    light: makeLegacyTheme(getTheme("light")),
+    dark: makeLegacyTheme(getTheme("dark")),
 };
+
+/** Reactive legacy theme — re-renders when the user changes appearance. */
+export function useLegacyTheme() {
+    const { scheme } = useTheme();
+    return LEGACY[scheme];
+}
+
+/** @deprecated Frozen to light. Use `useLegacyTheme()` or `useTheme()`. */
+export const Theme = LEGACY.light;
+
+export { Radius, Spacing };

@@ -17,6 +17,9 @@ import GradientScreen from "../ui/GradientScreen";
 import AppButton from "../ui/AppButton";
 import { login, appleLogin } from "../api/auth";
 
+import { useTheme } from "../ui/ThemeProvider";
+import useThemedStyles from "../ui/useThemedStyles";
+import useReduceMotion from "../ui/useReduceMotion";
 // Apple Sign In is only available on iOS native builds (not Expo Go / web)
 let AppleAuthentication = null;
 try {
@@ -34,6 +37,8 @@ const isExpoGo =
     Constants.executionEnvironment === "storeClient";
 
 export default function LoginScreen({ navigation, onAuthed }) {
+    const { theme } = useTheme();
+    const styles = useThemedStyles(makeStyles);
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [busy, setBusy] = useState(false);
@@ -41,18 +46,98 @@ export default function LoginScreen({ navigation, onAuthed }) {
     const [showPw, setShowPw] = useState(false);
 
     const logo = useMemo(() => require("../../assets/logo.png"), []);
+    const reduceMotion = useReduceMotion();
+
+    // Entrance: brand, then card, then footer — each one rises and fades in.
+    // Driven off a single 0→1 value so the three only need different output
+    // ranges rather than three separate timers.
+    const intro = useRef(new Animated.Value(0)).current;
+    // Continuous idle motion on the mark: a slow breath plus a drifting halo.
     const pulse = useRef(new Animated.Value(1)).current;
+    const halo = useRef(new Animated.Value(0)).current;
+    const float = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
-        const loop = Animated.loop(
-            Animated.sequence([
-                Animated.timing(pulse, { toValue: 1.03, duration: 1400, useNativeDriver: true }),
-                Animated.timing(pulse, { toValue: 1.0, duration: 1400, useNativeDriver: true }),
-            ])
-        );
-        loop.start();
-        return () => loop.stop();
-    }, [pulse]);
+        if (reduceMotion) {
+            // Land on the finished state instead of animating to it.
+            intro.setValue(1);
+            pulse.setValue(1);
+            halo.setValue(0);
+            float.setValue(0);
+            return;
+        }
+
+        Animated.timing(intro, {
+            toValue: 1,
+            duration: 620,
+            delay: 60,
+            useNativeDriver: true,
+        }).start();
+
+        const loops = [
+            Animated.loop(
+                Animated.sequence([
+                    Animated.timing(pulse, { toValue: 1.04, duration: 1600, useNativeDriver: true }),
+                    Animated.timing(pulse, { toValue: 1.0, duration: 1600, useNativeDriver: true }),
+                ])
+            ),
+            Animated.loop(
+                Animated.sequence([
+                    Animated.timing(halo, { toValue: 1, duration: 2200, useNativeDriver: true }),
+                    Animated.timing(halo, { toValue: 0, duration: 2200, useNativeDriver: true }),
+                ])
+            ),
+            Animated.loop(
+                Animated.sequence([
+                    Animated.timing(float, { toValue: -5, duration: 1900, useNativeDriver: true }),
+                    Animated.timing(float, { toValue: 0, duration: 1900, useNativeDriver: true }),
+                ])
+            ),
+        ];
+        loops.forEach((l) => l.start());
+        return () => loops.forEach((l) => l.stop());
+    }, [reduceMotion, intro, pulse, halo, float]);
+
+    // Each block enters over its own slice of `intro`, which staggers them
+    // without extra Animated.Values. Memoized because this screen re-renders on
+    // every keystroke, and a fresh interpolation node per render means the
+    // native animated node is torn down and rebuilt while the user types.
+    const { brandEnter, cardEnter, footerEnter } = useMemo(() => {
+        const enter = (from, to, offset) => ({
+            opacity: intro.interpolate({
+                inputRange: [from, to],
+                outputRange: [0, 1],
+                extrapolate: "clamp",
+            }),
+            transform: [
+                {
+                    translateY: intro.interpolate({
+                        inputRange: [from, to],
+                        outputRange: [offset, 0],
+                        extrapolate: "clamp",
+                    }),
+                },
+            ],
+        });
+        return {
+            brandEnter: enter(0, 0.55, 22),
+            cardEnter: enter(0.2, 0.85, 30),
+            footerEnter: enter(0.5, 1, 14),
+        };
+    }, [intro]);
+
+    const haloStyle = useMemo(
+        () => ({
+            opacity: halo.interpolate({ inputRange: [0, 1], outputRange: [0.25, 0.6] }),
+            transform: [{ scale: halo.interpolate({ inputRange: [0, 1], outputRange: [1, 1.18] }) }],
+        }),
+        [halo]
+    );
+
+    const markStyle = useMemo(
+        () => ({ transform: [{ translateY: float }, { scale: pulse }] }),
+        [float, pulse]
+    );
 
     useEffect(() => {
         if (Platform.OS === "ios" && AppleAuthentication?.isAvailableAsync) {
@@ -106,6 +191,25 @@ export default function LoginScreen({ navigation, onAuthed }) {
             onAuthed();
         } catch (e) {
             if (e?.code === "ERR_REQUEST_CANCELED") return; // user dismissed the sheet
+
+            // The backend validates the identity token's audience against its
+            // Apple:ClientId setting. When that key is absent it answers
+            // apple_token_invalid with the raw config error, which must never be
+            // shown to a user (and would read as a broken app in review).
+            const serverError = e?.response?.data;
+            const isServerMisconfigured =
+                serverError?.error === "apple_token_invalid" &&
+                /missing in configuration/i.test(serverError?.reason ?? "");
+
+            if (isServerMisconfigured) {
+                console.warn("[AppleSignIn] server misconfigured:", serverError?.reason);
+                Alert.alert(
+                    "Apple Sign In unavailable",
+                    "Sign in with Apple is temporarily unavailable. Please sign in with your email and password, or try again later."
+                );
+                return;
+            }
+
             Alert.alert("Apple Sign In failed", e?.userMessage ?? e?.message ?? "Something went wrong.");
         } finally {
             setBusy(false);
@@ -116,45 +220,51 @@ export default function LoginScreen({ navigation, onAuthed }) {
         <GradientScreen>
             <SafeAreaView style={{ flex: 1 }}>
                 <View style={styles.container}>
-                    <Animated.View style={[styles.brandWrap, { transform: [{ scale: pulse }] }]}>
-                        <View style={styles.logoRing}>
-                            <Image source={logo} style={styles.logo} resizeMode="contain" />
-                        </View>
+                    <Animated.View style={[styles.brandWrap, brandEnter]}>
+                        <Animated.View style={markStyle}>
+                            {/* Halo sits BEHIND the mark and only breathes in
+                                opacity/scale, so it never intercepts touches. */}
+                            <Animated.View
+                                pointerEvents="none"
+                                style={[styles.logoHalo, haloStyle]}
+                            />
+                            <View style={styles.logoRing}>
+                                <Image source={logo} style={styles.logo} resizeMode="contain" />
+                            </View>
+                        </Animated.View>
                         <Text style={styles.brand}>PaperAI</Text>
                         <Text style={styles.tagline}>Upload documents. Get instant AI insights.</Text>
                     </Animated.View>
 
-                    <View style={styles.card}>
+                    <Animated.View style={[styles.card, cardEnter]}>
                         <Text style={styles.cardTitle}>Sign in</Text>
 
                         <View style={styles.inputWrap}>
-                            <Ionicons name="mail-outline" size={18} color="rgba(255,255,255,0.7)" />
+                            <Ionicons name="mail-outline" size={18} color={theme.colors.textMuted} />
                             <TextInput
                                 placeholder="Email address"
-                                placeholderTextColor="rgba(255,255,255,0.45)"
+                                placeholderTextColor={theme.colors.textMuted}
                                 keyboardType="email-address"
                                 autoCapitalize="none"
                                 value={email}
                                 onChangeText={setEmail}
-                                style={styles.input}
-                            />
+                                style={styles.input} keyboardAppearance={theme.keyboardAppearance} />
                         </View>
 
                         <View style={styles.inputWrap}>
-                            <Ionicons name="lock-closed-outline" size={18} color="rgba(255,255,255,0.7)" />
+                            <Ionicons name="lock-closed-outline" size={18} color={theme.colors.textMuted} />
                             <TextInput
                                 placeholder="Password"
-                                placeholderTextColor="rgba(255,255,255,0.45)"
+                                placeholderTextColor={theme.colors.textMuted}
                                 secureTextEntry={!showPw}
                                 value={password}
                                 onChangeText={setPassword}
-                                style={styles.input}
-                            />
+                                style={styles.input} keyboardAppearance={theme.keyboardAppearance} />
                             <Pressable onPress={() => setShowPw(s => !s)} hitSlop={10}>
                                 <Ionicons
                                     name={showPw ? "eye-off-outline" : "eye-outline"}
                                     size={18}
-                                    color="rgba(255,255,255,0.7)"
+                                    color={theme.colors.textMuted}
                                 />
                             </Pressable>
                         </View>
@@ -181,20 +291,25 @@ export default function LoginScreen({ navigation, onAuthed }) {
                                 onPress={onAppleSignIn}
                                 disabled={busy}
                             >
-                                <Ionicons name="logo-apple" size={20} color="#000" />
+                                <Ionicons name="logo-apple" size={20} color={theme.colors.textPrimary} />
                                 <Text style={styles.socialBtnText}>Continue with Apple</Text>
                             </Pressable>
                         )}
 
-                        {/* Phone OTP */}
+                        {/* Phone OTP — hidden until the Twilio SMS plan is active.
+                            Sending an OTP currently fails, and App Review rejects
+                            non-functional features (guideline 2.1). The OtpLogin
+                            screen and route are kept intact: restore this block to
+                            re-enable phone login once SMS delivery works.
                         <Pressable
                             style={[styles.socialBtnOutline, busy && { opacity: 0.5 }]}
                             onPress={() => navigation.navigate("OtpLogin")}
                             disabled={busy}
                         >
-                            <Ionicons name="phone-portrait-outline" size={20} color="#A5B4FC" />
+                            <Ionicons name="phone-portrait-outline" size={20} color={theme.colors.accentText} />
                             <Text style={styles.socialBtnOutlineText}>Continue with Phone OTP</Text>
                         </Pressable>
+                        */}
 
                         <View style={styles.rowLinks}>
                             <Text
@@ -204,66 +319,82 @@ export default function LoginScreen({ navigation, onAuthed }) {
                                 Create an account →
                             </Text>
                         </View>
-                    </View>
+                    </Animated.View>
 
-                    <Text style={styles.footerNote}>
+                    <Animated.Text style={[styles.footerNote, footerEnter]}>
                         Built for fast, private document intelligence.
-                    </Text>
+                    </Animated.Text>
                 </View>
             </SafeAreaView>
         </GradientScreen>
     );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t) =>
+    StyleSheet.create({
     container: { flex: 1, padding: 18, justifyContent: "center" },
     brandWrap: { alignItems: "center", marginBottom: 18 },
     logoRing: {
         width: 84, height: 84, borderRadius: 24,
-        backgroundColor: "rgba(255,255,255,0.06)",
-        borderWidth: 1, borderColor: "rgba(255,255,255,0.10)",
+        backgroundColor: t.colors.glass,
+        borderWidth: 1, borderColor: t.colors.glassBorder,
         alignItems: "center", justifyContent: "center", marginBottom: 12,
+        shadowColor: t.colors.primary, shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.1, shadowRadius: 18, elevation: 4,
+    },
+    // Soft glow behind the app mark. Absolutely positioned and centred on the
+    // 84pt ring above it.
+    logoHalo: {
+        position: "absolute",
+        top: -8, left: -8,
+        width: 100, height: 100,
+        borderRadius: 34,
+        backgroundColor: t.isDark ? "rgba(110,168,255,0.22)" : "rgba(79,140,255,0.20)",
     },
     logo: { width: 56, height: 56 },
-    brand: { fontSize: 30, fontWeight: "900", color: "#fff", letterSpacing: 0.2 },
-    tagline: { marginTop: 6, color: "rgba(255,255,255,0.72)", textAlign: "center" },
+    brand: { fontSize: 30, fontWeight: "800", color: t.colors.textPrimary, letterSpacing: 0.2 },
+    tagline: { marginTop: 6, color: t.colors.textMuted, textAlign: "center" },
 
     card: {
-        backgroundColor: "rgba(255,255,255,0.06)",
-        borderWidth: 1, borderColor: "rgba(255,255,255,0.10)",
+        backgroundColor: t.colors.glass,
+        borderWidth: 1, borderColor: t.colors.glassBorder,
         borderRadius: 22, padding: 16,
+        shadowColor: t.colors.primary, shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.1, shadowRadius: 18, elevation: 4,
     },
-    cardTitle: { color: "#fff", fontSize: 18, fontWeight: "800", marginBottom: 10 },
+    cardTitle: { color: t.colors.textPrimary, fontSize: 18, fontWeight: "800", marginBottom: 10 },
     inputWrap: {
         flexDirection: "row", alignItems: "center", gap: 10,
-        backgroundColor: "rgba(0,0,0,0.18)",
-        borderWidth: 1, borderColor: "rgba(255,255,255,0.10)",
-        borderRadius: 16, paddingHorizontal: 12, paddingVertical: 12, marginBottom: 10,
+        backgroundColor: t.colors.inputBg,
+        borderWidth: 1, borderColor: t.colors.inputBorder,
+        borderRadius: 14, paddingHorizontal: 12, paddingVertical: 14, marginBottom: 10,
     },
-    input: { flex: 1, color: "#fff", fontSize: 15 },
+    input: { flex: 1, color: t.colors.textPrimary, fontSize: 15 },
 
     dividerRow: { flexDirection: "row", alignItems: "center", marginVertical: 14, gap: 8 },
-    dividerLine: { flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.12)" },
-    dividerText: { color: "rgba(255,255,255,0.45)", fontSize: 13 },
+    dividerLine: { flex: 1, height: 1, backgroundColor: t.colors.separator },
+    dividerText: { color: t.colors.textMuted, fontSize: 13 },
 
     socialBtn: {
         flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
-        backgroundColor: "#fff", borderRadius: 16, paddingVertical: 13, marginBottom: 10,
+        backgroundColor: t.colors.sheet, borderRadius: 14, paddingVertical: 15, marginBottom: 10,
+        borderWidth: 1, borderColor: t.colors.border,
     },
-    socialBtnText: { color: "#000", fontWeight: "700", fontSize: 15 },
+    socialBtnText: { color: t.colors.textPrimary, fontWeight: "700", fontSize: 15 },
 
     socialBtnOutline: {
         flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
-        borderWidth: 1, borderColor: "rgba(165,180,252,0.4)",
-        borderRadius: 16, paddingVertical: 13, marginBottom: 4,
+        backgroundColor: t.colors.glassButton,
+        borderWidth: 1, borderColor: t.colors.primary,
+        borderRadius: 14, paddingVertical: 15, marginBottom: 4,
     },
-    socialBtnOutlineText: { color: "#A5B4FC", fontWeight: "700", fontSize: 15 },
+    socialBtnOutlineText: { color: t.colors.accentText, fontWeight: "700", fontSize: 15 },
 
     rowLinks: { marginTop: 14, alignItems: "center" },
-    linkStrong: { color: "#A5B4FC", fontWeight: "900" },
+    linkStrong: { color: t.colors.accentText, fontWeight: "800" },
 
     footerNote: {
         marginTop: 16, textAlign: "center",
-        color: "rgba(255,255,255,0.55)", fontSize: 12,
+        color: t.colors.textMuted, fontSize: 12,
     },
 });

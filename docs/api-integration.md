@@ -41,18 +41,50 @@
 ```json
 {
   "active": true,
-  "productId": "com.bholeshankar.paperai.pro_monthly",
+  "productId": "com.bholeshankar.paperai.plus_monthly",
   "status": "active",
   "expiresAtUtc": "2026-07-24T00:00:00Z"
 }
 ```
 
 ### Product IDs (must match App Store Connect)
-| Plan | Product ID | Credits/cycle |
-|------|-----------|---------------|
-| Weekly | `com.bholeshankar.paperai.pro_weekly` | 30 |
-| Monthly | `com.bholeshankar.paperai.pro_monthly` | 152 |
-| Yearly | `com.bholeshankar.paperai.pro_yearly` | 2184 |
+
+Nine auto-renewable subscriptions: three tiers x three durations, all in the one
+App Store Connect subscription group **Paper AI Pro Plans**. One group means a
+user holds exactly one plan at a time and Apple treats every switch as a plan
+change. The client's copy of this table lives in `src/constants/api.ts`
+(`SUBSCRIPTION_TIERS`) and must stay in sync with both this file and the
+backend's product-ID -> credits map.
+
+| Tier | Duration | Product ID | Credits/cycle | USA price |
+|------|----------|-----------|---------------|-----------|
+| Essential | Weekly  | `com.bholeshankar.paperai.essential_weekly`  | 13  | $12.99 |
+| Essential | Monthly | `com.bholeshankar.paperai.essential_monthly` | 40  | $39.99 |
+| Essential | Yearly  | `com.bholeshankar.paperai.essential_yearly`  | 353 | $299.99 |
+| Plus | Weekly  | `com.bholeshankar.paperai.plus_weekly`  | 20  | $19.99 |
+| Plus | Monthly | `com.bholeshankar.paperai.plus_monthly` | 60  | $59.99 |
+| Plus | Yearly  | `com.bholeshankar.paperai.plus_yearly`  | 471 | $399.99 |
+| Advance | Weekly  | `com.bholeshankar.paperai.advance_weekly`  | 30  | $29.99 |
+| Advance | Monthly | `com.bholeshankar.paperai.advance_monthly` | 100 | $99.99 |
+| Advance | Yearly  | `com.bholeshankar.paperai.advance_yearly`  | 706 | $599.99 |
+
+Prices above are the USA base price; Apple equalizes every other territory from
+it. The app always renders the live StoreKit price and falls back to these only
+if the product fetch has not returned yet.
+
+> **Retired IDs.** `pro_weekly`, `pro_monthly` and `pro_yearly` no longer exist
+> in App Store Connect. Any backend mapping still keyed on them will grant zero
+> credits to a paying customer. Treat a `pro_*` reference anywhere as a bug.
+
+### Credits reset each billing period
+
+Credits do **not** roll over. On every renewal the balance is set to that plan's
+credits/cycle rather than incremented, so an unused balance is lost at the
+period boundary. The reset is the backend's job, driven by Apple's `DID_RENEW`
+server notification on `POST /api/billing/ios/notifications-v2`; the app only
+ever displays the balance the server reports. The paywall and Terms screen both
+state this explicitly, and that wording is App Store review surface -- keep it
+literal if you change it.
 
 ---
 

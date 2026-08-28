@@ -35,8 +35,84 @@ Status date: 2026-07-16. Companion to the code changes in `paperai-mobile` and
   `SubscriptionPlanCard`, `IAPSetupScreen`) and stale product-ID env plumbing
   from `.env.example` + all GitHub workflows.
 - `npm audit fix`: axios 1.18.1, form-data 4.0.6 (runtime highs fixed).
-  Remaining 2 highs are build-time-only (`@xmldom/xmldom` inside
-  `@expo/prebuild-config`) — do not force-fix before release.
+
+### npm audit — what to fix and what to leave (reviewed 2026-08-27)
+
+**Never run `npm audit fix --force` on this project.** Every remaining advisory
+whose "fix" is a major bump resolves to an **Expo SDK 57** package
+(`expo@57`, `expo-constants@57`, `expo-splash-screen@57`, …). The app is on
+SDK 54. `--force` is an unplanned SDK upgrade wearing a security label.
+
+The question that decides whether an advisory matters here is **does the
+vulnerable module ship inside the .ipa**, not what npm's severity column says.
+Almost nothing in this tree does: Metro, the Expo CLI, prebuild-config, xcode
+and their dependencies run on the build machine. To reach them an attacker must
+already be able to run your build.
+
+To check rather than assume:
+
+```
+npx expo export --platform ios --source-maps --output-dir /tmp/x
+# then read the `sources` array of the emitted .hbc.map — that is the
+# definitive list of what is actually in the binary.
+```
+
+Fixed 2026-08-27 by tightening `overrides` in package.json — the previous pins
+had gone stale as new advisories moved past them (29 -> 23 advisories):
+
+| Package | Pin | Why |
+|---|---|---|
+| `nanoid` | `^3.3.18` | **Ships in the binary** (`nanoid/non-secure`). Stay on 3.x — 4+ is ESM-only and breaks the RN require. |
+| `shell-quote` | `>=1.10.0` | was `>=1.8.4`; advisory grew to `<=1.8.4` |
+| `undici` | `7.29.0` | was `7.28.0`; advisory covers `>=7.0.0 <7.29.0` |
+| `tar` | `>=7.5.22` | was `>=7.5.16` (resolved 7.5.20); advisory covers `<=7.5.20` |
+| `postcss` | `>=8.5.26` | advisory covers `<=8.5.22` |
+| `fast-uri` | `^3.1.6` | advisory covers `<3.1.5` |
+
+Then fixed the rest (23 -> 8, **zero moderate remaining**). The multi-major
+ones need npm's version-selector override syntax — a plain `"js-yaml": "..."`
+forces one version onto every consumer and breaks the build; `"js-yaml@3"` and
+`"js-yaml@4"` patch each major in place:
+
+| Package | Pin | Note |
+|---|---|---|
+| `brace-expansion@1` | `^1.1.18` | three majors live in the tree at once |
+| `brace-expansion@2` | `^2.1.4` | |
+| `brace-expansion@5` | `^5.0.9` | |
+| `js-yaml@3` | `^3.15.2` | `@expo/config` uses 3.x, other tooling 4.x |
+| `js-yaml@4` | `^4.3.2` | |
+| `uuid` | `^11.1.1` | `xcode` declares `^7.0.3` but only ever calls `uuid.v4()`, which v11 still exports. Verified by parsing the real `project.pbxproj` and generating a UUID — do not assume this, re-test it if the pin moves. |
+
+**The 8 that remain are all one root cause: `image-size`.** The other seven
+(`metro`, `metro-config`, `metro-transform-worker`, `@expo/metro`,
+`@expo/metro-config`, `@expo/cli`, `expo`) are just the dependency chain above
+it. `image-size`'s own advisory range is `*` and its newest release (`2.0.2`)
+is still inside it, so there is nothing to pin `image-size` itself to.
+
+**Corrected 2026-08-28** — the note previously here was wrong, and acting on it
+broke the dev server (see `troubleshooting.md` §1). Bumping **Metro** does clear
+these 8: Metro **0.83.4+** dropped the `image-size` dependency entirely and
+inlined its own `getAssetSize`. Verified on 0.83.8 — `image-size` appears
+neither in its `dependencies` nor in `src/Assets.js`.
+
+We still do not take it. Metro `^0.83.8` **breaks `expo start` on SDK 54**: that
+same 0.83.4 release changed the `metro-file-map` change-event shape that
+`@expo/cli@54.0.26` destructures, so the bundler dies on the first file change.
+The pin buys a clean audit and costs you the dev server.
+
+| Option | Audit | `expo start` |
+|---|---|---|
+| Metro 0.83.3 (Expo's pin) | 8 highs remain | works |
+| Metro 0.83.8 | clean | **broken** |
+
+**Never add a `metro*` override to `package.json`.** Metro's version belongs to
+the Expo SDK. `npm audit fix --force` picks the major bump heuristically, not
+because it understands this trade-off. Do not run it for this.
+
+In practice it is Metro reading image dimensions from your own asset files at
+build time; the DoS needs a hostile ICNS/JXL/HEIF input, which would mean
+someone already put a malicious file in `assets/`. Re-check when SDK 57 is
+planned; do not force it before then.
 
 ---
 
@@ -51,18 +127,31 @@ Status date: 2026-07-16. Companion to the code changes in `paperai-mobile` and
 | 5 | After #4, run `node tools/asc/apply-subscription-prices.js` (or set prices in the ASC UI using the table below) | Applies the 9 base USA prices; Apple equalizes other territories |
 | 6 | Upload a **review screenshot** per subscription in the ASC UI | Required for submission (not for sandbox testing) |
 
-### Final agreed subscription prices + credits (applied to code; ASC pending agreement)
+### Subscription prices + credits
+
+> **This table is a copy, not the source of truth.** The authoritative values
+> live in `src/constants/api.ts` (`SUBSCRIPTION_TIERS`) and, for what actually
+> gets written to Apple, in `tools/asc/apply-subscription-prices.js`
+> (`TARGET_USA_PRICE`). Those two agree today, verified against this table on
+> 2026-08-27. If you are setting prices, run the script — do not hand-type from
+> here. An earlier revision of this table listed a completely different set of
+> prices and credits than the code was shipping, which is exactly how the wrong
+> numbers reach App Store Connect.
+
 | Product | Credits | USA price |
 |---|---|---|
-| essential_weekly | 15 | $15.99 |
-| essential_monthly | 60 | $57.90 |
-| essential_yearly | 560 | $459.00 |
-| plus_weekly | 40 | $42.49 |
-| plus_monthly | 160 | $153.99 |
-| plus_yearly | 850 | $699.00 |
-| advance_weekly | 80 | $85.00 |
-| advance_monthly | 320 | $309.00 |
-| advance_yearly | 1100 | $899.00 |
+| essential_weekly | 13 | $12.99 |
+| essential_monthly | 40 | $39.99 |
+| essential_yearly | 353 | $299.99 |
+| plus_weekly | 20 | $19.99 |
+| plus_monthly | 60 | $59.99 |
+| plus_yearly | 471 | $399.99 |
+| advance_weekly | 30 | $29.99 |
+| advance_monthly | 100 | $99.99 |
+| advance_yearly | 706 | $599.99 |
+
+Credits do not roll over: each renewal resets the balance to the plan's
+allowance rather than adding to it. See `docs/api-integration.md`.
 
 Yearly credits set at a 15% better per-credit rate than the monthly plan. Already
 written to `src/constants/api.ts` and backend `IAP:Products`. ASC en-US

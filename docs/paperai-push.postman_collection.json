@@ -1,0 +1,276 @@
+{
+  "info": {
+    "name": "Paper AI — Push Notifications",
+    "description": "Push notification endpoints for Paper AI Assistant.\n\nSETUP\n1. Import this collection.\n2. Open the collection's Variables tab and set `email` and `password` (an admin account for the announce/test calls — admin ids live in Admin:UserIds in appsettings.json).\n3. Run \"1. Login\" — it captures accessToken into the `jwt` variable automatically. Every other request uses it.\n\nORDER THAT ACTUALLY WORKS\n  1. Login\n  2. Register device token   <- paste a real ExponentPushToken from the app\n  3. Get preferences         <- confirm announcements=false by default\n  4. Opt in to announcements\n  5. Announce (DRY RUN)      <- check the audience count\n  6. Announce (SEND)         <- not undoable\n\nA push can only be DELIVERED to a real device that registered a real token. Steps 5-6 will report audience 0 until step 2 has been done with a genuine token from a development build or TestFlight (Expo Go cannot issue one — remote push was removed from Expo Go in SDK 53).\n\nNOTE ON 411: the reverse proxy rejects POSTs that carry no body at all with 411 Length Required, before the API sees them. Every POST here sends a body for that reason — including \"5. Send test push\", whose {} is required rather than decorative. GET and DELETE are unaffected.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://apis.bseptechnologies.com",
+      "type": "string"
+    },
+    {
+      "key": "localUrl",
+      "value": "http://localhost:5263",
+      "type": "string"
+    },
+    {
+      "key": "email",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "password",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "jwt",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "expoPushToken",
+      "value": "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{jwt}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "1. Login (captures jwt)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 200) {",
+              "    const body = pm.response.json();",
+              "    pm.collectionVariables.set('jwt', body.accessToken);",
+              "    console.log('jwt captured');",
+              "} else {",
+              "    console.log('login failed: ' + pm.response.code);",
+              "}",
+              "pm.test('login succeeded', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "login"
+          ]
+        },
+        "description": "Returns { accessToken, refreshToken }. The test script stores accessToken as {{jwt}}."
+      }
+    },
+    {
+      "name": "2. Register device token",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"{{expoPushToken}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/push/token",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "push",
+            "token"
+          ]
+        },
+        "description": "Attaches this Expo push token to the logged-in account, detaching it from any other account that held it.\n\nGet a real token from the app: it is registered automatically after sign-in on a development build. Expo Go cannot issue one."
+      }
+    },
+    {
+      "name": "3. Get preferences",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/push/preferences",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "push",
+            "preferences"
+          ]
+        },
+        "description": "Creates defaults on first call. Expect announcements=false — marketing is opt-in only (App Store guideline 4.5.4)."
+      }
+    },
+    {
+      "name": "4. Opt in to announcements",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"announcements\": true\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/push/preferences",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "push",
+            "preferences"
+          ]
+        },
+        "description": "Only the keys you send are changed; omitted ones are left alone.\n\nOther keys: analysisComplete, usageReminders, renewalReminders."
+      }
+    },
+    {
+      "name": "5. Send test push (to yourself, admin only)",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/api/push/test",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "push",
+            "test"
+          ]
+        },
+        "description": "Pushes to the calling account's own registered token.\n\nThe empty {} body is REQUIRED, not decorative: the reverse proxy in front of the API answers a bodyless POST with 411 Length Required before ASP.NET sees it, which looks like a broken endpoint. This endpoint takes no parameters otherwise.\n\n{ ok: true } means Expo accepted it.\n{ tokenIsDead: true } means the token belongs to a deleted or reinstalled app; it is cleared automatically, so sign in again to register a fresh one.\n400 \"No push token registered\" means nobody has registered a token for this account yet.\n403 means this account is not in Admin:UserIds.",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        }
+      }
+    },
+    {
+      "name": "6. Announce — DRY RUN (audience only)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Sign & Fill is here\",\n  \"body\": \"Sign a document without leaving the app.\",\n  \"dryRun\": true\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/push/announce",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "push",
+            "announce"
+          ]
+        },
+        "description": "ALWAYS run this first. Returns { audience, sent: 0 } and delivers nothing.\n\n`audience` counts users who have a token AND announcements=true."
+      }
+    },
+    {
+      "name": "7. Announce — SEND (not undoable)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Sign & Fill is here\",\n  \"body\": \"Sign a document without leaving the app.\",\n  \"screen\": \"Upload\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/push/announce",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "push",
+            "announce"
+          ]
+        },
+        "description": "Delivers to everyone opted in. There is no recall.\n\n`screen` is optional and deep-links the app when the notification is tapped (e.g. Upload, Paywall).\n\nDead tokens are cleared automatically, so `sent` can be lower than `audience`."
+      }
+    },
+    {
+      "name": "8. Remove device token (logout)",
+      "request": {
+        "method": "DELETE",
+        "url": {
+          "raw": "{{baseUrl}}/api/push/token",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "push",
+            "token"
+          ]
+        },
+        "description": "What the app calls on sign-out, so the next account on a shared device is not reachable at the previous owner's address."
+      }
+    }
+  ]
+}
