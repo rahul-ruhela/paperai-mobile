@@ -10,6 +10,7 @@ import {
     Image,
     TextInput,
     Animated,
+    Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -424,6 +425,15 @@ export default function HomeScreen({ navigation }) {
                         data={visibleDocs}
                         keyExtractor={(i) => i.id}
                         renderItem={renderItem}
+                        // C3 (performance-optimization-plan.md). Without these RN
+                        // mounts far more rows than a screen shows. No
+                        // getItemLayout: these rows have a variable height, and a
+                        // wrong constant there causes scroll jumps that are worse
+                        // than the measurement it saves.
+                        initialNumToRender={8}
+                        maxToRenderPerBatch={8}
+                        windowSize={7}
+                        removeClippedSubviews={Platform.OS === "android"}
                         // A React *element*, not a component function: passing a
                         // function defined inline would remount the header on
                         // every render and the search field would lose focus on

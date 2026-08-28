@@ -105,6 +105,11 @@ export default function AiChatScreen({ navigation, route }) {
     // and a fresh array each time makes FlatList re-diff the whole thread.
     const ordered = useMemo(() => [...messages].reverse(), [messages]);
 
+    // C2 (performance-optimization-plan.md). An inline arrow gives renderItem a
+    // new identity every render, which invalidates every row in the list; with
+    // Bubble memoised below, this is what makes the memo actually pay.
+    const renderBubble = useCallback(({ item }) => <Bubble message={item} />, []);
+
     const send = useCallback(
         async (text) => {
             const body = (text ?? input).trim();
@@ -246,7 +251,12 @@ export default function AiChatScreen({ navigation, route }) {
                             keyExtractor={(m) => String(m.id)}
                             keyboardShouldPersistTaps="handled"
                             contentContainerStyle={styles.listContent}
-                            renderItem={({ item }) => <Bubble message={item} />}
+                            renderItem={renderBubble}
+                            // C3. A long conversation is exactly the case this
+                            // protects: every bubble used to stay mounted.
+                            initialNumToRender={12}
+                            maxToRenderPerBatch={10}
+                            windowSize={9}
                             ListHeaderComponent={sending ? <TypingBubble /> : null}
                             ListFooterComponent={
                                 messages.length === 0 ? (
@@ -341,7 +351,9 @@ function Header({ title, navigation, credits }) {
     );
 }
 
-function Bubble({ message }) {
+// Memoised: a chat re-renders on every keystroke in the composer, and without
+// this each keystroke re-rendered every bubble already on screen.
+const Bubble = React.memo(function Bubble({ message }) {
     const { theme } = useTheme();
     const styles = useThemedStyles(makeStyles);
     const mine = message.role === "user";
@@ -393,7 +405,7 @@ function Bubble({ message }) {
             </Pressable>
         </View>
     );
-}
+});
 
 /** Three dots that breathe while the answer is in flight. */
 function TypingBubble() {

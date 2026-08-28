@@ -1,4 +1,4 @@
-import { api } from "../api/client";
+import { api, FAST } from "../api/client";
 import { isFeatureAllowed } from "../config/featureMatrix";
 
 // entitlementService — thin wrapper over GET /api/entitlements/me with a short
@@ -9,6 +9,39 @@ const CACHE_TTL_MS = 30_000;
 
 let _cache = null; // { snapshot, fetchedAt }
 let _inFlight = null;
+
+// H2 (performance-optimization-plan.md): every hook consumer used to hold its
+// own copy of the snapshot, so a refresh after a purchase in one screen left
+// every other screen showing the old tier until its own 30 s TTL lapsed.
+//
+// A subscriber set rather than the context provider the plan suggested. It
+// reaches the same two outcomes — one snapshot shared by every consumer, and a
+// refresh that propagates immediately — without adding a provider that every
+// screen must then be rendered underneath. A gate that silently reads a default
+// because it mounted outside a provider is a worse failure than the one being
+// fixed, and this design cannot produce it.
+const _subscribers = new Set();
+
+/** Subscribe to snapshot changes. Returns an unsubscribe function. */
+export function subscribeEntitlements(listener) {
+    _subscribers.add(listener);
+    return () => _subscribers.delete(listener);
+}
+
+function publish(snapshot) {
+    for (const listener of _subscribers) {
+        try {
+            listener(snapshot);
+        } catch {
+            // One bad listener must not stop the others being told.
+        }
+    }
+}
+
+/** The cached snapshot, or null. Lets a consumer paint before its fetch lands. */
+export function cachedEntitlements() {
+    return _cache?.snapshot ?? null;
+}
 
 // Shape returned by the backend, defaulted so the app degrades to Free safely.
 const FREE_SNAPSHOT = {
@@ -28,9 +61,10 @@ export async function fetchEntitlements({ force = false } = {}) {
 
     _inFlight = (async () => {
         try {
-            const { data } = await api.get("/api/entitlements/me");
+            const { data } = await api.get("/api/entitlements/me", FAST);
             const snapshot = { ...FREE_SNAPSHOT, ...data };
             _cache = { snapshot, fetchedAt: Date.now() };
+            publish(snapshot);
             return snapshot;
         } catch (err) {
             // Never hard-fail the UI on entitlement load — fall back to Free.
@@ -45,8 +79,13 @@ export async function fetchEntitlements({ force = false } = {}) {
 }
 
 // Call after a purchase, refund, or credit-spending action to force a refresh.
-export function invalidateEntitlements() {
+//
+// Re-fetches rather than only clearing, so every subscribed screen updates at
+// once. Fire-and-forget: the caller has already done the thing that made the
+// snapshot stale and has nothing to wait for.
+export function invalidateEntitlements({ refetch = true } = {}) {
     _cache = null;
+    if (refetch) fetchEntitlements({ force: true }).catch(() => {});
 }
 
 // Server-authoritative single-feature check. Returns

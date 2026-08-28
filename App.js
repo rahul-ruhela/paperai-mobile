@@ -1,5 +1,6 @@
 ﻿import React, { useEffect, useState } from "react";
 import { NavigationContainer, DefaultTheme, DarkTheme, createNavigationContainerRef } from "@react-navigation/native";
+import { InteractionManager } from "react-native";
 import * as Notifications from "expo-notifications";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
@@ -57,6 +58,7 @@ import AiChatScreen from "./src/screens/AiChatScreen";
 import ReceiptCaptureScreen from "./src/screens/ReceiptCaptureScreen";
 import ExpensesScreen from "./src/screens/ExpensesScreen";
 import BootScreen from "./src/screens/BootScreen";
+import { speakFromPayload } from "./src/services/voicePlayback";
 
 // Shared ref so a tapped reminder notification can navigate from outside any
 // screen. `isReady()` gates every use — a notification can be delivered before
@@ -72,16 +74,30 @@ const navigationRef = createNavigationContainerRef();
 // imports that module, so it never ran. Registering at module scope here means
 // it is in place before any notification can be delivered.
 Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-        // shouldShowBanner/shouldShowList are the SDK 54 names; shouldShowAlert
-        // is the pre-53 spelling, kept so behaviour does not depend on which
-        // one this version reads.
-        shouldShowBanner: true,
-        shouldShowList: true,
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: false,
-    }),
+    handleNotification: async (notification) => {
+        // Voice Companion (Module 7 §4, case 1). The app is in the foreground,
+        // so this is the one moment iOS lets app code run at delivery time.
+        // The sentence was composed at SCHEDULE time and travels in the payload,
+        // so nothing is fetched here and it works offline.
+        //
+        // Fire-and-forget, and every failure is swallowed inside speakFromPayload:
+        // a reminder that fails to speak has still been delivered as a banner,
+        // and blocking the handler on a synthesiser would delay the banner
+        // itself. Spoken once here; the tap path checks it is not already
+        // speaking, so tapping your own banner does not say it twice.
+        speakFromPayload(notification?.request?.content?.data);
+
+        return {
+            // shouldShowBanner/shouldShowList are the SDK 54 names;
+            // shouldShowAlert is the pre-53 spelling, kept so behaviour does not
+            // depend on which one this version reads.
+            shouldShowBanner: true,
+            shouldShowList: true,
+            shouldShowAlert: true,
+            shouldPlaySound: true,
+            shouldSetBadge: false,
+        };
+    },
 });
 
 // A notification tapped while the app was terminated is delivered before the
@@ -230,13 +246,23 @@ function AppShell() {
                 if (mounted) {
                     setAuthed(!!token);
                 }
-                // Expo Go only: give fresh tester accounts dummy credits.
                 if (token) {
-                    ensureExpoGoTestCredits();
-                    // Re-register every launch: tokens rotate on reinstall and
-                    // after long inactivity, and re-sending an unchanged one is
-                    // a no-op server-side.
-                    registerForPushNotifications();
+                    // H1 (performance-optimization-plan.md). Both of these touch
+                    // the network and nothing waits on their results, so they are
+                    // deferred until after the first frame is painted. Before
+                    // this they ran between the token read and setReady, putting
+                    // two requests in front of the UI appearing at all.
+                    //
+                    // Correctness is unchanged: both are idempotent, both already
+                    // ignored their results, and push still re-registers on every
+                    // launch.
+                    InteractionManager.runAfterInteractions(() => {
+                        // Expo Go only: give fresh tester accounts dummy credits.
+                        ensureExpoGoTestCredits();
+                        // Tokens rotate on reinstall and after long inactivity;
+                        // re-sending an unchanged one is a no-op server-side.
+                        registerForPushNotifications();
+                    });
                 }
             } catch {
                 if (mounted) {
@@ -274,12 +300,20 @@ function AppShell() {
         let alive = true;
 
         const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+            // Case 2: the user tapped it. Speaks from the same payload, and
+            // speakFromPayload is a no-op while the synthesiser is already busy —
+            // so tapping a banner that just spoke itself does not repeat it.
+            speakFromPayload(response?.notification?.request?.content?.data, { onTap: true });
             navigateTo(targetFromResponse(response));
         });
 
         Notifications.getLastNotificationResponseAsync()
             .then((response) => {
-                if (alive) navigateTo(targetFromResponse(response));
+                if (!alive) return;
+                // A cold launch from a reminder: the app was terminated when it
+                // fired, so this is the first chance to say anything.
+                speakFromPayload(response?.notification?.request?.content?.data, { onTap: true });
+                navigateTo(targetFromResponse(response));
             })
             .catch(() => {});
 

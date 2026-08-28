@@ -1,6 +1,8 @@
 # Paper AI Assistant — Product Roadmap v2
 
-Status: **in progress — Modules 0–6 shipped; Module 7 is next.**
+Status: **all nine modules (0–8) landed.** Modules 0–6 are on `development`;
+Modules 7 and 8 are on `chore/release-hardening-7-8`. Module 8 is applied but
+its measurement gate is unmet — see `performance-optimization-plan.md`.
 Written: 2026-08-27. Last synced to the repository: 2026-08-28. Branch: `chore/release-hardening`.
 Basis: the mobile repo (`paperai-mobile`) + API repo (`PaperAiApis`).
 
@@ -58,6 +60,10 @@ deployed. See §11 for what is live in production.
   default. Pulls short reminders out of a task's own note and folds them into
   that task's reminder. Settings → Smart Recall lists everything stored, with
   per-item undo and a typed-confirmation "forget everything".
+- **AI Voice Companion** *(Module 7, 2026-08-29)* — Advance, opt-in, off by
+  default. Reminders read themselves aloud with the phone's own voices; voice,
+  speed and tone in Settings, plus a per-task override. The Module 3 speaker
+  button on a task card stays Free and unchanged.
 - **Privacy & Security** *(Module 5, merged 2026-08-28)* — Settings → Privacy &
   Security: the privacy score, the sensitive-document suggestions, and the
   Private Vault (AES-256-GCM, key in the Keychain behind Face ID / Touch ID /
@@ -96,8 +102,8 @@ Ordered by dependency, not desirability. Each row is one approval gate.
 | 4 | Smart Cleaner layers (Basic / Deep / Pro) | `smart-cleaner-spec.md` | Free → Advance | Seeds only | Medium | **Shipped** 2026-08-28 |
 | 5 | Privacy & Security module (Vault, sensitive detection, privacy score) | `privacy-security-module.md` | Free | Local only | Medium | **Shipped** 2026-08-28 |
 | 6 | Smart Recall engine | `smart-recall-engine.md` | Advance | Yes | High | **Shipped** 2026-08-29 |
-| 7 | AI Voice Companion | `voice-assistant-spec.md` | Advance | Yes (prefs) | Medium | Not started |
-| 8 | Performance pass | `performance-optimization-plan.md` | all | No | Low | Not started |
+| 7 | AI Voice Companion | `voice-assistant-spec.md` | Advance | Yes (prefs) | Medium | **Shipped** 2026-08-29 |
+| 8 | Performance pass | `performance-optimization-plan.md` | all | No | Low | **Partly applied** 2026-08-29 — 6 of 14 items; measurement gate unmet |
 
 ---
 
@@ -106,13 +112,13 @@ Ordered by dependency, not desirability. Each row is one approval gate.
 ```
 Module 0  (matrix repair + tasks API)            [DONE]
    │
-   ├── Module 3  Assistant ──┬── Module 6  Smart Recall [DONE] ── Module 7  Voice Companion
+   ├── Module 3  Assistant ──┬── Module 6  Smart Recall [DONE] ── Module 7  Voice Companion [DONE]
    │              [DONE]     └── (reuses reminderService)
    ├── Module 1  Entitlement policy   (informs every gate below)  [DONE]
    ├── Module 4  Smart Cleaner        [DONE]
    └── Module 5  Privacy [DONE] ── Module 2  Permission Center  [DONE — Module 5 links to it]
 
-Module 8  Performance — last, measured against the finished surface area.
+Module 8  Performance — 6 of 14 items applied; NOT measured. See its spec.
 ```
 
 Hard ordering rules:
@@ -169,7 +175,15 @@ The preference columns go on the existing table rather than into a new
 `UserRecallPreferences`, which is the same call this document already recommends
 for Module 7.
 
-**Module 7** — voice preferences. Recommendation: add columns to the existing `UserNotificationPreferences` rather than create `UserVoicePreferences` — fewer joins and a smaller migration surface. Confirmed in the voice spec.
+**Module 7 — voice preferences — MIGRATION WRITTEN, NOT APPLIED.** Migration
+`20260828192637_AddVoicePreferences` adds five nullable columns to
+`UserNotificationPreferences` (`VoiceEnabled`, `VoiceId`, `VoiceRate`,
+`VoiceTone`, `VoiceSpeakOnTap`) and one to `Tasks` (`VoiceEnabled`, the per-task
+override). Every column is nullable and its null IS the documented default, so
+there is no backfill and an existing row comes out with voice off.
+
+The recommendation to extend the existing table rather than create
+`UserVoicePreferences` was followed.
 
 **Module 5 — no server schema, as specified.** Vault contents never leave the device, and neither do detection results or the privacy score. Nothing was added to the backend for this module at all.
 
@@ -192,7 +206,7 @@ Additive only; no existing route or response shape changes.
 | 5 | *(deferred)* | The PLUS AI-assisted classification pass in `privacy-security-module.md` §3 needs a route this module does not add. No matrix key was registered for it, so nothing advertises it — see §8.2 there. | Deferred |
 | 6 | `GET /api/recall/memories`, `DELETE /api/recall/memories/{id}`, `POST /api/recall/memories/{id}/restore`, `DELETE /api/recall/memories/source/{id}`, `DELETE /api/recall/memories/all` | Memory CRUD, the undo half of the soft delete, and the mandatory "forget everything". | **Implemented** |
 | 6 | `GET/PUT /api/recall/preferences` | The master switch and the lock-screen-detail switch. Deliberately NOT tier-gated for reads or for turning recall *off* — a lapsed subscriber must never be locked out of stopping the feature or deleting what it stored. | **Implemented** |
-| 7 | `GET/PUT /api/voice/preferences` | Voice on/off, voice id, rate, tone. | Not started |
+| 7 | `GET/PUT /api/voice/preferences` | Voice on/off, voice id, rate, tone, speak-on-tap. `GET` and turning voice *off* are not tier-gated; only enabling it requires Advance. | **Implemented** |
 
 Every new endpoint is `[Authorize]`, scopes by `GetUserId()`, and calls `EntitlementService.CheckAccessAsync` for its feature key before doing work.
 
@@ -230,9 +244,13 @@ Every new endpoint is `[Authorize]`, scopes by `GetUserId()`, and calls `Entitle
 - New: `src/api/recall.js`, `src/services/recallNotification.js` (the lock-screen rules, pure and tested), `src/screens/MemoriesScreen.js`. `reminderService.scheduleTaskAlert` takes optional `memories` / `hideRecallDetails` — absent means today's behaviour, so no existing caller changed meaning. *(Module 6)*
 - No new mobile dependencies for Module 6. *(Module 6)*
 
+- `App.js` — voice playback wired into the notification handler and the tap/cold-launch listeners; `VoiceSettingsSection` is hosted in `SettingsScreen` rather than getting its own route. *(Module 7)*
+- New: `src/services/voiceService.js`, `src/services/voicePlayback.js`, `src/api/voice.js`, `src/ui/VoiceSettingsSection.js`, and the three-way "Speak this reminder" control in `TaskEditorSheet`. *(Module 7)*
+- No new dependencies: `expo-speech` was already present and ships no config plugin. *(Module 7)*
+
 **Remaining**
 
-- `App.js` — add the `VoiceSettings` stack route when Module 7 lands.
+- Nothing from the v2 roadmap. Modules 0–8 have all landed.
 - `src/config/featureMatrix.ts` — add each later module's keys, always in the same commit as `FeatureMatrix.cs` **and** the snapshot in `__tests__/featureMatrix.test.ts`.
 - **Nothing further to convert.** The other screens' paywall prompts were checked and are 402 credit top-ups or plain navigation, not tier locks — see the policy §5. Converting them would turn a top-up into a wall.
 - New services: `recallService.js`, `voiceService.js`.
@@ -268,6 +286,8 @@ Merged is not deployed. Track the two separately.
 | 1 — Entitlement policy | Yes (2026-08-28) | **No** | No schema and no new routes, but the `SUBSCRIPTION_EXPIRED` correction is server-side: until the API deploys, a never-subscribed user on a production build would still be told their plan ended. |
 | 2 — Device Permission Center | Yes (2026-08-28) | **n/a** | Mobile-only and entirely on-device: no schema, no route, no backend change at all. It is the one module here with no API dependency, so it is safe to ship in a mobile build ahead of the API deploy. |
 | 3 — Assistant | Yes (2026-08-28) | **No** | The Assistant screen works only against a local backend until the API is deployed. Do not ship the mobile build to TestFlight/App Store before the API deploy. |
+| 8 — Performance pass | On `…-7-8` (2026-08-29) | **n/a** | Mobile-only, no schema, no route. Applied but unmeasured — see the spec's implementation record before trusting any of it. |
+| 7 — Voice Companion | On `…-7-8` (2026-08-29) | **No** | Migration `20260828192637` is written but **NOT applied** to `PaperAiDb`. Until it is, `/api/voice/preferences` fails at the database; the Settings panel degrades to "unavailable" rather than crashing. No new native build needed — `expo-speech` was already in the binary. |
 | 6 — Smart Recall | Yes (2026-08-29) | **No** | Migration `20260828182850` is written but **NOT applied** to `PaperAiDb`. Until it is, `/api/recall/*` fails at the database and extraction never runs — the mobile screen degrades to "off" rather than crashing, but the feature does not exist. Apply the migration and deploy together. |
 | 5 — Privacy & Security | Yes (2026-08-28) | **n/a** | Mobile-only and entirely on-device: no schema, no route, no backend change at all. Like Module 2 it has no API dependency — but it **does** need a new native build (`expo-local-authentication`, `expo-crypto`), so the Vault does not exist in the current TestFlight binary. |
 | 4 — Smart Cleaner | Yes (2026-08-28) | **No** | The free layers (Screenshots, Large Files) and the Storage Forecast are entirely on-device and work against any backend. The two paid scans need migration `20260828120000` applied and the API deployed, or their Reserve 404s on an unpriced key. Also needs a **new native build** — `expo-image-manipulator` was added — so neither paid scan runs in the current TestFlight binary. |

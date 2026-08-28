@@ -28,6 +28,7 @@ const DURATION_TITLE = { weekly: "Weekly", monthly: "Monthly", yearly: "Yearly" 
 import { useTheme } from "../ui/ThemeProvider";
 import useThemedStyles from "../ui/useThemedStyles";
 import { scheduleTestReminder } from "../services/reminderService";
+import VoiceSettingsSection from "../ui/VoiceSettingsSection";
 export default function SettingsScreen({ navigation, onLoggedOut }) {
     const { theme, preference, setPreference } = useTheme();
     const styles = useThemedStyles(makeStyles);
@@ -505,6 +506,11 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
                             />
                         </View>
                     </View>
+
+                    {/* firstName is fetched by the panel itself. It is optional
+                        by design: composeSentence drops the greeting entirely
+                        when no name is known, rather than saying "Hey ,". */}
+                    <VoiceSettingsSection navigation={navigation} />
 
                     <View style={styles.card}>
                         <Text style={styles.section}>Notifications</Text>

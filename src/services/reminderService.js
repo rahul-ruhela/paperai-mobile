@@ -537,6 +537,12 @@ export async function scheduleTaskAlert({
     // without being changed.
     memories = null,
     hideRecallDetails = true,
+    // Voice Companion (Module 7 §4). iOS will not run app code when a
+    // notification is delivered in the background, so the sentence is composed
+    // HERE, at schedule time, and carried in the payload. Playback on tap then
+    // needs no network and no recomposition — it works offline, and it works
+    // when the app was terminated between scheduling and firing.
+    spoken = null,
 }) {
     if (!taskId || !dueAtUtc) return { error: "past" };
 
@@ -564,7 +570,7 @@ export async function scheduleTaskAlert({
                 memories,
                 hideDetails: hideRecallDetails,
             }),
-            data: { type: "task", taskId },
+            data: { type: "task", taskId, ...(spoken ? { spoken } : {}) },
         },
         trigger: { type: "date", date: fire },
     });

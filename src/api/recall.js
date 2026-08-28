@@ -1,4 +1,4 @@
-import { api } from "./client";
+import { api, FAST } from "./client";
 
 /**
  * Smart Recall API client (roadmap Module 6).
@@ -46,7 +46,7 @@ export async function forgetAllMemories() {
 
 /** { enabled, hideDetailsOnLockScreen, available, storedCount } */
 export async function getRecallPreferences() {
-    const { data } = await api.get("/api/recall/preferences");
+    const { data } = await api.get("/api/recall/preferences", FAST);
     return data;
 }
 
