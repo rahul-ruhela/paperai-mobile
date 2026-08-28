@@ -586,6 +586,58 @@ export async function scheduleTaskAlert({
     return record;
 }
 
+/**
+ * How far out the "try it" reminder fires. A minute is long enough to leave the
+ * app and lock the phone — which is the thing being demonstrated — and short
+ * enough that nobody has to remember they asked for it.
+ */
+export const TEST_REMINDER_DELAY_MS = 60_000;
+
+/**
+ * Schedules a one-off reminder a minute from now so a user can see what a Paper
+ * AI reminder actually looks and sounds like on their own device.
+ *
+ * This is a visible feature for everyone, not a hidden or account-gated one. It
+ * exists because a reminder is the one part of the app a user cannot evaluate
+ * without waiting for a real due date to arrive, and "set a fake task for two
+ * minutes from now" is a bad answer.
+ *
+ * It deliberately does NOT go into the task-alert store: it belongs to no task,
+ * so it must not appear as an alarm on a row, must not be cancelled when some
+ * unrelated task is edited, and must not survive as a stale record. It is a
+ * plain scheduled notification and nothing else.
+ *
+ * @returns { ok: true, fireAt, notificationId } | { ok: false, reason }
+ *          reason: "denied" | "simulator" | "failed".
+ */
+export async function scheduleTestReminder() {
+    // Asked at the point of use, which is the only place iOS wants it asked.
+    // ensurePermission also reports "simulator", which is passed through rather
+    // than flattened into "denied" — telling someone to check their Settings
+    // when the real problem is that notifications do not exist on a simulator
+    // sends them somewhere with nothing to fix.
+    const permission = await ensurePermission();
+    if (!permission.granted) {
+        return { ok: false, reason: permission.reason ?? "denied" };
+    }
+
+    const fireAt = new Date(Date.now() + TEST_REMINDER_DELAY_MS);
+
+    try {
+        const notificationId = await Notifications.scheduleNotificationAsync({
+            content: {
+                title: "This is a Paper AI reminder",
+                body: "This is what a reminder looks like. Real ones show your task and what you asked to be reminded of.",
+                data: { type: "test" },
+            },
+            trigger: { type: "date", date: fireAt },
+        });
+        return { ok: true, fireAt: fireAt.toISOString(), notificationId };
+    } catch {
+        return { ok: false, reason: "failed" };
+    }
+}
+
 /** { [taskId]: record } — what the Assistant needs to show an alarm on a row. */
 export async function taskAlertMap() {
     const all = await serialise(async () => pruneStaleTaskAlerts(await listTaskAlerts()));

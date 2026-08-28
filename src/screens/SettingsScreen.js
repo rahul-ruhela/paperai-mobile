@@ -27,6 +27,7 @@ const DURATION_TITLE = { weekly: "Weekly", monthly: "Monthly", yearly: "Yearly" 
 
 import { useTheme } from "../ui/ThemeProvider";
 import useThemedStyles from "../ui/useThemedStyles";
+import { scheduleTestReminder } from "../services/reminderService";
 export default function SettingsScreen({ navigation, onLoggedOut }) {
     const { theme, preference, setPreference } = useTheme();
     const styles = useThemedStyles(makeStyles);
@@ -169,6 +170,44 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
      * became visible. It exercises the whole chain in one tap: permission →
      * Expo token → backend → Expo relay → APNs → the notification handler.
      */
+
+    // Schedules a real local notification a minute out. Nothing about it is
+    // simulated: it is the same scheduling path a task alert uses, which is the
+    // only way the preview is worth anything.
+    async function sendTestReminder() {
+        const result = await scheduleTestReminder();
+
+        if (result.ok) {
+            Alert.alert(
+                "On its way",
+                "Your test reminder arrives in about a minute. Lock your phone to see how it looks on the lock screen."
+            );
+            return;
+        }
+
+        if (result.reason === "simulator") {
+            Alert.alert(
+                "Not available here",
+                "Notifications only work on a real device, so there is nothing to show on a simulator."
+            );
+            return;
+        }
+
+        if (result.reason === "denied") {
+            Alert.alert(
+                "Notifications are off",
+                "Paper AI cannot send reminders until notifications are turned on for it.",
+                [
+                    { text: "Not now", style: "cancel" },
+                    { text: "Open Settings", onPress: () => Linking.openSettings() },
+                ]
+            );
+            return;
+        }
+
+        Alert.alert("Could not schedule", "The test reminder was not scheduled. Please try again.");
+    }
+
     async function runTestPush() {
         const { token, reason, detail } = await registerForPushNotifications();
 
@@ -510,6 +549,19 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
                                 />
                             </>
                         )}
+
+                        {/* Visible to everyone, on purpose. A reminder is the
+                            one part of the app you cannot judge without waiting
+                            for a real due date to arrive, and anything unlocked
+                            by a secret account or gesture would be a guideline
+                            2.3.1 hidden feature for no product gain. */}
+                        <View style={styles.toggleDivider} />
+                        <Row
+                            icon="alarm-outline"
+                            title="Send me a test reminder"
+                            subtitle="See what a reminder looks like — arrives in one minute"
+                            onPress={sendTestReminder}
+                        />
 
                         {/* Dev/Expo Go only. The endpoint is admin-gated on the
                             server regardless, so this cannot be used by a normal
