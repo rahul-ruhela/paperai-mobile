@@ -41,6 +41,8 @@ import ProfileScreen from "./src/screens/ProfileScreen";
 import CreditAnalyticsScreen from "./src/screens/CreditAnalyticsScreen";
 import PrivacyScreen from "./src/screens/PrivacyScreen";
 import PermissionCenterScreen from "./src/screens/PermissionCenterScreen";
+import PrivacyCenterScreen from "./src/screens/PrivacyCenterScreen";
+import VaultScreen from "./src/screens/VaultScreen";
 import TermsScreen from "./src/screens/TermsScreen";
 import HelpCenterScreen from "./src/screens/HelpCenterScreen";
 import ContactSupportScreen from "./src/screens/ContactSupportScreen";
@@ -403,6 +405,18 @@ function AppShell() {
                         <Stack.Screen name="Profile" component={ProfileScreen} />
                         <Stack.Screen name="Analytics" component={CreditAnalyticsScreen} />
                         <Stack.Screen name="Privacy" component={PrivacyScreen} />
+                        {/* The privacy CONTROL panel, distinct from "Privacy"
+                            above, which is the policy document. */}
+                        <Stack.Screen
+                            name="PrivacyCenter"
+                            component={PrivacyCenterScreen}
+                            options={{ title: "Privacy & Security" }}
+                        />
+                        <Stack.Screen
+                            name="Vault"
+                            component={VaultScreen}
+                            options={{ title: "Private Vault" }}
+                        />
                         {/* Standalone for now; Module 5 embeds the same panel
                             as a section inside the Privacy centre. */}
                         <Stack.Screen

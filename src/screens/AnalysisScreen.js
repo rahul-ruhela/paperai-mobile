@@ -23,6 +23,7 @@ import { listTasks } from "../api/tasks";
 import { useTheme } from "../ui/ThemeProvider";
 import useThemedStyles from "../ui/useThemedStyles";
 import { useFocusEffect } from "@react-navigation/native"; // 🔹 NEW
+import { recordDetection } from "../services/sensitiveStore";
 
 
 export default function AnalysisScreen({ route, navigation }) {
@@ -60,6 +61,16 @@ export default function AnalysisScreen({ route, navigation }) {
 
             const { data } = await api.get(`/api/documents/${docId}`);
             setDoc(data);
+
+            // Sensitive-document detection (Module 5, §3) runs here because this
+            // is where the app already holds the text — no extra fetch, and the
+            // classifier is pure regex over a string in memory. The result is
+            // written to a local file and nowhere else; it is never sent to the
+            // server and never logged. Failures are swallowed on purpose: a
+            // classifier is an advisory extra and must not break the screen the
+            // user actually opened.
+            recordDetection(docId, `${data?.title ?? ""}\n${data?.summary ?? ""}\n${data?.extractedText ?? ""}`)
+                .catch(() => {});
 
             if (data?.status === "PROCESSED") {
                 const allTasks = await listTasks();

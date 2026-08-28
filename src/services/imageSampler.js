@@ -20,23 +20,12 @@ import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { decode as decodeJpeg } from "jpeg-js";
 
 import { averageHash, laplacianVariance } from "./cleanerService";
+import { base64ToBytes } from "./base64";
 
 /** Edge of the greyscale frame used for sharpness. */
 export const SAMPLE_SIZE = 64;
 /** Edge of the hash grid. SAMPLE_SIZE must be a whole multiple of it. */
 export const HASH_SIZE = 8;
-
-function base64ToBytes(b64) {
-    // RN 0.74+ and Hermes expose atob globally. Guarded rather than assumed,
-    // because the failure mode without it is a thrown ReferenceError in the
-    // middle of a paid scan.
-    const decoder = typeof atob === "function" ? atob : null;
-    if (!decoder) return null;
-    const binary = decoder(b64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    return bytes;
-}
 
 /** ITU-R BT.601 luma from an RGBA buffer. */
 export function toGreyscale(rgba, pixelCount) {

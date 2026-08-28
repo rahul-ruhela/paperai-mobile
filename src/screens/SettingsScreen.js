@@ -396,6 +396,13 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
                         />
 
                         <Row
+                            icon="shield-checkmark-outline"
+                            title="Privacy & Security"
+                            subtitle="Vault, privacy score and what stays on this device"
+                            onPress={() => navigation.navigate("PrivacyCenter")}
+                        />
+
+                        <Row
                             icon="hardware-chip-outline"
                             title="Storage Studio"
                             subtitle="Free up space on this device"

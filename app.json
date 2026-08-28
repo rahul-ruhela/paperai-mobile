@@ -6,26 +6,25 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.bholeshankar.paperai",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "UIBackgroundModes": ["remote-notification"],
-
+        "UIBackgroundModes": [
+          "remote-notification"
+        ],
         "//": "NSAllowsLocalNetworking permits cleartext HTTP to LAN addresses ONLY, never to public internet hosts. It is what lets a development build on a real device reach the API running on a laptop (http://192.168.x.x:5263), so push registration can be tested end to end before anything is deployed. It does not weaken production: the app defaults to the HTTPS production API, and Apple accepts this key without a justification because it cannot be used to reach the internet in the clear.",
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true
         },
-        "NSLocalNetworkUsageDescription": "Paper AI Assistant connects to a development API running on your computer when you are testing a development build on the same Wi-Fi network."
+        "NSLocalNetworkUsageDescription": "Paper AI Assistant connects to a development API running on your computer when you are testing a development build on the same Wi-Fi network.",
+        "NSFaceIDUsageDescription": "Face ID unlocks your Private Vault, so only you can open the documents you keep there. Paper AI never sends your Vault or your face data anywhere."
       }
     },
-
     "web": {
       "favicon": "./assets/favicon.png"
     },
-
     "plugins": [
       "expo-secure-store",
       "expo-apple-authentication",
@@ -53,7 +52,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Paper AI Assistant uses your photo library to choose images to extract text from, pick a page to sign, add a receipt to scan, and — in Storage Studio — to find duplicates, screenshots, large files, blurry shots and near-identical photos so you can remove the copies you choose. Photos are analysed on this device and none are uploaded or deleted without your confirmation. Storage Studio needs \"All Photos\" to cover your whole library."
+          "photosPermission": "Paper AI Assistant uses your photo library to choose images to extract text from, pick a page to sign, add a receipt to scan, and \u2014 in Storage Studio \u2014 to find duplicates, screenshots, large files, blurry shots and near-identical photos so you can remove the copies you choose. Photos are analysed on this device and none are uploaded or deleted without your confirmation. Storage Studio needs \"All Photos\" to cover your whole library."
         }
       ],
       [
@@ -66,19 +65,24 @@
       [
         "expo-media-library",
         {
-          "photosPermission": "Paper AI Assistant uses your photo library to choose images to extract text from, pick a page to sign, add a receipt to scan, and — in Storage Studio — to find duplicates, screenshots, large files, blurry shots and near-identical photos so you can remove the copies you choose. Photos are analysed on this device and none are uploaded or deleted without your confirmation. Storage Studio needs \"All Photos\" to cover your whole library.",
+          "photosPermission": "Paper AI Assistant uses your photo library to choose images to extract text from, pick a page to sign, add a receipt to scan, and \u2014 in Storage Studio \u2014 to find duplicates, screenshots, large files, blurry shots and near-identical photos so you can remove the copies you choose. Photos are analysed on this device and none are uploaded or deleted without your confirmation. Storage Studio needs \"All Photos\" to cover your whole library.",
           "savePhotosPermission": "Paper AI Assistant needs permission to save scanned documents to your photo library.",
           "isAccessMediaLocationEnabled": true
         }
-      ]
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Face ID unlocks your Private Vault, so only you can open the documents you keep there. Paper AI never sends your Vault or your face data anywhere."
+        }
+      ],
+      "expo-crypto"
     ],
-
     "extra": {
       "eas": {
         "projectId": "b0bec626-8107-4130-95be-749068adbcd7"
       }
     },
-
     "owner": "rahulruhela",
     "assetBundlePatterns": [
       "**/*"

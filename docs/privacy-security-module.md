@@ -1,7 +1,8 @@
 # Privacy & Security Module
 
-Status: **specification only — no code changed.**
-Written: 2026-08-27.
+Status: **implemented** (roadmap Module 5), 2026-08-28. One layer is deferred and
+four decisions depart from the sketch below — see §8.
+Written: 2026-08-27. Last synced to the repository: 2026-08-28.
 
 Four features: Private Vault, Sensitive Document Detection, Privacy Score, Permission Center (specified separately in `device-permission-center.md`).
 
@@ -29,7 +30,15 @@ Key points:
 - **No server involvement.** Vault files are never uploaded, never analysed server-side, and are excluded from any export path.
 - **Fallback.** If biometry is unavailable or the user has none enrolled, `expo-local-authentication` falls back to the device passcode. If neither exists, the vault refuses to open and says why — there is no app-level PIN, which would be weaker than the OS gate and another secret to leak.
 
-Dependencies to add: `expo-local-authentication`, `expo-crypto`. Both need `app.json` plugin entries; Face ID needs `NSFaceIDUsageDescription`.
+**Dependencies as built:** `expo-local-authentication`, `expo-crypto` and
+**`@noble/ciphers`**. The third was not in this sketch and is not optional:
+`expo-crypto` provides random bytes and digests but **no symmetric cipher**, so
+there is nothing in the Expo SDK to perform the AES-256-GCM this design calls
+for. `@noble/ciphers` is audited, pure JS, and authenticated — a tampered file
+fails to decrypt rather than decrypting to garbage.
+
+Both Expo packages have `app.json` plugin entries, and `NSFaceIDUsageDescription`
+is set to the actual use rather than a category.
 
 ---
 
@@ -121,3 +130,106 @@ The existing `PrivacyScreen.js` is the privacy *policy* screen; it stays as-is a
 7. Confirm no network request originates from the vault or detection paths (assert against a request spy).
 8. Privacy score recomputes after each remediation action.
 9. `npm test`, `npx tsc --noEmit` clean.
+
+---
+
+## 8. Implementation record
+
+Written during implementation, 2026-08-28.
+
+### 8.1 What shipped
+
+| Piece | File |
+|---|---|
+| Key + cipher | `src/services/vaultCrypto.js` |
+| Vault files + encrypted index | `src/services/vaultStore.js` |
+| Classifier (pure) | `src/services/sensitiveDetection.js` |
+| Local detection store | `src/services/sensitiveStore.js` |
+| Score (pure) | `src/services/privacyScore.js` |
+| Bytes ↔ base64, shared | `src/services/base64.js` |
+| Vault UI | `src/screens/VaultScreen.js` |
+| Control panel | `src/screens/PrivacyCenterScreen.js` |
+
+Entry point: **Settings → Privacy & Security**. Detection is hooked into
+`AnalysisScreen`, because that is where the app already holds a document's text —
+no extra fetch, and the classifier is regex over a string already in memory.
+
+60 tests across `sensitiveDetection`, `privacyScore`, `vaultCrypto` and
+`vaultStore`, including one that spies on `fetch` to assert the vault paths reach
+nothing at all.
+
+### 8.2 Four departures from the sketch above
+
+**The Vault card shows existence, not an item count.** §5 asked for "locked/
+unlocked state, item count"; §7.2 says a failed authentication must not reveal
+counts. The second rule wins — and the first is unimplementable anyway, because
+the index is encrypted along with everything else, so there is no count to read
+without the key.
+
+**The notification-preview component is not scored.** iOS gives an app no way to
+read whether lock screen previews are hidden. Rather than guess or ask the user
+to self-report, the component reports that it cannot be measured and scores full
+marks. Its 10 points are therefore never lost — better than a permanent
+deduction nobody can clear.
+
+**A 25 MB per-file limit.** AES-GCM here is pure JavaScript on the JS thread, so
+encryption time is linear in file size; past roughly this point a save stops
+feeling like a save and starts feeling like a hang. The limit is stated to the
+user when they hit it, with the reason.
+
+**The PLUS AI-assisted classification pass is deferred.** §3 offers a
+credit-bearing pass with better recall on scanned images. It needs a server route,
+and roadmap §7 records Module 5 as local-only by design with no API changes. No
+matrix key was added for it, so nothing advertises a feature that does not exist.
+The on-device rule set — which is the whole of §3's requirement — is complete.
+
+### 8.3 App Review compliance record
+
+**5.1.1 — Face ID string.** `NSFaceIDUsageDescription` names the actual use:
+"Face ID unlocks your Private Vault, so only you can open the documents you keep
+there. Paper AI never sends your Vault or your face data anywhere."
+
+**No misleading security claims (§6.2).** The UI says AES-256-GCM, key in the iOS
+Keychain, this device only. Never "military-grade", never "bank-level". The
+privacy score is likewise advisory: `scoreBand` has a test asserting no band
+label ever reads "at risk", "critical", "vulnerable" or "exposed", because a
+heuristic over five measurable things does not get to tell someone they are in
+danger.
+
+**Losing the device loses the vault**, said at setup — before the first file is
+added, not after. The Keychain item is `WHEN_UNLOCKED_THIS_DEVICE_ONLY`, so it
+never syncs to iCloud and never restores elsewhere. That is the intended
+trade-off, and it has a real cost the user is entitled to know about in advance.
+
+**Adding encrypts a copy.** The app cannot delete a photo from the user's library
+and must not imply that it did. Said before the first add, and asserted by a test
+that the original file is never deleted.
+
+**Screenshots are not blocked**, because iOS has no supported API for it. The
+image preview says so rather than implying protection the vault does not have.
+
+**No permission coercion (§6.4).** A device with no passcode or biometrics gets a
+plain refusal explaining why, and an explicit statement that Paper AI will not
+offer its own PIN instead — it would be weaker than the OS lock and one more
+secret to lose. The app never claims it can change an iOS setting itself.
+
+**Data collection (§6.5).** Vault contents, detection results and the score are
+device-local. The privacy nutrition label gains no entries. `vaultStore` makes no
+network call on any path, and there is a test that fails if one appears.
+
+**2.5.1.** Public APIs only — `expo-secure-store`, `expo-local-authentication`,
+`expo-file-system`. No private entitlements, no attempt to read another app's
+data.
+
+### 8.4 Open — needs a human decision
+
+**Encryption export compliance (§6.3).** `app.json` still declares
+`ITSAppUsesNonExemptEncryption: false`, unchanged by this module. The assessment
+behind leaving it alone: the AES added here is used solely to protect the user's
+own data on their own device, which is the ordinary exemption, and no encryption
+is offered as a feature of the app to third parties.
+
+That reasoning is sound but it is a **declaration filed by the developer, not a
+code change**, and it should be confirmed against the current App Store Connect
+export-compliance questions before the next submission rather than inherited from
+the previous build by default. Flagging rather than deciding.
