@@ -286,8 +286,8 @@ Merged is not deployed. Track the two separately.
 | 1 — Entitlement policy | Yes (2026-08-28) | **No** | No schema and no new routes, but the `SUBSCRIPTION_EXPIRED` correction is server-side: until the API deploys, a never-subscribed user on a production build would still be told their plan ended. |
 | 2 — Device Permission Center | Yes (2026-08-28) | **n/a** | Mobile-only and entirely on-device: no schema, no route, no backend change at all. It is the one module here with no API dependency, so it is safe to ship in a mobile build ahead of the API deploy. |
 | 3 — Assistant | Yes (2026-08-28) | **No** | The Assistant screen works only against a local backend until the API is deployed. Do not ship the mobile build to TestFlight/App Store before the API deploy. |
-| 8 — Performance pass | On `…-7-8` (2026-08-29) | **n/a** | Mobile-only, no schema, no route. Applied but unmeasured — see the spec's implementation record before trusting any of it. |
-| 7 — Voice Companion | On `…-7-8` (2026-08-29) | **No** | Migration `20260828192637` is written but **NOT applied** to `PaperAiDb`. Until it is, `/api/voice/preferences` fails at the database; the Settings panel degrades to "unavailable" rather than crashing. No new native build needed — `expo-speech` was already in the binary. |
+| 8 — Performance pass | Yes (2026-08-29) | **n/a** | Mobile-only, no schema, no route. Applied but unmeasured — see the spec's implementation record before trusting any of it. |
+| 7 — Voice Companion | Yes (2026-08-29) | **No** | Migration `20260828192637` **applied** to `PaperAiDb` on 2026-08-29; all six columns are additive and nullable, so the production build is unaffected. `/api/voice/preferences` works against a local API and 404s against production until the API deploys. No new native build needed — `expo-speech` was already in the binary. |
 | 6 — Smart Recall | Yes (2026-08-29) | **No** | Migration `20260828182850` is written but **NOT applied** to `PaperAiDb`. Until it is, `/api/recall/*` fails at the database and extraction never runs — the mobile screen degrades to "off" rather than crashing, but the feature does not exist. Apply the migration and deploy together. |
 | 5 — Privacy & Security | Yes (2026-08-28) | **n/a** | Mobile-only and entirely on-device: no schema, no route, no backend change at all. Like Module 2 it has no API dependency — but it **does** need a new native build (`expo-local-authentication`, `expo-crypto`), so the Vault does not exist in the current TestFlight binary. |
 | 4 — Smart Cleaner | Yes (2026-08-28) | **No** | The free layers (Screenshots, Large Files) and the Storage Forecast are entirely on-device and work against any backend. The two paid scans need migration `20260828120000` applied and the API deployed, or their Reserve 404s on an unpriced key. Also needs a **new native build** — `expo-image-manipulator` was added — so neither paid scan runs in the current TestFlight binary. |
@@ -297,3 +297,11 @@ subscriptions, submitted 2026-08-18 — it predates all of the above.
 
 **Release gate before any of this reaches users:** deploy `PaperAiApis`, confirm
 `GET /api/tasks` returns the new fields against production, then cut the mobile build.
+
+
+**Security audit:** dependency and secrets findings are recorded in
+`dependency-security-audit.md` (2026-08-29). Summary: the 8 `npm audit` highs
+are build-time only and unfixable — no patched `image-size` exists and the
+suggested `expo@57` upgrade would break the build without fixing them; NuGet is
+clean; and live credentials that were committed to the API repo have been
+untracked, but **not yet rotated**.
