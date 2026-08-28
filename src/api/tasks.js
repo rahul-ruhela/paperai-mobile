@@ -29,7 +29,7 @@ export async function listTasks({ source, status } = {}) {
  * false` — the flag only decides whether the UI shows a time.
  */
 export async function createTask(title, documentId = null, fields = {}) {
-  const { description, priority, dueAtUtc, dueTimeSet, repeat } = fields;
+  const { description, priority, dueAtUtc, dueTimeSet, repeat, voiceEnabled } = fields;
 
   const { data } = await api.post("/api/tasks", {
     title,
@@ -39,6 +39,8 @@ export async function createTask(title, documentId = null, fields = {}) {
     dueAtUtc,
     dueTimeSet,
     repeat,
+    // Voice Companion per-task override. null = follow the global setting.
+    voiceEnabled,
   });
   return data;
 }

@@ -7,8 +7,23 @@ import { API } from "../constants/api";
 // ---------------------------------------------------------------------------
 export const api = axios.create({
     baseURL: API.BASE_URL,
-    timeout: 30000, // 30 s — enough for all endpoints; AI processing is async on the backend
+    // The safe default: uploads and AI calls legitimately take this long.
+    timeout: 30000,
 });
+
+/**
+ * A shorter deadline for the small reads that gates and lists wait on
+ * (M4 in docs/performance-optimization-plan.md).
+ *
+ * Spread into a per-call config: `api.get(url, { ...FAST })`.
+ *
+ * The 30 s default is right for an upload and wrong for
+ * GET /api/entitlements/me — a hung request there blocks whatever feature gate
+ * is waiting on it for half a minute, when the app already knows how to fall
+ * back to the FREE snapshot in one. Failing fast IS the better answer for a
+ * request whose failure has a good default.
+ */
+export const FAST = { timeout: 10000 };
 
 // ---------------------------------------------------------------------------
 // Request interceptor — attach JWT

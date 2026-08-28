@@ -1,6 +1,8 @@
 # Performance Optimization Plan
 
-Status: **analysis only — no code changed. No features added.**
+Status: **partially applied** (roadmap Module 8), 2026-08-29. No features added.
+Six items are done; the rest are deliberately not, and the measurement gate
+this document sets for itself is **not met**. See §Implementation record.
 Written: 2026-08-27. Measured against the repo as it stands (`src/` ≈ 17.5k lines, 26 screens).
 
 Each item: problem → location → solution → expected improvement.
@@ -135,3 +137,67 @@ No item ships without a before-and-after number; "feels faster" is not a result.
 ## Suggested order
 
 C1 → C2 → C3 (list and scan performance, the user-visible ones) → H1, H2 (startup and request volume) → H3, H4, H5 → M1–M4 → L1–L3.
+
+---
+
+## Implementation record
+
+Written 2026-08-29.
+
+### The measurement gate is not met, and that matters
+
+This plan's own rule is: *"No item ships without a before-and-after number;
+'feels faster' is not a result."*
+
+**No numbers were captured.** The work below was done in a development
+environment with no physical device, no release build, and no Instruments run.
+Every item was chosen because the mechanism is understood and the change is
+small, not because it was measured — which is a weaker basis than this document
+asks for, and is stated here rather than quietly skipped.
+
+What that means practically: these are safe, conventional changes that should not
+regress anything, and several are verified by tests. But "should not regress" is
+not "measured to improve", and the table in *Measurement plan* above is still
+the work that proves any of it. Treat the items below as applied-but-unproven.
+
+### Applied
+
+| Item | What was done |
+|---|---|
+| **C1** *(partly, in Module 4)* | The scan engine left `JunkWiperScanScreen` for `services/cleanerService.js`. The screen lost ~140 lines and became a consumer. The **progress throttling** half of C1 is not done. |
+| **C2** *(partly)* | `AiChatScreen`'s `Bubble` is now `React.memo`, with `renderItem` hoisted into `useCallback`. A chat re-renders on every keystroke in the composer; before this each keystroke re-rendered every bubble on screen. `TaskCard` and `SegmentedTabs` were already memoised. |
+| **C3** | Windowing props on the two lists that grow with use — Documents and the chat. **No `getItemLayout`**: those rows have variable heights, and a wrong constant there causes scroll jumps far worse than the measurement it saves. |
+| **H1** | `ensureExpoGoTestCredits` and `registerForPushNotifications` moved behind `InteractionManager.runAfterInteractions`. They were running between the token read and `setReady`, putting two network calls in front of the UI appearing. Both are idempotent and neither's result was ever used. |
+| **H2** | Consumers now share one snapshot via a subscriber set in `entitlementService`, and `invalidateEntitlements()` re-fetches and publishes. |
+| **M4** | A `FAST` (10 s) per-call timeout on the small GETs that gates wait on — entitlements, credit balance, voice and recall preferences. The 30 s blanket default is right for an upload and wrong for a request whose failure has a good default. |
+
+`useAccessTier`'s return shape is unchanged, so nothing that consumes it —
+`useFeatureAccess`, `FeatureLock`, or any screen behind them — needed editing.
+`__tests__/entitlementSharing.test.js` covers the sharing, the publish after a
+purchase, unsubscribe, a throwing listener, and the offline fallbacks.
+
+### One deliberate deviation
+
+H2 asked for a React context provider. It was built as a **subscriber set in the
+service** instead. Same two outcomes — one shared snapshot, and a refresh that
+reaches every screen — without adding a provider that every screen must then be
+rendered underneath. A gate that silently reads a default because it mounted
+outside a provider is a worse failure than the one being fixed, and this design
+cannot produce it.
+
+### Not applied, and why
+
+- **C1 (progress throttling)**, **H3** (stale-while-revalidate on focus),
+  **H4** (`reminders.json` write-behind), **H5** (stopping animation loops on
+  blur), **M1**–**M3**, **L1**, **L3**: each changes behaviour in a way that
+  wants a measurement to justify it and a device to verify it. Applying them
+  blind would be exactly the "feels faster" this document forbids.
+- **L2** is **already satisfied**: `src/` contains zero `console.log` calls. The
+  item was written against an earlier state of the tree.
+
+### Housekeeping noticed but not touched
+
+`src/ui/` contains ten untracked Finder duplicates (`TaskCard 2.js`,
+`tokens 2.js`, and so on). Nothing imports them and none is in git, so they are
+local working-directory cruft rather than repository content — safe to delete,
+but they are the developer's files and were left alone.

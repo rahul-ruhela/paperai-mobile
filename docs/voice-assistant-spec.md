@@ -1,8 +1,8 @@
 # AI Voice Companion — Specification
 
-Status: **specification only — no code changed.**
-Written: 2026-08-27. Last reviewed: 2026-08-28. Tier: **ADVANCE** (Plus gets a
-locked preview). Depends on: Assistant module (`Description`) — **satisfied**, so
+Status: **implemented** (roadmap Module 7), 2026-08-29. Tier: **ADVANCE** (Plus
+gets an audible preview). See §10.
+Written: 2026-08-27. Last synced to the repository: 2026-08-29. Depends on: Assistant module (`Description`) — **satisfied**, so
 this module is unblocked.
 
 Already provided by Module 1 (entitlement policy) — do **not** rebuild these:
@@ -170,3 +170,94 @@ Plus one column on `Tasks`: `VoiceEnabled bit null` for the per-task override (n
 7. Notifications denied → no crash; Settings reflects the state.
 8. Per-task override beats the global setting in both directions.
 9. `npm test`, `npx tsc --noEmit`, `dotnet build` clean.
+
+---
+
+## 10. Implementation record
+
+Written during implementation, 2026-08-29.
+
+### 10.1 The conflict in §2, resolved
+
+§2 asked this module to settle a contradiction it inherited: the tier table says
+FREE and ESSENTIAL get "no voice", but Module 3 had already shipped a speaker
+button on every task card — ungated, on every tier, at the owner's explicit
+request.
+
+**Resolved in favour of what shipped.** The speaker button stays Free.
+
+Taking a working feature away from users who already have it, so it can be sold
+back to them, is a worse thing to do than leaving one tier boundary softer than a
+table predicted. Pressing a button to hear the task in front of you is also not
+the companion: `voice_companion` (ADVANCE) now gates what is genuinely new —
+reminders that speak themselves, choosing a voice, speed and tone, and the
+per-task override. The Settings panel says this in as many words, because a user
+seeing a locked "Voice Companion" panel would otherwise reasonably conclude the
+button they already use is being taken away.
+
+`taskSpeech.js` was **not** rewritten to §1's rules either. It answers a different
+question — "read me this task", including its due date, repeat and status — and
+the companion's reminder phrasing lives in `voiceService.js` beside it.
+`voiceService` delegates the synthesiser lifecycle to `taskSpeech` rather than
+touching `Speech` twice, so the card button and a spoken reminder cannot talk
+over each other.
+
+### 10.2 What shipped
+
+**Backend** — five nullable columns on `UserNotificationPreferences`, one on
+`Tasks`, `Controllers/VoiceController.cs`, migration
+`20260828192637_AddVoicePreferences`. No credit key: synthesis is on-device with
+the system's own voices, and charging for that would be charging for nothing.
+
+**Mobile** — `src/services/voiceService.js` (composition + playback),
+`src/services/voicePlayback.js` (the notification bridge), `src/api/voice.js`,
+`src/ui/VoiceSettingsSection.js`, the three-way override in `TaskEditorSheet`,
+and the two speech hooks in `App.js`.
+
+32 mobile tests and 7 backend tests.
+
+### 10.3 Details worth knowing
+
+**Nothing is generated.** Every word the companion says is a fixed template or a
+stored field. There is no model anywhere in this path, so it cannot invent a
+detail about someone's day — which is what makes it safe to speak aloud.
+
+**The sentence is composed at schedule time** and carried in the notification
+payload, because iOS will not run app code when a notification is delivered in
+the background. Playback needs no network, works offline, and works when the app
+was terminated between scheduling and firing.
+
+**Spoken once.** A foreground fire speaks, and tapping that same banner does not
+repeat it — `voicePlayback` checks the synthesiser is not already mid-sentence on
+the same payload.
+
+**URLs and emoji are stripped** before speaking. A URL read character by
+character is thirty seconds of noise, and an emoji is either announced by name or
+produces a dead pause.
+
+**Proper nouns keep their capital.** "You mentioned that the final report…" reads
+better lowered; "priya has the keys" mangles someone's name. Only an allowlist of
+function words is lowered — caught by a test, after the first implementation got
+it wrong.
+
+**Preferences are asymmetric, like Smart Recall's.** `GET` is open and `PUT` is
+open for turning voice *off*; only enabling it requires Advance. A lapsed
+subscriber must always be able to silence the app.
+
+### 10.4 App Review
+
+No microphone, anywhere. Nothing is recorded, no `NSMicrophoneUsageDescription`
+is needed, and no privacy-manifest entry changes. `UIBackgroundModes` is
+untouched — still `remote-notification` only. No critical/time-sensitive
+interruption level is requested; that entitlement needs Apple's approval and this
+use case does not justify asking. No audio reaches the server, and nothing about
+this module adds a privacy-label entry.
+
+Voices are labelled with whatever the OS reports. The app does not invent a
+gender, a persona or a name for a system voice.
+
+### 10.5 Not built
+
+`expo-speech` ships no config plugin, so — as §3 already corrected — there is no
+`app.json` entry, and no new native dependency. Nothing in this module is
+outstanding.

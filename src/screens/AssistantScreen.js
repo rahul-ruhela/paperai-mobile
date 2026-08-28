@@ -40,6 +40,9 @@ import {
 import { useUpgradePrompt } from "../ui/FeatureLock";
 import { speakTask, stopSpeaking } from "../services/taskSpeech";
 import { getRecallPreferences, listMemories } from "../api/recall";
+import { getVoicePreferences } from "../api/voice";
+import { composeSentence, shouldSpeak } from "../services/voiceService";
+import { api } from "../api/client";
 
 /**
  * AssistantScreen — the Assistant tab.
@@ -257,6 +260,37 @@ export default function AssistantScreen({ navigation }) {
         }
     }
 
+    // Voice Companion (Module 7 §4). The sentence is composed HERE, at schedule
+    // time, and carried in the notification payload — iOS will not run app code
+    // when a notification is delivered in the background, so anything not
+    // already in the payload does not exist by the time it fires.
+    //
+    // Composed only when the user will actually hear it, so a payload never
+    // carries task text for a feature that is off. Failures return null and the
+    // reminder schedules exactly as it does today.
+    async function spokenFor(task) {
+        try {
+            const prefs = await getVoicePreferences();
+            if (!shouldSpeak(task, { enabled: prefs?.enabled, available: prefs?.available })) {
+                return null;
+            }
+            const profile = await api
+                .get("/api/profile")
+                .then((r) => r.data)
+                .catch(() => null);
+            const firstName = String(profile?.name ?? "").trim().split(" ")[0] ?? "";
+            return composeSentence(task, { firstName, tone: prefs?.tone }) || null;
+        } catch {
+            return null;
+        }
+    }
+
+    /** Everything the two optional notification decorations need, in one await. */
+    async function alertExtrasFor(task) {
+        const [recall, spoken] = await Promise.all([recallFor(task?.id), spokenFor(task)]);
+        return { ...recall, spoken };
+    }
+
     async function quickAdd() {
         const clean = title.trim();
         if (!clean) return;
@@ -294,7 +328,7 @@ export default function AssistantScreen({ navigation }) {
                         title: next.title,
                         description: next.description,
                         dueAtUtc: next.dueAtUtc,
-                        ...(await recallFor(next.id)),
+                        ...(await alertExtrasFor(next)),
                     });
                     // `past` only means the next occurrence is already overdue —
                     // not worth interrupting a tick-the-box gesture with an alert.
@@ -446,7 +480,7 @@ export default function AssistantScreen({ navigation }) {
                         title: fields.title,
                         description: fields.description,
                         dueAtUtc: fields.dueAtUtc,
-                        ...(await recallFor(taskId)),
+                        ...(await alertExtrasFor({ ...fields, id: taskId })),
                     });
                     if (result?.error === "past") {
                         Alert.alert(
@@ -520,7 +554,7 @@ export default function AssistantScreen({ navigation }) {
                 title: task.title,
                 description: task.description,
                 dueAtUtc: until.toISOString(),
-                ...(await recallFor(task.id)),
+                ...(await alertExtrasFor(task)),
             });
 
             if (result?.error === "past") {

@@ -1,7 +1,7 @@
-import { api } from "./client";
+import { api, FAST } from "./client";
 
 export async function getCreditsBalance() {
-    const { data } = await api.get("/api/credits/balance");
+    const { data } = await api.get("/api/credits/balance", FAST);
     return data; // { credits }
 }
 

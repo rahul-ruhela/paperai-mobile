@@ -162,10 +162,6 @@ export default function TaskEditorSheet({
     const [dueDate, setDueDate] = useState(null); // local Date, midnight
     const [timeKey, setTimeKey] = useState("none");
     const [repeat, setRepeat] = useState("NONE");
-    // Voice Companion per-task override (Module 7 §5). Three states: null means
-    // "follow my global setting", which is the default and what most tasks stay
-    // on — so the control is a three-way, not a switch.
-    const [voiceEnabled, setVoiceEnabled] = useState(null);
     const [showCalendar, setShowCalendar] = useState(false);
     const [error, setError] = useState("");
 
@@ -178,7 +174,6 @@ export default function TaskEditorSheet({
         setDescription(task?.description ?? "");
         setPriority(task?.priority ? String(task.priority).toUpperCase() : "");
         setRepeat(task?.repeat ? String(task.repeat).toUpperCase() : "NONE");
-        setVoiceEnabled(task?.voiceEnabled ?? null);
         setTimeKey(timeKeyFor(task?.dueAtUtc, task?.dueTimeSet));
         setShowCalendar(false);
         setError("");
@@ -228,7 +223,6 @@ export default function TaskEditorSheet({
             dueTimeSet: dueDate ? minutes != null : null,
             // The API cannot tell "left alone" from "cleared" by a null, so say so.
             clearDueAt: hadDueDate && !dueDate,
-            voiceEnabled,
         });
     }
 
@@ -368,37 +362,6 @@ export default function TaskEditorSheet({
                                             active && styles.chipActive,
                                             !advanced && option.key !== "NONE" && styles.chipLocked,
                                         ]}
-                                        accessibilityRole="button"
-                                        accessibilityState={{ selected: active }}
-                                    >
-                                        <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                                            {option.label}
-                                        </Text>
-                                    </Pressable>
-                                );
-                            })}
-                        </View>
-
-                        {/* Voice Companion per-task override (Module 7 §5).
-                            Three choices rather than a switch, because "follow
-                            my setting" is a real and common answer — and it is
-                            the default, so most tasks never leave it. */}
-                        <View style={[styles.labelRow, { marginTop: 14 }]}>
-                            <Text style={[styles.label, { marginTop: 0 }]}>Speak this reminder</Text>
-                        </View>
-
-                        <View style={styles.chipRow}>
-                            {[
-                                { key: null, label: "Use my setting" },
-                                { key: true, label: "Always" },
-                                { key: false, label: "Never" },
-                            ].map((option) => {
-                                const active = voiceEnabled === option.key;
-                                return (
-                                    <Pressable
-                                        key={String(option.key)}
-                                        onPress={() => setVoiceEnabled(option.key)}
-                                        style={[styles.chip, active && styles.chipActive]}
                                         accessibilityRole="button"
                                         accessibilityState={{ selected: active }}
                                     >
