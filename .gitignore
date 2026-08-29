@@ -47,3 +47,6 @@ src/appstorekey/
 /ios
 /android
 /.vs
+
+# Local EAS build artifacts (eas build --local --output ./build/…)
+/build/
