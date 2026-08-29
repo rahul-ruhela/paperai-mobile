@@ -76,26 +76,33 @@ import { usePhotoPermission } from "../hooks/usePhotoPermission";
 const SAMPLE_LIMIT = 2000;
 
 const MODES = {
-    // The merged layer: screenshots, blurry shots and near-identical duplicates
-    // in ONE pass for 3 credits.
+    // The merged PAID layer: blurry shots and near-identical duplicates in ONE
+    // pass for 3 credits.
     //
-    // Merging is not just a menu change — it is cheaper. Blurry and similar
-    // already shared a single 64x64 sample per photo, so running them together
-    // costs the same analysis as running either alone, and screenshots are a
-    // filename check on top. Charged once instead of twice.
+    // Merging is not just a menu change — it is cheaper. Both already shared a
+    // single 64x64 sample per photo, so running them together costs the same
+    // analysis that running either alone did. Charged once instead of twice.
     //
-    // The three separate modes below are KEPT: the App Store build in review
+    // Screenshots are deliberately NOT here. That scan is free, on-device and
+    // needs no image analysis at all — it is a filename check — so folding it
+    // into a paid scan would be charging for something the app gives away.
+    //
+    // The two separate paid modes below are KEPT: the App Store build in review
     // still routes to them, and their credit keys are still seeded server-side.
     photos: {
         title: "Photo Cleanup",
         featureKey: "photo_cleanup",
         creditKey: "photo_cleanup_scan",
         icon: "sparkles-outline",
-        blurb: "Finds screenshots, blurry shots and near-identical photos in one pass. Every photo is analysed on this device — nothing is uploaded.",
-        empty: "Nothing to clean up. No screenshots, blurry shots or near-identical photos found.",
+        blurb: "Finds blurry shots and near-identical photos in one pass. Every photo is analysed on this device — nothing is uploaded.",
+        empty: "Nothing to clean up. No blurry or near-identical photos found.",
         noun: "item",
         grouped: true,
-        finds: ["Screenshots you no longer need", "Blurry and out-of-focus shots", "Near-identical photos, keeping the best"],
+        finds: [
+            "Blurry and out-of-focus shots",
+            "Near-identical photos, keeping the best",
+            "Screenshots stay free in their own scan",
+        ],
     },
     screenshots: {
         title: "Screenshots",
@@ -274,27 +281,13 @@ export default function StorageScanScreen({ route, navigation }) {
             if (mode === MODES.photos) {
                 step("Sorting what it found…", 96);
 
-                // Order matters: a photo must appear ONCE. A blurry screenshot
-                // is reported as a screenshot, and a photo already inside a
-                // similar-group is not also listed as blurry — otherwise
-                // selecting both rows would try to delete the same asset twice
-                // and the freed-bytes total would double-count it.
+                // Order matters: a photo must appear ONCE. A photo already
+                // inside a similar-group is not also listed as blurry —
+                // otherwise selecting both rows would try to delete the same
+                // asset twice and the freed-bytes total would double-count it.
                 const claimed = new Set();
 
-                const shots = findScreenshots(sampled).map((a) => {
-                    claimed.add(a.id);
-                    return {
-                        id: a.id,
-                        label: a.filename || "Screenshot",
-                        subtitle: `Screenshot · ${formatSize(a.fileSize)}`,
-                        group: "Screenshots",
-                        bytes: a.fileSize ?? 0,
-                        uri: a.localUri ?? a.uri,
-                        assetIds: [a.id],
-                    };
-                });
-
-                const groups = groupSimilarByHash(sampled.filter((a) => !claimed.has(a.id)));
+                const groups = groupSimilarByHash(sampled);
                 const similar = groups.map((g) => {
                     g.assetIds.forEach((id) => claimed.add(id));
                     return {
@@ -323,7 +316,7 @@ export default function StorageScanScreen({ route, navigation }) {
                         assetIds: [a.id],
                     }));
 
-                built = [...shots, ...similar, ...blurry];
+                built = [...similar, ...blurry];
             } else if (mode === MODES.blurry) {
                 step("Scoring sharpness…", 96);
                 built = sampled

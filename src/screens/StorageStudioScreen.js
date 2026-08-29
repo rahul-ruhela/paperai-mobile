@@ -39,15 +39,20 @@ import { useFeatureAccess } from "../hooks/useFeatureAccess";
  * than it speaks. See projectStorage.
  */
 
-// Three layers, not five.
+// Four layers, not five.
 //
-// Screenshots, Blurry Photos and Similar Photos were three separate scans over
-// the SAME photo library, and the two paid ones already shared one 64x64 sample
-// per photo — so running them apart charged twice for work that happens once.
-// They are now a single "Photo Cleanup" pass at 3 credits.
+// Blurry Photos and Similar Photos were two separate paid scans over the SAME
+// photo library, and both already shared one 64x64 sample per photo — so
+// running them apart charged twice for work that happens once. They are now a
+// single "Photo Cleanup" pass at 3 credits.
 //
-// The three old modes still exist in StorageScanScreen and their credit keys
-// are still seeded server-side: the App Store build in review routes to them.
+// Screenshots stays its own FREE layer. It needs no image analysis at all (it
+// is a filename check), so there is nothing to save by folding it in and a
+// free feature would have been taken away to do it.
+//
+// The two old paid modes still exist in StorageScanScreen and their credit
+// keys are still seeded server-side: the App Store build in review routes to
+// them and reserves against them.
 const LAYERS = [
     {
         key: "duplicates",
@@ -67,6 +72,16 @@ const LAYERS = [
         tone: "accentText",
         route: "StorageScan",
         params: { mode: "photos" },
+    },
+    {
+        key: "screenshots",
+        featureKey: "screenshot_cleaner",
+        title: "Screenshots",
+        subtitle: "Every screenshot on this device, largest first — free",
+        icon: "phone-portrait-outline",
+        tone: "successText",
+        route: "StorageScan",
+        params: { mode: "screenshots" },
     },
     {
         key: "large",
