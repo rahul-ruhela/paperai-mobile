@@ -40,6 +40,7 @@ import {
     enumerateAssets,
     findScreenshots,
     formatSize,
+    formatItemSize,
     groupSimilarByHash,
     isVideoAsset,
 } from "../services/cleanerService";
@@ -239,7 +240,7 @@ export default function StorageScanScreen({ route, navigation }) {
             built = findScreenshots(enriched).map((a) => ({
                 id: a.id,
                 label: a.filename || "Screenshot",
-                subtitle: formatSize(a.fileSize),
+                subtitle: formatItemSize(a.fileSize ?? 0),
                 bytes: a.fileSize ?? 0,
                 uri: a.localUri ?? a.uri,
                 assetIds: [a.id],
@@ -250,7 +251,7 @@ export default function StorageScanScreen({ route, navigation }) {
                 band.items.map((a) => ({
                     id: a.id,
                     label: a.filename || "Large file",
-                    subtitle: `${formatSize(a.fileSize)}`,
+                    subtitle: formatItemSize(a.fileSize ?? 0),
                     group: band.label,
                     bytes: a.fileSize ?? 0,
                     uri: a.localUri ?? a.uri,
@@ -309,7 +310,7 @@ export default function StorageScanScreen({ route, navigation }) {
                     .map((a) => ({
                         id: a.id,
                         label: a.filename || "Photo",
-                        subtitle: `Blurry · ${formatSize(a.fileSize)}`,
+                        subtitle: `Blurry · ${formatItemSize(a.fileSize ?? 0)}`,
                         group: "Blurry photos",
                         bytes: a.fileSize ?? 0,
                         uri: a.localUri ?? a.uri,
@@ -327,7 +328,7 @@ export default function StorageScanScreen({ route, navigation }) {
                     .map((a) => ({
                         id: a.id,
                         label: a.filename || "Photo",
-                        subtitle: `Blurry · ${formatSize(a.fileSize)}`,
+                        subtitle: `Blurry · ${formatItemSize(a.fileSize ?? 0)}`,
                         bytes: a.fileSize ?? 0,
                         uri: a.localUri ?? a.uri,
                         assetIds: [a.id],

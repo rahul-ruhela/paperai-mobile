@@ -38,6 +38,17 @@ export function formatSize(bytes) {
 }
 
 /**
+ * Size label for a single item, where 0 means "the API would not tell us".
+ *
+ * `formatSize` is right for totals — a total of nothing really is 0 MB — but on
+ * one row it reads as a claim that the file is empty. An unmeasurable asset says
+ * so instead.
+ */
+export function formatItemSize(bytes) {
+    return bytes > 0 ? formatSize(bytes) : "Size unavailable";
+}
+
+/**
  * Duplicate strategies, in the order they are trusted. The order matters: an
  * asset is claimed by the first strategy that groups it, so the most reliable
  * signal must run first or a burst-shot guess would steal an exact match.
@@ -489,6 +500,7 @@ export function buildAnalysisPayload({ totalAssets, totalBytes, freeBytes, dupli
 // ─────────────────────────────────────────────────────────────────────────────
 
 import * as MediaLibrary from "expo-media-library";
+import * as FileSystem from "expo-file-system/legacy";
 
 export const PAGE_SIZE = 500;
 /** getAssetInfoAsync batch size. Larger batches stall the JS thread (spec §6). */
@@ -537,9 +549,44 @@ export async function enumerateAssets({ onCount, shouldCancel } = {}) {
 }
 
 /**
+ * The byte size of one enriched asset, measured off disk when the media API
+ * declines to say.
+ *
+ * `getAssetInfoAsync` fills in `fileSize` on Android but not on iOS, where the
+ * Photos framework exposes no size on the asset itself — which is why every
+ * screenshot was reporting "0 MB". The honest way to get it is to stat the
+ * file the asset resolves to: `localUri` is a real `file://` path once
+ * `getAssetInfoAsync` has run, and `getInfoAsync({ size: true })` reads its
+ * size without decoding the image.
+ *
+ * Returns 0 when the size genuinely cannot be read (a cloud-only asset that has
+ * not been materialised, a `ph://` uri with no local file). 0 keeps the existing
+ * contract: it means "unknown", and every strategy above already refuses to make
+ * claims about an asset whose size is unknown rather than guessing one.
+ */
+export async function measureAssetSize(asset) {
+    const reported = asset?.fileSize ?? 0;
+    if (reported > 0) return reported;
+
+    const uri = asset?.localUri || asset?.uri;
+    if (!uri || !uri.startsWith("file://")) return 0;
+
+    try {
+        const info = await FileSystem.getInfoAsync(uri, { size: true });
+        return info?.exists && Number.isFinite(info.size) ? info.size : 0;
+    } catch {
+        return 0; // unreadable — reported as unknown, never invented
+    }
+}
+
+/**
  * Fills in `fileSize` (and, on iOS, `mediaSubtypes`) in batches. An asset whose
  * info call fails keeps its bare form rather than dropping out of the scan — it
  * simply cannot participate in the size-based strategies.
+ *
+ * Anything the media API leaves without a size is measured off disk by
+ * `measureAssetSize`, in the same batch, so iOS results carry real megabytes
+ * instead of a library-wide 0 MB.
  */
 export async function enrichAssets(assets, { onProgress, shouldCancel } = {}) {
     const enriched = [];
@@ -547,7 +594,12 @@ export async function enrichAssets(assets, { onProgress, shouldCancel } = {}) {
         checkCancelled(shouldCancel);
         const batch = assets.slice(i, i + INFO_BATCH);
         const infos = await Promise.all(
-            batch.map((a) => MediaLibrary.getAssetInfoAsync(a).catch(() => a))
+            batch.map(async (a) => {
+                const info = await MediaLibrary.getAssetInfoAsync(a).catch(() => a);
+                if ((info?.fileSize ?? 0) > 0) return info;
+                const fileSize = await measureAssetSize(info);
+                return fileSize > 0 ? { ...info, fileSize } : info;
+            })
         );
         enriched.push(...infos);
         onProgress?.(Math.min(1, (i + INFO_BATCH) / Math.max(assets.length, 1)));

@@ -38,7 +38,13 @@ import * as FileSystem from "expo-file-system/legacy";
 
 import GradientScreen from "../ui/GradientScreen";
 import SignaturePad, { strokesToSvg, renderStroke } from "../ui/SignaturePad";
-import { listSignatures, saveSignature, deleteSignature } from "../services/signatureStore";
+import {
+    listSignatures,
+    saveSignature,
+    updateSignature,
+    deleteSignature,
+    MAX_SAVED,
+} from "../services/signatureStore";
 import { useTheme } from "../ui/ThemeProvider";
 import useThemedStyles from "../ui/useThemedStyles";
 
@@ -145,10 +151,17 @@ export default function SignatureScreen({ navigation, route }) {
     // When true, confirming the pad swaps the strokes of the signature already
     // on the page instead of dropping a second one in the middle.
     const [replacing, setReplacing] = useState(false);
+    // The saved signature being redrawn, if any. Set only by the manage sheet;
+    // when it is set the pad overwrites that entry instead of adding a new one.
+    const [editingSaved, setEditingSaved] = useState(null);
+    // The saved signature being renamed, and the draft name in the field.
+    const [renaming, setRenaming] = useState(null);
+    const [nameDraft, setNameDraft] = useState("");
 
     function openPad() {
         setPadStrokes([]);
         setReplacing(false);
+        setEditingSaved(null);
         setPadOpen(true);
     }
 
@@ -156,6 +169,7 @@ export default function SignatureScreen({ navigation, route }) {
     function openPadToReplace() {
         setPadStrokes([]);
         setReplacing(true);
+        setEditingSaved(null);
         setPadOpen(true);
     }
 
@@ -203,6 +217,17 @@ export default function SignatureScreen({ navigation, route }) {
             Alert.alert("Nothing drawn", "Draw your signature first.");
             return;
         }
+
+        // Redrawing a saved signature overwrites that entry rather than adding a
+        // sixth one that looks almost the same as the one it was meant to fix.
+        if (editingSaved) {
+            await updateSignature(editingSaved.id, { strokes });
+            await refreshSaved();
+            setEditingSaved(null);
+            setPadOpen(false);
+            return;
+        }
+
         if (alsoSave) {
             await saveSignature(strokes);
             await refreshSaved();
@@ -216,6 +241,46 @@ export default function SignatureScreen({ navigation, route }) {
     // rather than resetting its position — the same rule as redrawing.
     function useSaved(sig) {
         placeStrokes(sig.strokes, { replace: !!placed });
+    }
+
+    /**
+     * The manage menu for one saved signature: rename it, redraw it, or delete it.
+     *
+     * Long-press used to go straight to Delete, which made the only edit anyone
+     * could make to a saved signature a destructive one. Delete is still here and
+     * still confirms separately — the extra tap is the point.
+     */
+    function manageSaved(sig) {
+        Alert.alert(
+            sig.name || "Saved signature",
+            "What would you like to do with this signature?",
+            [
+                { text: "Rename", onPress: () => openRename(sig) },
+                { text: "Redraw", onPress: () => openPadToEditSaved(sig) },
+                { text: "Delete", style: "destructive", onPress: () => removeSaved(sig) },
+                { text: "Cancel", style: "cancel" },
+            ]
+        );
+    }
+
+    function openPadToEditSaved(sig) {
+        setPadStrokes([]);
+        setReplacing(false);
+        setEditingSaved(sig);
+        setPadOpen(true);
+    }
+
+    function openRename(sig) {
+        setNameDraft(sig.name || "");
+        setRenaming(sig);
+    }
+
+    async function confirmRename() {
+        if (!renaming) return;
+        await updateSignature(renaming.id, { name: nameDraft });
+        setRenaming(null);
+        setNameDraft("");
+        await refreshSaved();
     }
 
     function removeSaved(sig) {
@@ -410,26 +475,53 @@ export default function SignatureScreen({ navigation, route }) {
                     {/* Saved signatures */}
                     {saved.length > 0 && (
                         <View style={styles.savedWrap}>
-                            <Text style={styles.sectionLabel}>Saved signatures</Text>
+                            <View style={styles.savedHead}>
+                                <Text style={styles.sectionLabel}>Saved signatures</Text>
+                                <Text style={styles.savedCount}>
+                                    {saved.length} of {MAX_SAVED}
+                                </Text>
+                            </View>
                             <View style={styles.savedRow}>
                                 {saved.map((s) => (
-                                    <Pressable
-                                        key={s.id}
-                                        onPress={() => useSaved(s)}
-                                        onLongPress={() => removeSaved(s)}
-                                        style={styles.savedChip}
-                                        accessibilityRole="button"
-                                        accessibilityLabel="Use saved signature. Long press to delete."
-                                    >
-                                        <MiniSignature strokes={s.strokes} color={theme.colors.textPrimary} />
-                                    </Pressable>
+                                    <View key={s.id} style={styles.savedItem}>
+                                        <Pressable
+                                            onPress={() => useSaved(s)}
+                                            onLongPress={() => manageSaved(s)}
+                                            style={styles.savedChip}
+                                            accessibilityRole="button"
+                                            accessibilityLabel={`Use ${s.name || "saved signature"}. Long press to rename, redraw or delete.`}
+                                        >
+                                            <MiniSignature strokes={s.strokes} color={theme.colors.textPrimary} />
+                                        </Pressable>
+                                        <Pressable
+                                            onPress={() => manageSaved(s)}
+                                            hitSlop={8}
+                                            style={styles.savedManage}
+                                            accessibilityRole="button"
+                                            accessibilityLabel={`Manage ${s.name || "saved signature"}`}
+                                        >
+                                            <Text style={styles.savedName} numberOfLines={1}>
+                                                {s.name || "Unnamed"}
+                                            </Text>
+                                            <Ionicons
+                                                name="ellipsis-horizontal"
+                                                size={13}
+                                                color={theme.colors.textMuted}
+                                            />
+                                        </Pressable>
+                                    </View>
                                 ))}
                             </View>
                             <Text style={styles.hint}>
                                 {placed
-                                    ? "Tap to swap the signature on the page · long-press to delete"
-                                    : "Tap to place · long-press to delete"}
+                                    ? "Tap to swap the signature on the page · tap the name to rename, redraw or delete"
+                                    : "Tap to place · tap the name to rename, redraw or delete"}
                             </Text>
+                            {saved.length >= MAX_SAVED && (
+                                <Text style={styles.hint}>
+                                    All {MAX_SAVED} slots are full — saving another replaces the oldest.
+                                </Text>
+                            )}
                         </View>
                     )}
 
@@ -449,8 +541,20 @@ export default function SignatureScreen({ navigation, route }) {
                 <View style={styles.padOverlay}>
                     <View style={styles.padSheet}>
                         <View style={styles.padHead}>
-                            <Text style={styles.padTitle}>Draw your signature</Text>
-                            <Pressable onPress={() => setPadOpen(false)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close">
+                            <Text style={styles.padTitle}>
+                                {editingSaved
+                                    ? `Redraw ${editingSaved.name || "signature"}`
+                                    : "Draw your signature"}
+                            </Text>
+                            <Pressable
+                                onPress={() => {
+                                    setPadOpen(false);
+                                    setEditingSaved(null);
+                                }}
+                                hitSlop={10}
+                                accessibilityRole="button"
+                                accessibilityLabel="Close"
+                            >
                                 <Ionicons name="close" size={22} color={theme.colors.textPrimary} />
                             </Pressable>
                         </View>
@@ -477,15 +581,43 @@ export default function SignatureScreen({ navigation, route }) {
                             style={[styles.padPrimary, padStrokes.length === 0 && { opacity: 0.45 }]}
                             accessibilityRole="button"
                         >
-                            <Text style={styles.padPrimaryText}>Save & Place</Text>
-                        </Pressable>
-                        <Pressable onPress={() => confirmPad(false)} disabled={padStrokes.length === 0} accessibilityRole="button">
-                            <Text style={[styles.padSecondaryText, padStrokes.length === 0 && { opacity: 0.45 }]}>
-                                Use once, don't save
+                            <Text style={styles.padPrimaryText}>
+                                {editingSaved ? "Save changes" : "Save & Place"}
                             </Text>
                         </Pressable>
+                        {!editingSaved && (
+                            <Pressable onPress={() => confirmPad(false)} disabled={padStrokes.length === 0} accessibilityRole="button">
+                                <Text style={[styles.padSecondaryText, padStrokes.length === 0 && { opacity: 0.45 }]}>
+                                    Use once, don't save
+                                </Text>
+                            </Pressable>
+                        )}
                     </View>
                 </View>
+            </Modal>
+
+            {/* Rename a saved signature */}
+            <Modal visible={!!renaming} animationType="fade" transparent onRequestClose={() => setRenaming(null)}>
+                <Pressable style={styles.padOverlay} onPress={() => setRenaming(null)}>
+                    <Pressable style={styles.textSheet} onPress={() => {}}>
+                        <Text style={styles.padTitle}>Name this signature</Text>
+                        <TextInput
+                            value={nameDraft}
+                            onChangeText={setNameDraft}
+                            autoFocus
+                            maxLength={40}
+                            placeholder="Work, personal, initials…"
+                            placeholderTextColor={theme.colors.placeholder}
+                            keyboardAppearance={theme.keyboardAppearance}
+                            style={styles.textInput}
+                            returnKeyType="done"
+                            onSubmitEditing={confirmRename}
+                        />
+                        <Pressable onPress={confirmRename} style={styles.padPrimary} accessibilityRole="button">
+                            <Text style={styles.padPrimaryText}>Save name</Text>
+                        </Pressable>
+                    </Pressable>
+                </Pressable>
             </Modal>
 
             {/* Text box editor */}
@@ -892,8 +1024,19 @@ const makeStyles = (t) =>
         toolText: { color: t.colors.textSecondary, fontWeight: "800", fontSize: 12 },
 
         savedWrap: { marginTop: 20 },
+        savedHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+        savedCount: { color: t.colors.textMuted, fontWeight: "700", fontSize: 11, marginBottom: 10 },
+        savedItem: { width: 96 },
+        savedManage: {
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 4,
+            paddingVertical: 5,
+        },
+        savedName: { color: t.colors.textSecondary, fontWeight: "700", fontSize: 11, maxWidth: 66 },
         sectionLabel: { color: t.colors.textPrimary, fontWeight: "900", fontSize: 13, marginBottom: 10 },
-        savedRow: { flexDirection: "row", gap: 10 },
+        savedRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
         savedChip: {
             width: 96,
             height: 54,

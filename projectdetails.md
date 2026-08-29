@@ -82,8 +82,8 @@ Two authority rules the codebase holds to:
 - Bottom tabs: **Documents** (Home) · **Upload** · **Tasks** · **Settings**
 - Pushed screens: `Process`, `Document`, `Analysis`, `Paywall`, `Profile`,
   `Analytics` (credit analytics), `Privacy`, `Terms`, `HelpCenter`,
-  `ContactSupport`, `JunkWiper`, `CameraScanner`, `CodeScanner`, `Signature`,
-  `AiChat`, `ReceiptCapture`, `Expenses`
+  `ContactSupport`, `JunkWiper`, `StorageStudio`, `StorageScan`, `CameraScanner`,
+  `CodeScanner`, `Signature`, `AiChat`, `ReceiptCapture`, `Expenses`
 - A shared `navigationRef` lets a tapped reminder notification deep-link straight
   to `Analysis` for that document. Two delivery paths, because they cover
   different launch states: `addNotificationResponseReceivedListener` catches a
@@ -171,6 +171,57 @@ results group by photo / video / document. Nothing is synthesised to pad an
 empty result, and document groups carry no size figure because the API doesn't
 expose one. Needs "All Photos" access to be complete — the permission strings in
 `app.json` say so explicitly.
+
+### 4.4b Storage Studio — the cleaner hub
+`StorageStudioScreen` (hub) + `StorageScanScreen` (scan runner) +
+`cleanerService` (engine) + `cleanerHistory` (on-device scan log). Reached from
+the Upload hub and from Settings; routes `StorageStudio` and
+`StorageScan` (params `{ mode }`). Spec: `docs/smart-cleaner-spec.md`.
+
+Four layers, not five:
+
+| Layer | Route / mode | Feature key | Cost |
+| --- | --- | --- | --- |
+| Duplicate Cleaner | `JunkWiper` | `deep_clean` | paid |
+| Photo Cleanup | `StorageScan` `mode: "photos"` | `photo_cleanup` | 3 credits |
+| Screenshots | `StorageScan` `mode: "screenshots"` | `screenshot_cleaner` | **free** |
+| Large Files | `StorageScan` `mode: "large"` | `large_video_finder` | paid |
+
+Photo Cleanup is a merge: Blurry Photos and Similar Photos were two paid scans
+over the same library that already shared one 64×64 sample per photo, so running
+them apart charged twice for work that happens once. Screenshots stayed its own
+free layer — it is a filename/subtype check with no image analysis to share, so
+folding it in would only have taken a free feature away. The two old paid modes
+still exist in `StorageScanScreen` and their credit keys are still seeded
+server-side, because the build in review routes to them.
+
+`cleanerService` is split deliberately into a **pure** section (grouping,
+banding, `averageHash`, `laplacianVariance`, `projectStorage`,
+`buildAnalysisPayload` — no native imports, fully unit-tested) and a **native**
+section (`enumerateAssets`, `enrichAssets`, `measureAssetSize` — thin wrappers
+over `expo-media-library` with paging, batching and cancellation). Two rules the
+module exists to keep honest, both App Review rules (2.3.1, accurate
+functionality) as much as product ones: **nothing is ever synthesised** (a clean
+library returns zero groups; document duplicates report no megabytes because the
+API exposes none), and **nothing here deletes anything** (deletion is the
+screen's job, behind an explicit confirm and the OS sheet).
+
+**Asset sizes on iOS.** `getAssetInfoAsync` fills in `fileSize` on Android but
+not on iOS, where the Photos framework exposes no size on the asset — which is
+why every scanned screenshot used to report `0 MB`. `enrichAssets` now falls back
+to `measureAssetSize`, which stats the file the asset resolves to
+(`FileSystem.getInfoAsync(localUri, { size: true })`) without decoding the image.
+Anything genuinely unmeasurable — a cloud-only asset, a `ph://` uri with no local
+file — stays at `0`, which every strategy already reads as *unknown* and refuses
+to make claims about. Per-row labels go through `formatItemSize`, which says
+"Size unavailable" rather than "0 MB": on a total, zero is a fact; on one row it
+reads as a claim that the file is empty. Covered by
+`__tests__/cleanerAssetSize.test.js`.
+
+The AI storage analysis endpoint receives **aggregates only** — counts, byte
+totals, band and category sizes. Never a filename, never a path, never an asset
+id, never image data. `buildAnalysisPayload` is the single choke point for that,
+and `__tests__/cleanerService.test.js` asserts the shape stays closed.
 
 ### 4.5 Code Scanner (free, on-device)
 `CodeScannerScreen` — QR plus 12 barcode symbologies (`ean13`, `upc_a`,
@@ -284,9 +335,31 @@ from `pageX/pageY` against the pad's measured origin, not `locationX/locationY`,
 which are reported relative to whichever view holds the touch and break once the
 pad has children.
 
-`signatureStore` keeps up to 3 saved signatures as raw stroke JSON in the app
-document directory (stroke data is a few KB — past SecureStore's practical
-limit, and a signature is not a credential).
+`signatureStore` keeps up to `MAX_SAVED` (5) saved signatures as raw stroke JSON
+in the app document directory (stroke data is a few KB — past SecureStore's
+practical limit, and a signature is not a credential). Entries are
+`{ id, name, strokes, createdAt, updatedAt }`.
+
+**Managing saved signatures.** Each chip can be renamed, redrawn or deleted —
+long-press the chip, or tap the name beneath it, for the manage menu.
+
+- *Rename* (`renameSignature`) — an optional label, trimmed and capped at 40
+  chars by `normaliseName`; an empty name is valid and shows as "Unnamed".
+- *Redraw* (`updateSignature(id, { strokes })`) — reopens the pad in edit mode
+  and **overwrites that entry** rather than adding a sixth one that looks almost
+  like the one it was meant to fix. An empty drawing is ignored, not saved, so a
+  redraw can never blank a signature.
+- *Delete* — still confirms separately. Long-press used to go straight to
+  Delete, which made the only available edit a destructive one.
+
+Edits keep the entry's `id`, its `createdAt` and its **position in the list**, so
+renaming does not shuffle chips someone has learned the order of; only
+`updatedAt` moves. Ids are `sig_<ms>_<random>`: the timestamp alone collided for
+two signatures saved in the same millisecond, and since every edit and delete
+looks an entry up by id, one of them would rename or delete the other. Entries
+written before names existed read back as unnamed — `listSignatures` maps them on
+read and never rewrites a file it was only asked to look at. Covered by
+`__tests__/signatureStore.test.js`.
 
 > The copy here must never claim legal validity: this produces a signature
 > *image* on a document, not a certified e-signature.
