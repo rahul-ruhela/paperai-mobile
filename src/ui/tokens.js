@@ -109,13 +109,23 @@ const lightColors = {
     // wrong together. Both schemes are defined here so a change to one is a
     // visible omission in the other.
     radarText: "#0F1B3D",
-    radarMuted: "#5B6B8C",
+    // 4.79:1 on the light radar gradient. #5B6B8C measured 4.29, which is
+    // under WCAG AA for the 12px body text this drives.
+    radarMuted: "#55647F",
     radarAccent: "#0369A1",
     radarWarn: "#B91C1C",
     radarDivider: "rgba(15,27,61,0.18)",
     // Base RGB for every radar ring, chip and fill, so one token drives
     // all their alpha variants instead of thirteen literals per scheme.
     radarTintRgb: "3,105,161",
+    // Light mode is deliberately a DIFFERENT design, not the dark radar
+    // recoloured: an opaque card with a crisp border and flat rings, rather
+    // than a glow bloomed over a near-black panel. Glow needs darkness to read
+    // as glow; on white it just looks like a smudge.
+    radarSurface: "#FFFFFF",
+    radarBorder: "rgba(15,27,61,0.14)",
+    radarRingWidth: 2,
+    radarGlowOpacity: 0,
     radarSweepFrom: "rgba(3,105,161,0)",
     radarSweepTo: "rgba(3,105,161,0.42)",
 };
@@ -195,6 +205,10 @@ const darkColors = {
     radarWarn: "#FCA5A5",
     radarDivider: "rgba(148,163,184,0.25)",
     radarTintRgb: "56,189,248",
+    radarSurface: "transparent",
+    radarBorder: "transparent",
+    radarRingWidth: 1,
+    radarGlowOpacity: 1,
     radarSweepFrom: "rgba(56,189,248,0)",
     radarSweepTo: "rgba(56,189,248,0.55)",
 };

@@ -19,9 +19,7 @@ import GradientScreen from "../ui/GradientScreen";
 import { logout, deleteAccount } from "../api/auth";
 import { fetchEntitlements, invalidateEntitlements } from "../services/entitlementService";
 import { productInfoForSku } from "../constants/api";
-import { getPushPreferences, updatePushPreferences, sendTestPush } from "../api/push";
-import { isExpoGo } from "../api/dev";
-import { registerForPushNotifications } from "../notifications/pushNotifications";
+import { getPushPreferences, updatePushPreferences } from "../api/push";
 
 const DURATION_TITLE = { weekly: "Weekly", monthly: "Monthly", yearly: "Yearly" };
 
@@ -163,15 +161,6 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
         );
     }
 
-    /**
-     * Re-registers the device token and asks the server to push to this account.
-     *
-     * Shown only in a dev build or Expo Go — but the endpoint behind it is
-     * admin-gated server-side, so it 403s for everyone else even if this UI ever
-     * became visible. It exercises the whole chain in one tap: permission →
-     * Expo token → backend → Expo relay → APNs → the notification handler.
-     */
-
     // Schedules a real local notification a minute out. Nothing about it is
     // simulated: it is the same scheduling path a task alert uses, which is the
     // only way the preview is worth anything.
@@ -211,67 +200,6 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
         Alert.alert("Could not schedule", "The test reminder was not scheduled. Please try again.");
     }
 
-    async function runTestPush() {
-        const { token, reason, detail } = await registerForPushNotifications();
-
-        if (!token) {
-            // Each reason is a genuinely different problem with a different fix,
-            // so each gets its own message rather than one vague catch-all.
-            const explain = {
-                simulator: [
-                    "Needs A Real Device",
-                    "The simulator has no connection to Apple's push service, so it cannot be given a push token. Run this on your iPhone.",
-                ],
-                "expo-go": [
-                    "Not Available In Expo Go",
-                    "Remote push notifications were removed from Expo Go in Expo SDK 53. Local reminders still work here, but a push token needs a development build or TestFlight.\n\nRun: eas build --profile development --platform ios",
-                ],
-                denied: [
-                    "Notifications Are Off",
-                    "Allow notifications for Paper AI Assistant in iOS Settings, then try again.",
-                ],
-                "no-project-id": [
-                    "Missing Project ID",
-                    "No EAS project id was found in app.json (extra.eas.projectId). Expo cannot issue a token without it.",
-                ],
-                "token-failed": [
-                    "Could Not Get A Token",
-                    `Expo refused to issue a push token.${detail ? `\n\n${detail}` : ""}`,
-                ],
-            }[reason] ?? ["Could Not Register", detail || "Unknown problem."];
-
-            Alert.alert(explain[0], explain[1]);
-            return;
-        }
-
-        if (reason === "server-failed") {
-            // The device gave us a token; the backend would not take it. Almost
-            // always means the push endpoints are not deployed yet.
-            Alert.alert(
-                "Server Did Not Accept The Token",
-                `The device issued a push token but the API rejected it (${detail}).\n\n` +
-                    "If this is a 404, the /api/push endpoints are not deployed yet."
-            );
-            return;
-        }
-        try {
-            const res = await sendTestPush();
-            Alert.alert(
-                res?.ok ? "Test Sent" : "Not Sent",
-                res?.ok
-                    ? "It should arrive in a few seconds. Leave the app open to check the foreground banner, or background it to check the lock screen."
-                    : `Expo rejected it: ${res?.error ?? "unknown"}`
-            );
-        } catch (e) {
-            Alert.alert(
-                "Test Failed",
-                e?.response?.status === 403
-                    ? "This account is not an admin, so the test endpoint is not available to it."
-                    : e?.userMessage || "Could not reach the server."
-            );
-        }
-    }
-
     function Row({ icon, title, subtitle, onPress, danger }) {
         return (
             <Pressable onPress={onPress} style={({ pressed }) => [styles.row, pressed && { opacity: 0.75 }]}>
@@ -291,7 +219,7 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
         );
     }
 
-    function AppearanceOption({ value, label, icon, hint }) {
+    function AppearanceOption({ value, label, icon, hint, caption }) {
         const selected = preference === value;
         return (
             <Pressable
@@ -313,6 +241,11 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
                 <Text style={[styles.appearanceLabel, selected && styles.appearanceLabelActive]}>
                     {label}
                 </Text>
+                {/* "System" and "Light" look identical whenever the device is
+                    set to Light — because that is what System MEANS. Without
+                    this caption that reads as a broken setting, so System says
+                    which appearance it is currently resolving to. */}
+                {caption ? <Text style={styles.appearanceCaption}>{caption}</Text> : null}
                 {/* Selection is shown by a check as well as colour, so it does
                     not rely on colour alone. */}
                 {selected ? (
@@ -484,7 +417,8 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
                         <Text style={styles.section}>Appearance</Text>
                         <Text style={styles.sectionHint}>
                             Choose how PaperAI looks. “System” follows your{" "}
-                            {Platform.OS === "ios" ? "iOS" : "device"} Display setting.
+                            {Platform.OS === "ios" ? "iOS" : "device"} Display setting, so it
+                            matches Light or Dark rather than being a third look of its own.
                         </Text>
 
                         <View style={styles.appearanceRow} accessibilityRole="radiogroup">
@@ -492,7 +426,10 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
                                 value="system"
                                 label="System"
                                 icon="phone-portrait-outline"
-                                hint="Follow the device appearance setting"
+                                hint={`Follow the device appearance setting. Currently ${
+                                    theme.isDark ? "dark" : "light"
+                                }.`}
+                                caption={theme.isDark ? "Dark now" : "Light now"}
                             />
                             <AppearanceOption
                                 value="light"
@@ -587,21 +524,6 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
                                 </Pressable>
                             ))}
                         </View>
-
-                        {/* Dev/Expo Go only. The endpoint is admin-gated on the
-                            server regardless, so this cannot be used by a normal
-                            account even if the row were visible. */}
-                        {(__DEV__ || isExpoGo()) && (
-                            <>
-                                <View style={styles.toggleDivider} />
-                                <Row
-                                    icon="paper-plane-outline"
-                                    title="Send test notification"
-                                    subtitle="Dev build only · admin accounts only"
-                                    onPress={runTestPush}
-                                />
-                            </>
-                        )}
                     </View>
 
                     <View style={styles.card}>
@@ -719,6 +641,12 @@ const makeStyles = (t) =>
     appearanceOptionActive: {
         borderColor: t.colors.primary,
         backgroundColor: t.colors.infoBg,
+    },
+    appearanceCaption: {
+        color: t.colors.textMuted,
+        fontSize: 10,
+        fontWeight: "700",
+        marginTop: 1,
     },
     appearanceLabel: {
         color: t.colors.textSecondary,

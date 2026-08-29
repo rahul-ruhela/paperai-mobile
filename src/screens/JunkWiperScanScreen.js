@@ -638,7 +638,10 @@ export default function JunkWiperScanScreen({ navigation }) {
                                 <View style={styles.idleRingOuter} />
                                 <View style={styles.idleRingInner} />
                                 <View style={styles.idleIconBox}>
-                                    <Ionicons name="search" size={36} color={theme.colors.accentText} />
+                                    {/* The wiper's own mark. "search" said nothing
+                                        about what this screen does — every scan in
+                                        the app searches. */}
+                                    <Ionicons name="color-wand" size={34} color={theme.colors.accentText} />
                                 </View>
                             </View>
                             <Text style={styles.idleTitle}>Ready to Scan</Text>
@@ -1247,19 +1250,26 @@ const makeStyles = (t) =>
     cancelBtnText: { color: t.colors.textMuted, fontWeight: "800" },
 
     // ── Premium radar scanner ──
+    // Two designs, not one design in two palettes.
+    //
+    // Dark: a glowing sonar dish on near-black — the glow IS the effect.
+    // Light: an opaque white instrument card with a crisp border and flat,
+    // heavier rings. A glow needs darkness to read as a glow; painted on white
+    // it reads as a smudge, which is what the recoloured version looked like.
     radarScreen: {
         borderRadius: 28,
         paddingVertical: 28,
         paddingHorizontal: 20,
         alignItems: "center",
         gap: 18,
-        borderWidth: 1,
-        borderColor: `rgba(${t.colors.radarTintRgb},0.18)`,
+        backgroundColor: t.colors.radarSurface,
+        borderWidth: t.isDark ? 1 : 1.5,
+        borderColor: t.isDark ? `rgba(${t.colors.radarTintRgb},0.18)` : t.colors.radarBorder,
         shadowColor: t.colors.radarText,
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.4,
-        shadowRadius: 20,
-        elevation: 8,
+        shadowOffset: { width: 0, height: t.isDark ? 10 : 4 },
+        shadowOpacity: t.isDark ? 0.4 : 0.10,
+        shadowRadius: t.isDark ? 20 : 12,
+        elevation: t.isDark ? 8 : 3,
     },
     radarStage: {
         width: 230, height: 230,
@@ -1277,8 +1287,8 @@ const makeStyles = (t) =>
         borderColor: `rgba(${t.colors.radarTintRgb},0.22)`,
     },
     radarRingOuter: { width: 220, height: 220 },
-    radarRingMid: { width: 152, height: 152, borderColor: `rgba(${t.colors.radarTintRgb},0.28)` },
-    radarRingInner: { width: 84, height: 84, borderColor: `rgba(${t.colors.radarTintRgb},0.34)` },
+    radarRingMid: { width: 152, height: 152, borderColor: `rgba(${t.colors.radarTintRgb},${t.isDark ? 0.28 : 0.5})` },
+    radarRingInner: { width: 84, height: 84, borderColor: `rgba(${t.colors.radarTintRgb},${t.isDark ? 0.34 : 0.55})` },
     radarCrossH: {
         position: "absolute", width: 220, height: 1,
         backgroundColor: `rgba(${t.colors.radarTintRgb},0.14)`,
@@ -1307,23 +1317,26 @@ const makeStyles = (t) =>
     sweepEdge: {
         position: "absolute",
         top: 0, left: 110,
-        width: 2, height: 110,
-        backgroundColor: "rgba(125,211,252,0.95)",
-        shadowColor: "#38BDF8",
+        width: t.isDark ? 2 : 2.5,
+        height: 110,
+        backgroundColor: t.colors.radarAccent,
+        // The halo only exists in dark mode; in light it would just fog the card.
+        shadowColor: t.colors.radarAccent,
         shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 1,
+        shadowOpacity: t.colors.radarGlowOpacity,
         shadowRadius: 6,
     },
     radarCenter: {
         width: 84, height: 84, borderRadius: 42,
         alignItems: "center", justifyContent: "center",
-        backgroundColor: "rgba(9,18,46,0.65)",
-        borderWidth: 1, borderColor: `rgba(${t.colors.radarTintRgb},0.4)`,
+        backgroundColor: t.isDark ? "rgba(9,18,46,0.65)" : t.colors.radarSurface,
+        borderWidth: t.isDark ? 1 : 2,
+        borderColor: `rgba(${t.colors.radarTintRgb},${t.isDark ? 0.4 : 0.55})`,
     },
-    radarPct: { color: t.colors.white, fontSize: 28, fontWeight: "900", letterSpacing: -1 },
+    radarPct: { color: t.colors.radarText, fontSize: 28, fontWeight: "900", letterSpacing: -1 },
     radarCenterLabel: { color: t.colors.radarAccent, fontSize: 10, fontWeight: "800", letterSpacing: 2 },
 
-    radarMsg: { color: "#BAE6FD", fontWeight: "700", fontSize: 14, textAlign: "center" },
+    radarMsg: { color: t.colors.radarMuted, fontWeight: "700", fontSize: 14, textAlign: "center" },
 
     categoryRow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 8 },
     categoryChip: {
@@ -1332,7 +1345,7 @@ const makeStyles = (t) =>
         borderWidth: 1, borderColor: `rgba(${t.colors.radarTintRgb},0.25)`,
         borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6,
     },
-    categoryLabel: { color: "#E0F2FE", fontWeight: "700", fontSize: 11 },
+    categoryLabel: { color: t.colors.radarText, fontWeight: "700", fontSize: 11 },
 
     radarStatsRow: {
         flexDirection: "row", alignItems: "center",
@@ -1351,7 +1364,7 @@ const makeStyles = (t) =>
         backgroundColor: "rgba(255,255,255,0.10)",
         overflow: "hidden",
     },
-    radarBarFill: { height: 5, borderRadius: 3, backgroundColor: "#38BDF8" },
+    radarBarFill: { height: 5, borderRadius: 3, backgroundColor: t.colors.radarAccent },
 
     radarSafety: {
         flexDirection: "row", alignItems: "center", gap: 7,
@@ -1359,14 +1372,14 @@ const makeStyles = (t) =>
         borderWidth: 1, borderColor: `rgba(${t.colors.radarTintRgb},0.20)`,
         borderRadius: 12, padding: 10, alignSelf: "stretch",
     },
-    radarSafetyText: { flex: 1, color: "#CBD5E1", fontSize: 12, fontWeight: "700", lineHeight: 17 },
+    radarSafetyText: { flex: 1, color: t.colors.radarMuted, fontSize: 12, fontWeight: "700", lineHeight: 17 },
 
     radarCancel: {
         paddingVertical: 12, paddingHorizontal: 28, borderRadius: 16,
         backgroundColor: "rgba(255,255,255,0.06)",
         borderWidth: 1, borderColor: `rgba(${t.colors.radarTintRgb},0.3)`,
     },
-    radarCancelText: { color: "#CBD5E1", fontWeight: "800" },
+    radarCancelText: { color: t.colors.radarMuted, fontWeight: "800" },
 
     // ── Report ──
     reportWrap: { gap: 14 },

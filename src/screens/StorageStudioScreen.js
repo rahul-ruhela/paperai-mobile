@@ -59,7 +59,10 @@ const LAYERS = [
         featureKey: "deep_clean",
         title: "Duplicate Cleaner",
         subtitle: "Exact copies, repeated filenames and burst shots",
-        icon: "duplicate-outline",
+        // A wand, not "duplicate-outline": every other layer in this hub is
+        // also about duplicates of some kind, so a duplicate glyph did not
+        // distinguish it from Photo Cleanup sitting directly underneath.
+        icon: "color-wand-outline",
         tone: "primary",
         route: "JunkWiper",
     },
