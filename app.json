@@ -77,7 +77,8 @@
           "faceIDPermission": "Face ID unlocks your Private Vault, so only you can open the documents you keep there. Paper AI never sends your Vault or your face data anywhere."
         }
       ],
-      "expo-audio"
+      "expo-audio",
+      "expo-asset"
     ],
     "extra": {
       "eas": {
