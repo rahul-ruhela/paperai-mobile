@@ -246,3 +246,69 @@ No change. Every locked layer routes to the existing paywall through
 say 3. The defaults are only reached when the database row is missing, so the
 seeded value governs in practice — but the two should be reconciled before either
 scan is exercised against a database that has not run the Module 0 migration.
+
+---
+
+## Revision, 2026-08-29 — Photo Cleanup, size filters, one entry point
+
+### The layers changed shape
+
+Storage Studio is now **four** layers, not five:
+
+| Layer | Tier | Credits |
+|---|---|---|
+| Duplicate Cleaner | Plus (`deep_clean`) | per existing config |
+| **Photo Cleanup** *(new — merges Blurry + Similar)* | Essential (`photo_cleanup`) | **3** |
+| Screenshots | Free (`screenshot_cleaner`) | none |
+| Large Files | Free (`large_video_finder`) | none |
+
+**Why Blurry and Similar merged.** They were two separate paid scans over the
+same library, and both already ran off ONE 64×64 sample per photo. Running them
+apart charged twice for analysis that happens once. Merged, the work is
+identical and the user pays once.
+
+**Why Screenshots did NOT merge.** Finding screenshots is a filename check with
+no image analysis at all, so there is nothing to save by folding it in — and
+doing so would have taken a working free feature away from Free users to sell
+it back. It stays free and on-device, in its own layer.
+
+**Why Essential and not Plus.** Blurry was Essential, Similar was Plus. Pricing
+the merged scan at Plus would remove the blurry scan from Essential subscribers
+who have it today. Taking away access someone already pays for is worse than
+widening it, so the merged feature takes the LOWER of the two tiers.
+
+**A photo appears exactly once.** Similar-groups are claimed first, then blurry
+excludes anything already claimed. Without that, selecting every row would try
+to delete the same asset twice and the freed-bytes total would double-count it.
+
+### The two old modes are deliberately still there
+
+`blurry` and `similar` remain routable in `StorageScanScreen`, and
+`blurry_photo_scan` / `similar_photo_scan` remain seeded server-side. The App
+Store build in review routes to them and reserves against them; an unknown
+credit key fails closed at Reserve, so removing either would break its scans
+mid-review. Retire them only once no live build reaches them.
+
+### Large Files has a size floor the user picks
+
+The fixed 50 MB bar found almost nothing on a phone that mostly holds photos,
+and an empty report on an obviously full device reads as a broken scan. The
+floor is now **10 / 20 / 30 / 50 MB** (`LARGE_FILE_THRESHOLDS_MB`), 50 still the
+default, with bands added below 50 MB as the floor drops. An unrecognised
+threshold falls back to the default rather than producing an empty ladder.
+
+### Cleanup feedback
+
+A successful delete now plays a synthesised whoosh and launches a rocket
+showing the space freed (`ui/CleanupCelebration.js`). It fires **only** when
+bytes were actually reclaimed — a celebration for a delete that removed nothing
+would be a lie — and is suppressed when the partial-failure alert shows.
+Under "Reduce Motion" the panel fades instead of flying.
+
+### One entry point
+
+The Tools tab (formerly "Upload") no longer carries a standalone Junk Wiper
+card. Junk Wiper and Storage Studio's "Duplicate Cleaner" were the same feature
+— same `deep_clean` key, same engine, and the hub's card routed to the
+JunkWiper screen. Storage Studio is now the single door; the JunkWiper screen
+remains as the Duplicate Cleaner's implementation.

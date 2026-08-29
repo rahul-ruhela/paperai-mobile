@@ -71,7 +71,10 @@ blanked. Local files were left on disk, so nothing at runtime changed:
 `appsettings.Local.json` is loaded last and already carried every one of these
 values, which is what made the tracked copies redundant.
 
-**Still outstanding — manual, and deliberately not automated:**
+**Status 2026-08-29:** still outstanding. The untracking is done; NONE of the
+six credentials has been rotated, and all six remain valid and in git history.
+
+**Manual, and deliberately not automated:**
 
 1. The credentials remain **valid** and remain in **git history**. Untracking
    stops future exposure; it does not undo past exposure.

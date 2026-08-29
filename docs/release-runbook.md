@@ -277,6 +277,56 @@ Invoke-RestMethod -Method Post "https://apis.bseptechnologies.com/api/developer-
    cancel/expire · ACTIVE PLAN badge · DeveloperTester top-up · account
    deletion · reinstall · offline behavior.
 
+## 5a. `Entitlements:Enforce` — the flip, and when to do it
+
+Set in `appsettings.Local.json` on the VPS. `Enforce: false` restores the
+pre-2026-08-28 credits-only behaviour; `true` enforces the feature matrix.
+
+**Why it is currently false.** The App Store build 1.0.1 (43) predates the
+entitlement error contract: it renders ANY 403 as *"You don't have permission
+to do this."* — no paywall, no upgrade path. With enforcement on, a reviewer on
+a free account hits that dead end on AI Document Analysis, OCR, Summarize,
+Receipt Extraction and AI Chat, all of which worked before the API deploy.
+Builds 1.0.2+ handle `FEATURE_NOT_INCLUDED` and `SUBSCRIPTION_EXPIRED`
+properly, so the constraint is entirely about which build is LIVE.
+
+**The rule: flip it when the last build that cannot handle 403 stops being
+reachable by a user.** TestFlight is not that moment — App Store is.
+
+| Stage | Enforce | Why |
+|---|---|---|
+| Now — 1.0.1 (43) in review | **false** | A reviewer on a free account would hit a dead end on core features. |
+| 1.0.2+ on TestFlight, 1.0.1 still live | **false** | TestFlight changes nothing for App Store users, who are still on 1.0.1. |
+| 1.0.2+ **approved and live** on the App Store | **true** | Every user can now be handed a 403 they can act on. |
+
+Flipping early does not corrupt data — it changes what `/api/credits/reserve`
+returns. The damage is a bad user experience on old builds, and a possible
+rejection while a build is in review.
+
+**To flip:**
+
+1. Edit `Entitlements.Enforce` to `true` in the VPS `appsettings.Local.json`.
+2. **Restart the API.** It binds through `IOptions<T>`, resolved once at
+   startup — editing the file alone changes nothing.
+3. Verify with a free account (no active plan, created after 2026-08-28):
+
+   ```bash
+   curl -i https://apis.bseptechnologies.com/api/entitlements/check/ai_chat \
+     -H "Authorization: Bearer <TOKEN>"
+   ```
+
+   `403 FEATURE_NOT_INCLUDED` = enforcing. `200 {"allowed":true}` = still off.
+   The route is a GET and spends no credits.
+
+**Rolling back** is the same edit in reverse plus a restart. Nothing persists a
+decision made while enforcement was on, so a rollback is clean.
+
+**Grandfathering is unaffected by the flag.** Subscriptions created before
+`GrandfatherBeforeUtc` (2026-08-28) keep the wider access credits-only gating
+gave them, for as long as they stay continuously active.
+
+---
+
 ## 6. Submission prep (do NOT submit until approved)
 
 - Deploy the updated BsepTechnologiesSite (C:\work\web-apps\BsepTechnologiesSite):

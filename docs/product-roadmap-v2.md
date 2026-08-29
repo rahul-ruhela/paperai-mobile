@@ -290,7 +290,7 @@ Merged is not deployed. Track the two separately.
 | 7 — Voice Companion | Yes (2026-08-29) | **No** | Migration `20260828192637` **applied** to `PaperAiDb` on 2026-08-29; all six columns are additive and nullable, so the production build is unaffected. `/api/voice/preferences` works against a local API and 404s against production until the API deploys. No new native build needed — `expo-speech` was already in the binary. |
 | 6 — Smart Recall | Yes (2026-08-29) | **No** | Migration `20260828182850` is written but **NOT applied** to `PaperAiDb`. Until it is, `/api/recall/*` fails at the database and extraction never runs — the mobile screen degrades to "off" rather than crashing, but the feature does not exist. Apply the migration and deploy together. |
 | 5 — Privacy & Security | Yes (2026-08-28) | **n/a** | Mobile-only and entirely on-device: no schema, no route, no backend change at all. Like Module 2 it has no API dependency — but it **does** need a new native build (`expo-local-authentication`, `expo-crypto`), so the Vault does not exist in the current TestFlight binary. |
-| 4 — Smart Cleaner | Yes (2026-08-28) | **No** | The free layers (Screenshots, Large Files) and the Storage Forecast are entirely on-device and work against any backend. The two paid scans need migration `20260828120000` applied and the API deployed, or their Reserve 404s on an unpriced key. Also needs a **new native build** — `expo-image-manipulator` was added — so neither paid scan runs in the current TestFlight binary. |
+| 4 — Smart Cleaner | Yes (2026-08-29, revised) | **Deployed** | The free layers (Screenshots, Large Files) and the Storage Forecast are entirely on-device and work against any backend. The two paid scans need migration `20260828120000` applied and the API deployed, or their Reserve 404s on an unpriced key. Also needs a **new native build** — `expo-image-manipulator` was added — so neither paid scan runs in the current TestFlight binary. |
 
 The App Store release currently live is v1.0 (build 37) plus the nine
 subscriptions, submitted 2026-08-18 — it predates all of the above.
@@ -305,3 +305,44 @@ are build-time only and unfixable — no patched `image-size` exists and the
 suggested `expo@57` upgrade would break the build without fixing them; NuGet is
 clean; and live credentials that were committed to the API repo have been
 untracked, but **not yet rotated**.
+
+---
+
+## 12. Current state — 2026-08-29 (end of day)
+
+### Shipped since §11 was written
+
+| Change | Where |
+|---|---|
+| API deployed to production; voice + recall routes live | backend |
+| All migrations applied to `PaperAiDb`, including `photo_cleanup_scan` | backend |
+| TestFlight build **1.0.2 (44)** uploaded | mobile |
+| Tools tab (was "Upload"); Storage Studio is the single cleaner entry point | mobile |
+| Photo Cleanup — Blurry + Similar merged at 3 credits, Essential | both |
+| Large Files size floor: 10 / 20 / 30 / 50 MB | mobile |
+| iOS audio session — speech was muted by the ring/silent switch | mobile |
+| Home greets by first name; credits pill updates live | mobile |
+| Signature can be redrawn in place, keeping position and size | mobile |
+| Test reminders at 1 / 2 / 10 minutes | both |
+| Light-mode scanning radar (was hardcoded dark in both schemes) | mobile |
+| Cleanup rocket + sound, suppressed when nothing was freed | mobile |
+
+**Verified:** mobile 342 tests / 23 suites, `tsc` clean, iOS bundle builds;
+backend 124 tests, build clean, 0 pending migrations.
+
+### Open, and who owns it
+
+| Item | Owner | Note |
+|---|---|---|
+| **`Entitlements:Enforce` is `false`** | you | Correct until 1.0.2+ is LIVE on the App Store, not merely on TestFlight. See `release-runbook.md` §5a. |
+| **Six credentials still need rotating** | you | `Jwt:Key` first — it signs every token. Rotating signs everyone out, so not while a build is in review. See `dependency-security-audit.md` §3. |
+| **A new native build is required** | — | `expo-audio` is native and is NOT in build 1.0.2 (44). The audio session and cleanup sound do not exist in that binary. |
+| Module 8's remaining 8 performance items | — | Blocked on its own measurement gate: needs a device and a release build. |
+| Nothing has run on a device | you | Face ID, photo scans, audio and the rocket are verified by tests and a bundle only. |
+
+### The 8 `npm audit` highs are still accepted, not fixed
+
+Unchanged and still correct: all trace to `image-size` via the bundler, no
+patched release exists on any channel, and npm's suggested `expo@57` upgrade
+would break the build while shipping the same vulnerability. Full reasoning in
+`dependency-security-audit.md` §1.

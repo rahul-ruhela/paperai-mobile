@@ -261,3 +261,61 @@ gender, a persona or a name for a system voice.
 `expo-speech` ships no config plugin, so — as §3 already corrected — there is no
 `app.json` entry, and no new native dependency. Nothing in this module is
 outstanding.
+
+---
+
+## 11. Post-implementation fixes (2026-08-29)
+
+Three defects found after the module was marked implemented. All were silent —
+none produced an error, which is why they survived the first pass.
+
+### 11.1 Speech was muted by the ring/silent switch
+
+No audio session was ever configured, so `expo-speech` ran on the iOS
+**ambient** session, which the hardware mute switch silences outright. Every
+spoken reminder, the Module 3 speaker button and the Voice Companion sample
+produced nothing at all, with no error and no callback. It looked exactly like
+a broken feature.
+
+Fixed by `services/audioSession.js`: `expo-audio`'s `setAudioModeAsync` with
+`playsInSilentMode: true`, called once at launch.
+
+The trade-off, stated because it is a real choice: the app can now make sound
+while the phone is muted. That is what a spoken reminder is for, and it only
+ever fires for audio the user asked for — the speaker button, "Play sample", or
+a reminder they scheduled with speech enabled. Nothing plays on its own.
+
+`shouldPlayInBackground` stays **false**. Turning it on would require `audio` in
+`UIBackgroundModes`, which is a straightforward App Review rejection for an app
+that is not a media player, and would buy nothing: iOS does not run our code
+when a notification is delivered in the background.
+
+**This needs a native build.** `expo-audio` is a native module — it works in
+Expo Go immediately, but is absent from TestFlight build 1.0.2 (44).
+
+### 11.2 The greeting never used anyone's name
+
+`VoiceSettingsSection` and `AssistantScreen` both read `profile.name`, but
+`/api/profile` returns **`fullName`**. The name was always `undefined`, and
+`composeSentence` omits the greeting when the name is empty — so every spoken
+sentence silently dropped it and nothing ever looked wrong.
+
+Fixed with one shared accessor, `services/profileName.js`, and a regression
+test asserting the field is `fullName` and **not** `name`.
+
+### 11.3 "Play sample" was unreachable, not silent
+
+The panel loaded preferences and voices in one `Promise.all`. A failed
+`getVoicePreferences()` — an unreachable API, a changed LAN IP — replaced the
+entire section with *"Voice settings are unavailable right now."*, including
+the sample button. Synthesis is entirely on-device and never needed the server.
+
+They now load independently. A failed preferences load leaves the panel
+rendered with local defaults, an inline notice, and a working sample.
+
+**And a bug introduced by that fix, caught in review:** the failure was first
+represented as `available: false`, which is indistinguishable from "below
+Advance" — so every control routed to the upgrade sheet and the copy read
+"Part of Advance." An Advance subscriber with a flaky connection was told to
+buy the plan they already pay for. Load failure is now its own state: inert
+controls, honest copy, no upsell. Locked in by `__tests__/voicePanelState.test.js`.
