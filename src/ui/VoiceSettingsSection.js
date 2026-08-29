@@ -140,15 +140,26 @@ export default function VoiceSettingsSection({ navigation, firstName: firstNameP
         );
     }
 
-    const unlocked = prefs.available === true;
-    // Plus sits one tier below Advance and gets the audible preview.
-    const previewOnly = !unlocked;
+    // Three states, and they must not be confused with one another:
+    //
+    //   unlocked     Advance — everything works.
+    //   previewOnly  a real tier lock — sample plays, controls prompt to upgrade.
+    //   unavailable  the settings could not be LOADED. Never an upsell: an
+    //                Advance subscriber whose network hiccuped must not be told
+    //                to buy the plan they already pay for.
+    const unavailable = prefsFailed;
+    const unlocked = !unavailable && prefs.available === true;
+    const previewOnly = !unavailable && !unlocked;
 
     const Option = ({ active, label, onPress, disabled }) => (
         <Pressable
             accessibilityRole="radio"
             accessibilityState={{ selected: active, disabled }}
-            onPress={disabled ? promptUpgrade : onPress}
+            // `disabled` here means "locked by tier". When the settings simply
+            // failed to load, the control is inert and the notice above explains
+            // why — prompting an upgrade would be an answer to the wrong problem.
+            onPress={unavailable ? undefined : disabled ? promptUpgrade : onPress}
+            disabled={unavailable}
             style={[styles.option, active && styles.optionActive, disabled && styles.optionMuted]}
         >
             <Text style={[styles.optionText, active && styles.optionTextActive]}>{label}</Text>
@@ -185,14 +196,19 @@ export default function VoiceSettingsSection({ navigation, firstName: firstNameP
                 <View style={styles.rowText}>
                     <Text style={styles.label}>Speak my reminders</Text>
                     <Text style={styles.hint}>
-                        {unlocked
-                            ? "Spoken when a reminder arrives while the app is open, or when you tap it."
-                            : "Part of Advance. You can still hear a sample below."}
+                        {unavailable
+                            ? "Unavailable until your settings load. The sample below still works."
+                            : unlocked
+                              ? "Spoken when a reminder arrives while the app is open, or when you tap it."
+                              : "Part of Advance. You can still hear a sample below."}
                     </Text>
                 </View>
                 <Switch
                     value={!!prefs.enabled}
-                    onValueChange={(next) => (unlocked ? save({ enabled: next }) : promptUpgrade())}
+                    disabled={unavailable}
+                    onValueChange={(next) =>
+                        unavailable ? undefined : unlocked ? save({ enabled: next }) : promptUpgrade()
+                    }
                 />
             </View>
 
@@ -204,7 +220,7 @@ export default function VoiceSettingsSection({ navigation, firstName: firstNameP
                             key={rate}
                             label={`${rate}×`}
                             active={(prefs.rate ?? 1) === rate}
-                            disabled={previewOnly}
+                            disabled={previewOnly || unavailable}
                             onPress={() => save({ rate })}
                         />
                     ))}
@@ -220,7 +236,7 @@ export default function VoiceSettingsSection({ navigation, firstName: firstNameP
                             key={tone}
                             label={TONE_LABELS[tone]}
                             active={(prefs.tone ?? TONES.FRIENDLY) === tone}
-                            disabled={previewOnly}
+                            disabled={previewOnly || unavailable}
                             onPress={() => save({ tone })}
                         />
                     ))}
@@ -234,7 +250,7 @@ export default function VoiceSettingsSection({ navigation, firstName: firstNameP
                         <Option
                             label="System"
                             active={!prefs.voiceId}
-                            disabled={previewOnly}
+                            disabled={previewOnly || unavailable}
                             onPress={() => save({ voiceId: "" })}
                         />
                         {/* Labelled with whatever the OS says. The app does not
@@ -244,7 +260,7 @@ export default function VoiceSettingsSection({ navigation, firstName: firstNameP
                                 key={v.id}
                                 label={v.name || v.language}
                                 active={prefs.voiceId === v.id}
-                                disabled={previewOnly}
+                                disabled={previewOnly || unavailable}
                                 onPress={() => save({ voiceId: v.id })}
                             />
                         ))}
@@ -258,8 +274,9 @@ export default function VoiceSettingsSection({ navigation, firstName: firstNameP
                 </View>
                 <Switch
                     value={prefs.speakOnTap !== false}
+                    disabled={unavailable}
                     onValueChange={(next) =>
-                        unlocked ? save({ speakOnTap: next }) : promptUpgrade()
+                        unavailable ? undefined : unlocked ? save({ speakOnTap: next }) : promptUpgrade()
                     }
                 />
             </View>
