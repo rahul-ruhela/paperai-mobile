@@ -6,7 +6,7 @@ import useThemedStyles from "./useThemedStyles";
 import { useTheme } from "./ThemeProvider";
 import { showEntitlementDenial, useUpgradePrompt } from "./FeatureLock";
 
-import { api } from "../api/client";
+import { getFirstName } from "../services/profileName";
 import { getVoicePreferences, updateVoicePreferences } from "../api/voice";
 import {
     RATES,
@@ -66,11 +66,9 @@ export default function VoiceSettingsSection({ navigation, firstName: firstNameP
                 setVoices(installed);
 
                 if (!firstNameProp) {
-                    const profile = await api
-                        .get("/api/profile")
-                        .then((r) => r.data)
-                        .catch(() => null);
-                    const first = String(profile?.name ?? "").trim().split(" ")[0];
+                    // Was reading profile.name; the endpoint returns fullName,
+                    // so the sample never greeted anyone by name.
+                    const first = await getFirstName();
                     if (alive && first) setFirstName(first);
                 }
             } catch {

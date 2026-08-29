@@ -8,6 +8,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { getAccessToken } from "./src/storage/tokenStore";
 import { ensureExpoGoTestCredits } from "./src/api/dev";
+import { configureAudioSession } from "./src/services/audioSession";
 import {
     registerForPushNotifications,
     unregisterPushNotifications,
@@ -178,8 +179,8 @@ function Tabs({ onLoggedOut }) {
                             ? "document-text"
                             : "document-text-outline",
                         Upload: focused
-                            ? "cloud-upload"
-                            : "cloud-upload-outline",
+                            ? "grid"
+                            : "grid-outline",
                         Tasks: focused
                             ? "sparkles"
                             : "sparkles-outline",
@@ -199,7 +200,15 @@ function Tabs({ onLoggedOut }) {
             })}
         >
             <Tab.Screen name="Documents" component={HomeScreen} />
-            <Tab.Screen name="Upload" component={UploadScreen} />
+            {/* Route name stays "Upload" for the same reason "Tasks" does:
+                every navigate("Upload") call site keeps working. The tab is
+                a tools hub, not an upload button — it holds the scanners,
+                the signature editor, receipts and Storage Studio. */}
+            <Tab.Screen
+                name="Upload"
+                component={UploadScreen}
+                options={{ title: "Tools" }}
+            />
             {/* Route name stays "Tasks" so every existing navigate("Tasks")
                 call site and any parked deep link keeps working; only the label
                 the user reads changes. */}
@@ -262,6 +271,10 @@ function AppShell() {
                         // Tokens rotate on reinstall and after long inactivity;
                         // re-sending an unchanged one is a no-op server-side.
                         registerForPushNotifications();
+                        // Without this, speech is silenced by the ring/silent
+                        // switch — which is why the voice sample appeared to do
+                        // nothing. Idempotent, and safe to fail.
+                        configureAudioSession();
                     });
                 }
             } catch {

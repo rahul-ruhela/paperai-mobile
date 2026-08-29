@@ -142,14 +142,51 @@ export default function SignatureScreen({ navigation, route }) {
     }
 
     // ── Signature capture ─────────────────────────────────────────────────────
+    // When true, confirming the pad swaps the strokes of the signature already
+    // on the page instead of dropping a second one in the middle.
+    const [replacing, setReplacing] = useState(false);
+
     function openPad() {
         setPadStrokes([]);
+        setReplacing(false);
         setPadOpen(true);
     }
 
-    function placeStrokes(strokes) {
+    /** Redraw the signature that is already placed, keeping where it sits. */
+    function openPadToReplace() {
+        setPadStrokes([]);
+        setReplacing(true);
+        setPadOpen(true);
+    }
+
+    /**
+     * Places a signature, or REPLACES the one already on the page.
+     *
+     * Replacing keeps x, y and width. Someone who has positioned a signature
+     * over the right line and sized it to fit is not asking to start again
+     * just because the drawing was wrong — before this, the only way to change
+     * a signature was to delete it and place a new one from scratch.
+     *
+     * Height follows from the new aspect ratio, and the result is re-clamped
+     * so a taller signature cannot end up hanging off the bottom of the page.
+     */
+    function placeStrokes(strokes, { replace = false } = {}) {
         const svg = strokesToSvg(strokes);
         if (!svg) return;
+
+        if (replace && placed) {
+            const width = clamp(placed.width, MIN_SIG_W, frame.w);
+            const height = width / svg.aspect;
+            setPlaced({
+                strokes,
+                x: clamp(placed.x, 0, Math.max(0, frame.w - width)),
+                y: clamp(placed.y, 0, Math.max(0, frame.h - height)),
+                width,
+                aspect: svg.aspect,
+            });
+            return;
+        }
+
         const width = Math.min(200, frame.w * 0.5);
         setPlaced({
             strokes,
@@ -170,12 +207,15 @@ export default function SignatureScreen({ navigation, route }) {
             await saveSignature(strokes);
             await refreshSaved();
         }
-        placeStrokes(strokes);
+        placeStrokes(strokes, { replace: replacing });
+        setReplacing(false);
         setPadOpen(false);
     }
 
+    // Tapping a saved signature while one is already placed swaps it in place
+    // rather than resetting its position — the same rule as redrawing.
     function useSaved(sig) {
-        placeStrokes(sig.strokes);
+        placeStrokes(sig.strokes, { replace: !!placed });
     }
 
     function removeSaved(sig) {
@@ -340,6 +380,7 @@ export default function SignatureScreen({ navigation, route }) {
                                 placed={placed}
                                 onChange={setPlaced}
                                 onRemove={() => setPlaced(null)}
+                                onReplace={openPadToReplace}
                                 frame={frame}
                                 theme={theme}
                             />
@@ -384,7 +425,11 @@ export default function SignatureScreen({ navigation, route }) {
                                     </Pressable>
                                 ))}
                             </View>
-                            <Text style={styles.hint}>Tap to place · long-press to delete</Text>
+                            <Text style={styles.hint}>
+                                {placed
+                                    ? "Tap to swap the signature on the page · long-press to delete"
+                                    : "Tap to place · long-press to delete"}
+                            </Text>
                         </View>
                     )}
 
@@ -472,7 +517,7 @@ export default function SignatureScreen({ navigation, route }) {
 
 /* ── Draggable + resizable signature ─────────────────────────────────────────*/
 
-function DraggableSignature({ placed, onChange, onRemove, frame, theme }) {
+function DraggableSignature({ placed, onChange, onRemove, onReplace, frame, theme }) {
     const start = useRef({ x: 0, y: 0, width: 0 });
 
     // A PanResponder is created ONCE and never re-created, so anything its
@@ -561,6 +606,19 @@ function DraggableSignature({ placed, onChange, onRemove, frame, theme }) {
                 accessibilityLabel="Remove signature"
             >
                 <Ionicons name="close" size={13} color={theme.colors.white} />
+            </Pressable>
+
+            {/* Replace — redraws in place, keeping position and size. Sits at
+                the top RIGHT so it cannot be hit by someone reaching for the
+                remove handle, which is destructive. */}
+            <Pressable
+                onPress={onReplace}
+                hitSlop={8}
+                style={[handleStyle(theme), { right: -11, top: -11, backgroundColor: theme.colors.primary }]}
+                accessibilityRole="button"
+                accessibilityLabel="Redraw signature, keeping its position"
+            >
+                <Ionicons name="create-outline" size={13} color={theme.colors.white} />
             </Pressable>
 
             {/* Resize */}

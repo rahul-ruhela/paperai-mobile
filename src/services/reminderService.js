@@ -599,6 +599,9 @@ export async function scheduleTaskAlert({
  */
 export const TEST_REMINDER_DELAY_MS = 60_000;
 
+/** Delays the test reminder offers, in minutes. One minute stays the default. */
+export const TEST_REMINDER_CHOICES = [1, 2, 10];
+
 /**
  * Schedules a one-off reminder a minute from now so a user can see what a Paper
  * AI reminder actually looks and sounds like on their own device.
@@ -616,7 +619,7 @@ export const TEST_REMINDER_DELAY_MS = 60_000;
  * @returns { ok: true, fireAt, notificationId } | { ok: false, reason }
  *          reason: "denied" | "simulator" | "failed".
  */
-export async function scheduleTestReminder() {
+export async function scheduleTestReminder(minutes = 1) {
     // Asked at the point of use, which is the only place iOS wants it asked.
     // ensurePermission also reports "simulator", which is passed through rather
     // than flattened into "denied" — telling someone to check their Settings
@@ -627,18 +630,23 @@ export async function scheduleTestReminder() {
         return { ok: false, reason: permission.reason ?? "denied" };
     }
 
-    const fireAt = new Date(Date.now() + TEST_REMINDER_DELAY_MS);
+    // Clamped to the offered choices so a bad caller cannot schedule a
+    // reminder hours away that the user then forgets is coming.
+    const chosen = TEST_REMINDER_CHOICES.includes(minutes) ? minutes : 1;
+    const fireAt = new Date(Date.now() + chosen * TEST_REMINDER_DELAY_MS);
 
     try {
         const notificationId = await Notifications.scheduleNotificationAsync({
             content: {
                 title: "This is a Paper AI reminder",
-                body: "This is what a reminder looks like. Real ones show your task and what you asked to be reminded of.",
+                body:
+                    `This is what a reminder looks like, ${chosen} minute${chosen === 1 ? "" : "s"} after you asked for it. ` +
+                    "Real ones show your task and what you asked to be reminded of.",
                 data: { type: "test" },
             },
             trigger: { type: "date", date: fireAt },
         });
-        return { ok: true, fireAt: fireAt.toISOString(), notificationId };
+        return { ok: true, fireAt: fireAt.toISOString(), notificationId, minutes: chosen };
     } catch {
         return { ok: false, reason: "failed" };
     }

@@ -20,6 +20,7 @@ import * as MediaLibrary from "expo-media-library";
 import GradientScreen from "../ui/GradientScreen";
 import ConfirmActionSheet from "../ui/ConfirmActionSheet";
 import CreditConfirmModal from "../ui/CreditConfirmModal";
+import CleanupCelebration from "../ui/CleanupCelebration";
 import { reserveCredits, completeTransaction, refundTransaction, getFeatureConfig } from "../api/credits";
 import { listDocuments, deleteDocument } from "../api/documents";
 
@@ -92,6 +93,9 @@ export default function JunkWiperScanScreen({ navigation }) {
     // Rocket cleanup animation shown while junk is being wiped
     const [cleaning, setCleaning] = useState(false);
     const [cleanDone, setCleanDone] = useState(false);
+    // Set only when a delete actually reclaimed space, so the rocket can
+    // never celebrate a cleanup that freed nothing.
+    const [celebration, setCelebration] = useState(null);
     const rocketY = useRef(new Animated.Value(0)).current;
     const rocketShake = useRef(new Animated.Value(0)).current;
     const rocketOpacity = useRef(new Animated.Value(0)).current;
@@ -544,6 +548,13 @@ export default function JunkWiperScanScreen({ navigation }) {
                 );
             }
 
+            // Bytes are only known for media. Deleted documents have no size we
+            // can honestly report, so they get no figure rather than a made-up
+            // one — the same rule the completion alert below already follows.
+            const freedBytes = assetIds.length > 0
+                ? selectedItems.reduce((acc, d) => acc + (d.totalBytes ?? 0), 0)
+                : 0;
+
             // Show the "cleaned up!" confirmation for a beat before tearing down.
             setCleanDone(true);
             setTimeout(() => {
@@ -552,9 +563,14 @@ export default function JunkWiperScanScreen({ navigation }) {
                 setCleaning(false);
                 setCleanDone(false);
                 setDeleting(false);
-                if (remaining.length === 0) {
-                    // Only claim reclaimed storage when media was actually removed;
-                    // deleted documents have no size we can honestly report.
+
+                // The rocket replaces the "All Done!" alert when space was
+                // actually reclaimed and nothing failed — an alert you have to
+                // dismiss is a poor reward for finishing a cleanup. The alert
+                // still carries the cases the rocket cannot state honestly.
+                if (failedDocs.length === 0 && freedBytes > 0) {
+                    setCelebration(formatSize(freedBytes));
+                } else if (remaining.length === 0) {
                     Alert.alert(
                         "✓ All Done!",
                         assetIds.length > 0
@@ -946,6 +962,12 @@ export default function JunkWiperScanScreen({ navigation }) {
                         </View>
                     )}
                 </ScrollView>
+
+                <CleanupCelebration
+                    visible={celebration != null}
+                    bytesFreed={celebration ?? ""}
+                    onDone={() => setCelebration(null)}
+                />
             </SafeAreaView>
 
             <ConfirmActionSheet

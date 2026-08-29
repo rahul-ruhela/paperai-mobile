@@ -42,7 +42,7 @@ import { speakTask, stopSpeaking } from "../services/taskSpeech";
 import { getRecallPreferences, listMemories } from "../api/recall";
 import { getVoicePreferences } from "../api/voice";
 import { composeSentence, shouldSpeak } from "../services/voiceService";
-import { api } from "../api/client";
+import { getFirstName } from "../services/profileName";
 
 /**
  * AssistantScreen — the Assistant tab.
@@ -274,11 +274,11 @@ export default function AssistantScreen({ navigation }) {
             if (!shouldSpeak(task, { enabled: prefs?.enabled, available: prefs?.available })) {
                 return null;
             }
-            const profile = await api
-                .get("/api/profile")
-                .then((r) => r.data)
-                .catch(() => null);
-            const firstName = String(profile?.name ?? "").trim().split(" ")[0] ?? "";
+            // Was reading profile.name, which /api/profile does not return —
+            // it returns fullName. The greeting was therefore dropped from
+            // every spoken reminder, silently, because composeSentence omits
+            // it when the name is empty.
+            const firstName = await getFirstName();
             return composeSentence(task, { firstName, tone: prefs?.tone }) || null;
         } catch {
             return null;

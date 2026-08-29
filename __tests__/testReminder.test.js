@@ -35,6 +35,7 @@ jest.mock("expo-file-system/legacy", () => ({
 
 const {
     TEST_REMINDER_DELAY_MS,
+    TEST_REMINDER_CHOICES,
     scheduleTestReminder,
 } = require("../src/services/reminderService");
 
@@ -103,5 +104,46 @@ describe("scheduleTestReminder", () => {
         const FS = require("expo-file-system/legacy");
         await scheduleTestReminder();
         expect(FS.writeAsStringAsync).not.toHaveBeenCalled();
+    });
+});
+
+describe("scheduleTestReminder delay choices", () => {
+    it.each(TEST_REMINDER_CHOICES)("schedules %i minute(s) out when asked", async (minutes) => {
+        const before = Date.now();
+        const result = await scheduleTestReminder(minutes);
+
+        expect(result.ok).toBe(true);
+        expect(result.minutes).toBe(minutes);
+        const delay = new Date(result.fireAt).getTime() - before;
+        const expected = minutes * TEST_REMINDER_DELAY_MS;
+        expect(delay).toBeGreaterThanOrEqual(expected - 50);
+        expect(delay).toBeLessThan(expected + 2000);
+    });
+
+    // A delay the UI does not offer must not be schedulable: a "test" reminder
+    // arriving hours later is one the user has stopped expecting.
+    it.each([0, -5, 7, 120, 1.5, NaN, "10", null, undefined])(
+        "falls back to one minute for %p",
+        async (bad) => {
+            const before = Date.now();
+            const result = await scheduleTestReminder(bad);
+
+            expect(result.ok).toBe(true);
+            expect(result.minutes).toBe(1);
+            const delay = new Date(result.fireAt).getTime() - before;
+            expect(delay).toBeLessThan(TEST_REMINDER_DELAY_MS + 2000);
+        }
+    );
+
+    it("says how long it will be in the notification body", async () => {
+        await scheduleTestReminder(10);
+        const [args] = mockNotifications.scheduleNotificationAsync.mock.calls[0];
+        expect(args.content.body).toContain("10 minutes");
+
+        mockNotifications.scheduleNotificationAsync.mockClear();
+        await scheduleTestReminder(1);
+        const [single] = mockNotifications.scheduleNotificationAsync.mock.calls[0];
+        expect(single.content.body).toContain("1 minute");
+        expect(single.content.body).not.toContain("1 minutes");
     });
 });

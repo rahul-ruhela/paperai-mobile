@@ -17,6 +17,7 @@ import * as MediaLibrary from "expo-media-library";
 import GradientScreen from "../ui/GradientScreen";
 import ConfirmActionSheet from "../ui/ConfirmActionSheet";
 import CreditConfirmModal from "../ui/CreditConfirmModal";
+import CleanupCelebration from "../ui/CleanupCelebration";
 import { PrimaryButton } from "../ui/buttons";
 import useThemedStyles from "../ui/useThemedStyles";
 import { useTheme } from "../ui/ThemeProvider";
@@ -129,6 +130,9 @@ export default function StorageScanScreen({ route, navigation }) {
     const [scanned, setScanned] = useState(0);
     const [deleteConfirm, setDeleteConfirm] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    // Set only when a delete actually removed something, so the rocket can
+    // never celebrate a cleanup that freed nothing.
+    const [celebration, setCelebration] = useState(null);
     const [preparing, setPreparing] = useState(false);
     const [creditModal, setCreditModal] = useState({ visible: false, loading: false });
     const [featureCfg, setFeatureCfg] = useState(null);
@@ -423,6 +427,14 @@ export default function StorageScanScreen({ route, navigation }) {
                     "Some items kept",
                     `${removedCount} removed. ${stillThere.size} could not be deleted and ${stillThere.size === 1 ? "is" : "are"} still listed.`
                 );
+            } else {
+                // The clean case, and the only one that gets the rocket: the
+                // partial outcome above already opens an alert, and stacking a
+                // celebration behind a "some items kept" warning would be a
+                // confusing pair of messages.
+                // Nothing was left behind in this branch, so the bytes freed
+                // are exactly what was selected before the delete ran.
+                setCelebration(formatSize(selectedBytes));
             }
         } catch (err) {
             Alert.alert("Delete failed", err?.message || "Nothing was removed. Please try again.");
@@ -602,6 +614,12 @@ export default function StorageScanScreen({ route, navigation }) {
                     confirmText="Delete"
                     onCancel={() => setDeleteConfirm(false)}
                     onConfirm={performDelete}
+                />
+
+                <CleanupCelebration
+                    visible={celebration != null}
+                    bytesFreed={celebration ?? ""}
+                    onDone={() => setCelebration(null)}
                 />
             </SafeAreaView>
         </GradientScreen>

@@ -227,8 +227,10 @@ export default function UploadScreen({ navigation }) {
         Alert.alert("Copied", "Extracted text copied to clipboard.");
     }
 
-    function openJunkWiper() {
-        navigation.navigate("JunkWiper");
+    // The hub, not the Duplicate Cleaner directly: duplicates are one of five
+    // cleaners in there, and two of the five are free.
+    function openStorageStudio() {
+        navigation.navigate("StorageStudio");
     }
 
     function openCameraScanner() {
@@ -257,7 +259,7 @@ export default function UploadScreen({ navigation }) {
                 >
                     {/* Header */}
                     <View style={styles.header}>
-                        <Text style={styles.hTitle}>Upload</Text>
+                        <Text style={styles.hTitle}>Tools</Text>
                         <Pressable style={styles.creditBadge} onPress={() => navigation.navigate("Paywall")}>
                             <Ionicons name="flash" size={14} color={theme.colors.warning} />
                             <Text style={styles.creditText}>{credits === null ? "…" : `${credits} credits`}</Text>
@@ -460,28 +462,35 @@ export default function UploadScreen({ navigation }) {
                     {/* ── Advanced ── */}
                     <View style={styles.sectionDivider}>
                         <View style={styles.dividerLine} />
-                        <Text style={styles.sectionLabel}>ADVANCED</Text>
+                        <Text style={styles.sectionLabel}>DEVICE STORAGE</Text>
                         <View style={styles.dividerLine} />
                     </View>
 
-                    {/* 5. Junk Wiper — advanced, credit-based */}
+                    {/* 5. Storage Studio — the single home for all five cleaners.
+                        This card used to be "Junk Wiper", which was the SAME
+                        feature as Storage Studio's Duplicate Cleaner: same
+                        deep_clean key, same engine, and the hub's card even
+                        routed to the JunkWiper screen. Two names and two
+                        entry points for one feature is a way to make people
+                        think they have missed something. One door now. */}
                     <View style={styles.card}>
                         <View style={styles.cardHeader}>
                             <View style={[styles.cardIcon, { backgroundColor: theme.colors.dangerBg }]}>
-                                <Ionicons name="trash-bin-outline" size={20} color={theme.colors.danger} />
+                                <Ionicons name="sparkles-outline" size={20} color={theme.colors.danger} />
                             </View>
                             <View style={{ flex: 1 }}>
-                                <Text style={styles.cardTitle}>Junk Wiper</Text>
-                                <Text style={styles.cardSubtitle}>Smart Duplicate Cleaner — scan your permitted photos</Text>
+                                <Text style={styles.cardTitle}>Storage Studio</Text>
+                                <Text style={styles.cardSubtitle}>
+                                    Duplicates, screenshots, large files, blurry and similar photos
+                                </Text>
                             </View>
-                            <CreditBadge cost={configFor("junk_wiper_scan_report").creditCost} />
                         </View>
                         <View style={styles.safetyNote}>
                             <Ionicons name="shield-checkmark-outline" size={13} color={theme.colors.primary} />
                             <Text style={styles.safetyText}>Nothing is deleted without your review and confirmation.</Text>
                         </View>
-                        <ActionBtn icon="search-outline" label="Start Duplicate Scan"
-                            onPress={openJunkWiper} color={theme.colors.danger} full />
+                        <ActionBtn icon="albums-outline" label="Open Storage Studio"
+                            onPress={openStorageStudio} color={theme.colors.danger} full />
                     </View>
 
                     <Pressable

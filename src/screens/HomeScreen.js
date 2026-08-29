@@ -29,6 +29,7 @@ import useReduceMotion from "../ui/useReduceMotion";
 
 import { listDocuments, deleteDocument } from "../api/documents";
 import { useCreditBalance } from "../hooks/useCreditBalance";
+import { useFirstName } from "../hooks/useFirstName";
 
 const TABS = {
     INBOX: "inbox",
@@ -134,6 +135,7 @@ export default function HomeScreen({ navigation }) {
     const [selectedDoc, setSelectedDoc] = useState(null);
     const [pinnedIds, setPinnedIds] = useState([]);
     const { credits } = useCreditBalance();
+    const firstName = useFirstName();
 
     // Search field + tab pills settle in just ahead of the first rows, so the
     // screen assembles top-down instead of appearing all at once.
@@ -443,8 +445,14 @@ export default function HomeScreen({ navigation }) {
                                 {/* Greeting + credit pill */}
                                 <View style={S.greetRow}>
                                     <View style={{ flex: 1, minWidth: 0 }}>
+                                        {/* The name is the greeting when we have
+                                            one: "Good evening" / "Rahul". Until
+                                            the profile lands — or when the user
+                                            never set a name — it falls back to
+                                            the app name rather than greeting an
+                                            empty line. */}
                                         <Text style={S.greetHi}>{greeting()}</Text>
-                                        <Text style={S.greetSub}>Paper AI Assistant</Text>
+                                        <Text style={S.greetSub}>{firstName || "Paper AI Assistant"}</Text>
                                     </View>
                                     <Pressable
                                         onPress={() => navigation.navigate("Paywall")}

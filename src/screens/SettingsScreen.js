@@ -27,7 +27,7 @@ const DURATION_TITLE = { weekly: "Weekly", monthly: "Monthly", yearly: "Yearly" 
 
 import { useTheme } from "../ui/ThemeProvider";
 import useThemedStyles from "../ui/useThemedStyles";
-import { scheduleTestReminder } from "../services/reminderService";
+import { TEST_REMINDER_CHOICES, scheduleTestReminder } from "../services/reminderService";
 import VoiceSettingsSection from "../ui/VoiceSettingsSection";
 export default function SettingsScreen({ navigation, onLoggedOut }) {
     const { theme, preference, setPreference } = useTheme();
@@ -175,13 +175,15 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
     // Schedules a real local notification a minute out. Nothing about it is
     // simulated: it is the same scheduling path a task alert uses, which is the
     // only way the preview is worth anything.
-    async function sendTestReminder() {
-        const result = await scheduleTestReminder();
+    async function sendTestReminder(minutes = 1) {
+        const result = await scheduleTestReminder(minutes);
 
         if (result.ok) {
+            const m = result.minutes ?? minutes;
             Alert.alert(
                 "On its way",
-                "Your test reminder arrives in about a minute. Lock your phone to see how it looks on the lock screen."
+                `Your test reminder arrives in about ${m} minute${m === 1 ? "" : "s"}. ` +
+                    "Lock your phone to see how it looks on the lock screen."
             );
             return;
         }
@@ -565,9 +567,26 @@ export default function SettingsScreen({ navigation, onLoggedOut }) {
                         <Row
                             icon="alarm-outline"
                             title="Send me a test reminder"
-                            subtitle="See what a reminder looks like — arrives in one minute"
-                            onPress={sendTestReminder}
+                            subtitle="See what a reminder looks like, on the lock screen"
+                            onPress={() => sendTestReminder(1)}
                         />
+                        {/* One minute is the default and stays the row's own
+                            action; the longer delays are for checking that a
+                            reminder still arrives after you have put the phone
+                            down and left the app. */}
+                        <View style={styles.delayRow}>
+                            {TEST_REMINDER_CHOICES.map((m) => (
+                                <Pressable
+                                    key={m}
+                                    onPress={() => sendTestReminder(m)}
+                                    style={styles.delayChip}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={`Send a test reminder in ${m} minute${m === 1 ? "" : "s"}`}
+                                >
+                                    <Text style={styles.delayChipText}>{m} min</Text>
+                                </Pressable>
+                            ))}
+                        </View>
 
                         {/* Dev/Expo Go only. The endpoint is admin-gated on the
                             server regardless, so this cannot be used by a normal
