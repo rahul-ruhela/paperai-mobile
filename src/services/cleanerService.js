@@ -223,12 +223,44 @@ export const SIZE_BANDS = [
 ];
 
 /**
+ * Bands below the original 50 MB floor.
+ *
+ * 50 MB was too high a bar in practice: on a phone that mostly holds photos
+ * rather than 4K video, almost nothing clears it and the scan reports an empty
+ * library that plainly is not empty. The threshold is now the user's choice,
+ * and these are the extra bands that appear as they lower it.
+ */
+const SMALL_BANDS = [
+    { key: "sm30", label: "30 – 50 MB", minBytes: 30 * MB },
+    { key: "sm20", label: "20 – 30 MB", minBytes: 20 * MB },
+    { key: "sm10", label: "10 – 20 MB", minBytes: 10 * MB },
+];
+
+/** Thresholds offered in the UI, in megabytes. 50 stays the default. */
+export const LARGE_FILE_THRESHOLDS_MB = [10, 20, 30, 50];
+
+export const DEFAULT_LARGE_THRESHOLD_MB = 50;
+
+/**
+ * The bands in play for a given floor, largest first.
+ *
+ * An unrecognised threshold falls back to the default rather than producing an
+ * empty ladder, which would silently report "nothing found" on a full device.
+ */
+export function bandsForThreshold(minMb = DEFAULT_LARGE_THRESHOLD_MB) {
+    const floor = LARGE_FILE_THRESHOLDS_MB.includes(minMb)
+        ? minMb
+        : DEFAULT_LARGE_THRESHOLD_MB;
+    return [...SIZE_BANDS, ...SMALL_BANDS].filter((b) => b.minBytes >= floor * MB);
+}
+
+/**
  * Buckets assets into SIZE_BANDS. Anything under the smallest band is not
  * reported at all — listing a 3 MB photo as a "large file" is noise that makes
  * the whole report less trustworthy.
  */
-export function bandLargeAssets(assets) {
-    const bands = SIZE_BANDS.map((b) => ({ ...b, items: [], totalBytes: 0 }));
+export function bandLargeAssets(assets, { minMb = DEFAULT_LARGE_THRESHOLD_MB } = {}) {
+    const bands = bandsForThreshold(minMb).map((b) => ({ ...b, items: [], totalBytes: 0 }));
     for (const a of assets) {
         const size = a.fileSize ?? 0;
         const band = bands.find((b) => size >= b.minBytes);

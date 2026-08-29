@@ -31,6 +31,8 @@ import {
 } from "../api/credits";
 import {
     ScanCancelled,
+    DEFAULT_LARGE_THRESHOLD_MB,
+    LARGE_FILE_THRESHOLDS_MB,
     bandLargeAssets,
     buildDuplicateGroups,
     classifySharpness,
@@ -43,6 +45,7 @@ import {
 } from "../services/cleanerService";
 import { sampleImage } from "../services/imageSampler";
 import { freeDiskBytes, recordScan } from "../services/cleanerHistory";
+import { usePhotoPermission } from "../hooks/usePhotoPermission";
 
 /**
  * StorageScanScreen — one scan, review and delete flow shared by every Storage
@@ -73,6 +76,27 @@ import { freeDiskBytes, recordScan } from "../services/cleanerHistory";
 const SAMPLE_LIMIT = 2000;
 
 const MODES = {
+    // The merged layer: screenshots, blurry shots and near-identical duplicates
+    // in ONE pass for 3 credits.
+    //
+    // Merging is not just a menu change — it is cheaper. Blurry and similar
+    // already shared a single 64x64 sample per photo, so running them together
+    // costs the same analysis as running either alone, and screenshots are a
+    // filename check on top. Charged once instead of twice.
+    //
+    // The three separate modes below are KEPT: the App Store build in review
+    // still routes to them, and their credit keys are still seeded server-side.
+    photos: {
+        title: "Photo Cleanup",
+        featureKey: "photo_cleanup",
+        creditKey: "photo_cleanup_scan",
+        icon: "sparkles-outline",
+        blurb: "Finds screenshots, blurry shots and near-identical photos in one pass. Every photo is analysed on this device — nothing is uploaded.",
+        empty: "Nothing to clean up. No screenshots, blurry shots or near-identical photos found.",
+        noun: "item",
+        grouped: true,
+        finds: ["Screenshots you no longer need", "Blurry and out-of-focus shots", "Near-identical photos, keeping the best"],
+    },
     screenshots: {
         title: "Screenshots",
         featureKey: "screenshot_cleaner",
@@ -81,15 +105,18 @@ const MODES = {
         blurb: "Every screenshot on this device, largest first. Runs on your device and uses no credits.",
         empty: "No screenshots found on this device.",
         noun: "screenshot",
+        finds: ["Every screenshot on this device", "Largest first", "Free — runs entirely on your device"],
     },
     large: {
         title: "Large Files",
         featureKey: "large_video_finder",
         creditKey: null,
         icon: "film-outline",
-        blurb: "Photos and videos over 50 MB, grouped by size. Runs on your device and uses no credits.",
-        empty: "Nothing on this device is over 50 MB.",
+        blurb: "Your biggest photos and videos, grouped by size. Pick a size below. Runs on your device and uses no credits.",
+        empty: "Nothing this large was found. Try a smaller size.",
         noun: "file",
+        grouped: true,
+        finds: ["Photos and videos above the size you pick", "Grouped by size, largest first", "Free — runs entirely on your device"],
     },
     blurry: {
         title: "Blurry Photos",
@@ -99,6 +126,7 @@ const MODES = {
         blurb: "Checks your photos for blur and out-of-focus shots. The analysis happens on this device — no photo is uploaded.",
         empty: "No blurry photos found. Your library is in focus.",
         noun: "photo",
+        finds: ["Out-of-focus and camera-shake shots", "Scored on this device — no photo is uploaded"],
     },
     similar: {
         title: "Similar Photos",
@@ -108,6 +136,7 @@ const MODES = {
         blurb: "Groups near-identical shots so you can keep the best one. The analysis happens on this device — no photo is uploaded.",
         empty: "No near-identical shots found.",
         noun: "group",
+        finds: ["Burst shots and re-saves", "Keeps the newest of each group", "Compared on this device — no photo is uploaded"],
     },
 };
 
@@ -136,6 +165,9 @@ export default function StorageScanScreen({ route, navigation }) {
     const [preparing, setPreparing] = useState(false);
     const [creditModal, setCreditModal] = useState({ visible: false, loading: false });
     const [featureCfg, setFeatureCfg] = useState(null);
+    // Large-file floor. 50 MB was the fixed bar and found almost nothing on a
+    // phone that mostly holds photos, so it is now the user's choice.
+    const [thresholdMb, setThresholdMb] = useState(DEFAULT_LARGE_THRESHOLD_MB);
 
     const cancelRef = useRef(false);
     const txnRef = useRef(null);
@@ -149,30 +181,27 @@ export default function StorageScanScreen({ route, navigation }) {
         };
     }, [navigation, mode.title]);
 
+    const { ensureAccess, permissionSheet } = usePhotoPermission();
+
     // ── Permission ────────────────────────────────────────────────────────────
     // Asked at the point of use, which is what guideline 5.1.1 wants and what
     // the Permission Center (Module 2) deliberately does not do.
+    //
+    // The reason now comes BEFORE the system dialog rather than in an Alert
+    // after a refusal. iOS only ever shows that dialog once, so an explanation
+    // that arrives afterwards cannot inform the decision it is explaining.
     const ensurePhotoAccess = useCallback(async () => {
-        const perm = await MediaLibrary.requestPermissionsAsync(false);
+        const privileges = await ensureAccess({
+            title: `${mode.title} needs your photos`,
+            reason: `${mode.title} reads your photo library on this device to find what to show you.`,
+        });
+        if (!privileges) return null;
 
-        if (perm.status !== "granted") {
-            Alert.alert(
-                "Photo access needed",
-                `${mode.title} reads your photo library on this device to find what to show you. Nothing is uploaded, and nothing is deleted without you confirming it.`,
-                [
-                    { text: "Not now", style: "cancel" },
-                    { text: "Open Settings", onPress: () => Linking.openSettings() },
-                ]
-            );
-            return null;
-        }
-
-        const privileges = perm.accessPrivileges ?? "all";
         // Limited access is a supported outcome, not a failure: the scan covers
         // the chosen photos and the banner says the results are partial.
         setPartial(privileges === "limited");
         return privileges;
-    }, [mode.title]);
+    }, [mode.title, ensureAccess]);
 
     // ── Scanning ──────────────────────────────────────────────────────────────
     const runScan = useCallback(async () => {
@@ -210,19 +239,22 @@ export default function StorageScanScreen({ route, navigation }) {
             }));
         } else if (mode === MODES.large) {
             step("Measuring large files…", 80);
-            built = bandLargeAssets(enriched).flatMap((band) =>
+            built = bandLargeAssets(enriched, { minMb: thresholdMb }).flatMap((band) =>
                 band.items.map((a) => ({
                     id: a.id,
                     label: a.filename || "Large file",
-                    subtitle: `${band.label} · ${formatSize(a.fileSize)}`,
+                    subtitle: `${formatSize(a.fileSize)}`,
+                    group: band.label,
                     bytes: a.fileSize ?? 0,
                     uri: a.localUri ?? a.uri,
                     assetIds: [a.id],
                 }))
             );
         } else {
-            // Both paid modes need the same per-image sample, so the expensive
-            // pass runs once and each mode reads a different signal off it.
+            // Every sampling mode needs the same per-image sample, so the
+            // expensive pass runs once and each mode reads a different signal
+            // off it. This is what makes the merged mode cost no more analysis
+            // than a single one did.
             const candidates = sampleCandidates(enriched);
             const sampled = [];
             for (let i = 0; i < candidates.length; i++) {
@@ -239,7 +271,60 @@ export default function StorageScanScreen({ route, navigation }) {
             }
             if (candidates.length === SAMPLE_LIMIT) setPartial(true);
 
-            if (mode === MODES.blurry) {
+            if (mode === MODES.photos) {
+                step("Sorting what it found…", 96);
+
+                // Order matters: a photo must appear ONCE. A blurry screenshot
+                // is reported as a screenshot, and a photo already inside a
+                // similar-group is not also listed as blurry — otherwise
+                // selecting both rows would try to delete the same asset twice
+                // and the freed-bytes total would double-count it.
+                const claimed = new Set();
+
+                const shots = findScreenshots(sampled).map((a) => {
+                    claimed.add(a.id);
+                    return {
+                        id: a.id,
+                        label: a.filename || "Screenshot",
+                        subtitle: `Screenshot · ${formatSize(a.fileSize)}`,
+                        group: "Screenshots",
+                        bytes: a.fileSize ?? 0,
+                        uri: a.localUri ?? a.uri,
+                        assetIds: [a.id],
+                    };
+                });
+
+                const groups = groupSimilarByHash(sampled.filter((a) => !claimed.has(a.id)));
+                const similar = groups.map((g) => {
+                    g.assetIds.forEach((id) => claimed.add(id));
+                    return {
+                        id: g.id,
+                        label: g.label,
+                        subtitle: `${g.allCount} similar · keeps the newest · frees ${formatSize(g.totalBytes)}`,
+                        group: "Similar photos",
+                        bytes: g.totalBytes,
+                        uri: sampled.find((a) => a.id === g.keepId)?.localUri,
+                        assetIds: g.assetIds,
+                    };
+                });
+
+                const blurry = sampled
+                    // "unknown" is not "blurry" — a photo we could not decode is
+                    // left out rather than offered up for deletion.
+                    .filter((a) => !claimed.has(a.id) && classifySharpness(a.sharpness) === "blurry")
+                    .sort((a, b) => (a.sharpness ?? 0) - (b.sharpness ?? 0))
+                    .map((a) => ({
+                        id: a.id,
+                        label: a.filename || "Photo",
+                        subtitle: `Blurry · ${formatSize(a.fileSize)}`,
+                        group: "Blurry photos",
+                        bytes: a.fileSize ?? 0,
+                        uri: a.localUri ?? a.uri,
+                        assetIds: [a.id],
+                    }));
+
+                built = [...shots, ...similar, ...blurry];
+            } else if (mode === MODES.blurry) {
                 step("Scoring sharpness…", 96);
                 built = sampled
                     // "unknown" is not "blurry". A photo we could not decode is
@@ -279,7 +364,10 @@ export default function StorageScanScreen({ route, navigation }) {
         });
 
         return built;
-    }, [mode]);
+        // thresholdMb must be a dependency: without it the callback keeps the
+        // floor from first render and changing the filter would silently
+        // re-scan at 50 MB.
+    }, [mode, thresholdMb]);
 
     const start = useCallback(async () => {
         setPreparing(true);
@@ -448,6 +536,10 @@ export default function StorageScanScreen({ route, navigation }) {
         ({ item }) => {
             const isSelected = selected.has(item.id);
             return (
+                <>
+                {item.heading ? (
+                    <Text style={styles.groupHeading}>{item.heading}</Text>
+                ) : null}
                 <Pressable
                     onPress={() => toggle(item.id)}
                     accessibilityRole="checkbox"
@@ -480,10 +572,24 @@ export default function StorageScanScreen({ route, navigation }) {
                         color={isSelected ? theme.colors.primary : theme.colors.textMuted}
                     />
                 </Pressable>
+                </>
             );
         },
         [selected, toggle, styles, theme, mode.icon]
     );
+
+    // Section heading for the first row of each group. Rendered inside the row
+    // renderer rather than with SectionList so the existing windowing,
+    // selection and delete paths stay exactly as they are.
+    const rowsWithHeadings = useMemo(() => {
+        if (!mode.grouped) return rows;
+        let last = null;
+        return rows.map((r) => {
+            const heading = r.group && r.group !== last ? r.group : null;
+            if (r.group) last = r.group;
+            return heading ? { ...r, heading } : r;
+        });
+    }, [rows, mode.grouped]);
 
     const ROW_HEIGHT = 68;
 
@@ -502,12 +608,67 @@ export default function StorageScanScreen({ route, navigation }) {
 
                 {phase === "idle" ? (
                     <View style={styles.centre}>
-                        <Ionicons name={mode.icon} size={46} color={theme.colors.textMuted} />
+                        <View style={styles.idleIcon}>
+                            <Ionicons name={mode.icon} size={34} color={theme.colors.accentText} />
+                        </View>
+
+                        {/* What this scan actually looks for, so the cost is
+                            understood before it is spent rather than after. */}
+                        {mode.finds ? (
+                            <View style={styles.findsList}>
+                                {mode.finds.map((f) => (
+                                    <View key={f} style={styles.findsRow}>
+                                        <Ionicons
+                                            name="checkmark-circle-outline"
+                                            size={15}
+                                            color={theme.colors.primary}
+                                        />
+                                        <Text style={styles.findsText}>{f}</Text>
+                                    </View>
+                                ))}
+                            </View>
+                        ) : null}
+
+                        {/* Size floor. Only the large-file mode has one. */}
+                        {mode === MODES.large ? (
+                            <View style={styles.filterWrap}>
+                                <Text style={styles.filterLabel}>Show files larger than</Text>
+                                <View style={styles.filterRow}>
+                                    {LARGE_FILE_THRESHOLDS_MB.map((mb) => {
+                                        const active = thresholdMb === mb;
+                                        return (
+                                            <Pressable
+                                                key={mb}
+                                                onPress={() => setThresholdMb(mb)}
+                                                accessibilityRole="radio"
+                                                accessibilityState={{ selected: active }}
+                                                accessibilityLabel={`Show files larger than ${mb} megabytes`}
+                                                style={[styles.filterChip, active && styles.filterChipActive]}
+                                            >
+                                                <Text
+                                                    style={[
+                                                        styles.filterChipText,
+                                                        active && styles.filterChipTextActive,
+                                                    ]}
+                                                >
+                                                    {mb} MB
+                                                </Text>
+                                            </Pressable>
+                                        );
+                                    })}
+                                </View>
+                            </View>
+                        ) : null}
+
                         <PrimaryButton
                             title={preparing ? "Checking…" : `Scan for ${mode.title.toLowerCase()}`}
                             onPress={start}
                             disabled={preparing}
                         />
+
+                        <Text style={styles.idleFoot}>
+                            Nothing is deleted without your review and confirmation.
+                        </Text>
                     </View>
                 ) : null}
 
@@ -563,14 +724,24 @@ export default function StorageScanScreen({ route, navigation }) {
                             </View>
 
                             <FlatList
-                                data={rows}
+                                data={rowsWithHeadings}
                                 renderItem={renderRow}
                                 keyExtractor={(item) => item.id}
-                                getItemLayout={(_, index) => ({
-                                    length: ROW_HEIGHT,
-                                    offset: ROW_HEIGHT * index,
-                                    index,
-                                })}
+                                // getItemLayout only where every row really is
+                                // ROW_HEIGHT. A grouped list has taller rows
+                                // wherever a heading sits, and claiming a fixed
+                                // height there puts every offset past the first
+                                // heading wrong — scroll jumps, and scrollToIndex
+                                // lands on the neighbour.
+                                getItemLayout={
+                                    mode.grouped
+                                        ? undefined
+                                        : (_, index) => ({
+                                              length: ROW_HEIGHT,
+                                              offset: ROW_HEIGHT * index,
+                                              index,
+                                          })
+                                }
                                 removeClippedSubviews
                                 initialNumToRender={12}
                                 windowSize={7}
@@ -621,6 +792,8 @@ export default function StorageScanScreen({ route, navigation }) {
                     bytesFreed={celebration ?? ""}
                     onDone={() => setCelebration(null)}
                 />
+
+                {permissionSheet}
             </SafeAreaView>
         </GradientScreen>
     );
@@ -629,6 +802,66 @@ export default function StorageScanScreen({ route, navigation }) {
 const makeStyles = (t) =>
     StyleSheet.create({
         safe: { flex: 1 },
+
+        // ── Idle screen ─────────────────────────────────────────────────────
+        idleIcon: {
+            width: 68,
+            height: 68,
+            borderRadius: 34,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: t.colors.infoBg,
+            borderWidth: 1,
+            borderColor: t.colors.infoBorder,
+            marginBottom: 4,
+        },
+        findsList: { gap: 8, alignSelf: "stretch", paddingHorizontal: 12, marginBottom: 4 },
+        findsRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+        findsText: { color: t.colors.textSecondary, fontSize: 13, fontWeight: "600", flex: 1 },
+        idleFoot: {
+            color: t.colors.textMuted,
+            fontSize: 12,
+            fontWeight: "500",
+            textAlign: "center",
+            marginTop: 2,
+        },
+
+        // ── Size filter ─────────────────────────────────────────────────────
+        filterWrap: { alignSelf: "stretch", gap: 8, marginVertical: 4 },
+        filterLabel: {
+            color: t.colors.textMuted,
+            fontSize: 12,
+            fontWeight: "700",
+            textAlign: "center",
+            textTransform: "uppercase",
+            letterSpacing: 0.5,
+        },
+        filterRow: { flexDirection: "row", justifyContent: "center", flexWrap: "wrap", gap: 8 },
+        filterChip: {
+            minHeight: 40,
+            minWidth: 64,
+            alignItems: "center",
+            justifyContent: "center",
+            paddingHorizontal: 14,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: t.colors.border,
+        },
+        filterChipActive: { backgroundColor: t.colors.infoBg, borderColor: t.colors.infoBorder },
+        filterChipText: { color: t.colors.textSecondary, fontWeight: "700", fontSize: 13 },
+        filterChipTextActive: { color: t.colors.accentText },
+
+        // ── Result groups ───────────────────────────────────────────────────
+        groupHeading: {
+            color: t.colors.textMuted,
+            fontSize: 12,
+            fontWeight: "800",
+            textTransform: "uppercase",
+            letterSpacing: 0.6,
+            marginTop: 14,
+            marginBottom: 6,
+            paddingHorizontal: 4,
+        },
         header: { paddingHorizontal: 18, paddingTop: 12, gap: 6 },
         blurb: { color: t.colors.textSecondary, fontSize: 13, lineHeight: 19, fontWeight: "500" },
         partial: {

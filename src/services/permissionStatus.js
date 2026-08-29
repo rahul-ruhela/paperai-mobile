@@ -133,8 +133,8 @@ export async function getAllStatuses() {
             label: "Photos",
             state: photos,
             usedByApp: true,
-            why: "Choosing images to extract text from or sign, and finding duplicates in Junk Wiper.",
-            features: ["Upload from library", "Signature on a photo", "Junk Wiper duplicate scan"],
+            why: "Choosing images to extract text from or sign, and finding duplicates in Storage Studio.",
+            features: ["Upload from library", "Signature on a photo", "Duplicate Cleaner scan"],
             canRequest: photos === STATE.UNDETERMINED,
             // presentPermissionsPickerAsync is the iOS limited-library picker
             // and exists nowhere else.

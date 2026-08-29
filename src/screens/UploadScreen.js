@@ -259,26 +259,28 @@ export default function UploadScreen({ navigation }) {
                 >
                     {/* Header */}
                     <View style={styles.header}>
-                        <Text style={styles.hTitle}>Tools</Text>
-                        <Pressable style={styles.creditBadge} onPress={() => navigation.navigate("Paywall")}>
-                            <Ionicons name="flash" size={14} color={theme.colors.warning} />
-                            <Text style={styles.creditText}>{credits === null ? "…" : `${credits} credits`}</Text>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.hTitle}>Tools</Text>
+                            <Text style={styles.hSubtitle}>Scan, sign, extract and clean up</Text>
+                        </View>
+                        <Pressable
+                            style={({ pressed }) => [styles.creditBadge, pressed && { opacity: 0.75 }]}
+                            onPress={() => navigation.navigate("Paywall")}
+                            accessibilityRole="button"
+                            accessibilityLabel={`${credits ?? 0} credits. Tap to view plans.`}
+                        >
+                            <Ionicons name="flash" size={14} color={theme.colors.warningText} />
+                            <Text style={styles.creditText}>{credits === null ? "…" : `${credits}`}</Text>
                         </Pressable>
                     </View>
 
                     {/* Free, on-device tools first — nothing here costs a credit. */}
-
-                    {/* ── FREE TOOLS ── */}
-                    <View style={styles.sectionDivider}>
-                        <View style={styles.dividerLine} />
-                        <Text style={styles.sectionLabel}>FREE TOOLS</Text>
-                        <View style={styles.dividerLine} />
-                    </View>
+                    <SectionHeader label="Free tools" caption="No credits used" />
 
                     {/* 1. Scan Document — FREE (scan + save/PDF; AI optional) */}
                     <View style={styles.card}>
                         <View style={styles.cardHeader}>
-                            <View style={[styles.cardIcon, { backgroundColor: theme.colors.infoBg }]}>
+                            <View style={[styles.cardIcon, { backgroundColor: `${theme.colors.primary}18` }]}>
                                 <Ionicons name="camera-outline" size={20} color={theme.colors.primary} />
                             </View>
                             <View style={{ flex: 1 }}>
@@ -297,7 +299,7 @@ export default function UploadScreen({ navigation }) {
                     {/* 2. Scan QR & Codes — FREE general utility */}
                     <View style={styles.card}>
                         <View style={styles.cardHeader}>
-                            <View style={[styles.cardIcon, { backgroundColor: theme.colors.infoBg }]}>
+                            <View style={[styles.cardIcon, { backgroundColor: `${theme.colors.accentText}18` }]}>
                                 <Ionicons name="qr-code-outline" size={20} color={theme.colors.accentText} />
                             </View>
                             <View style={{ flex: 1 }}>
@@ -316,7 +318,7 @@ export default function UploadScreen({ navigation }) {
                     {/* 3. Sign & Fill — FREE, fully on-device */}
                     <View style={styles.card}>
                         <View style={styles.cardHeader}>
-                            <View style={[styles.cardIcon, { backgroundColor: theme.colors.successBg }]}>
+                            <View style={[styles.cardIcon, { backgroundColor: `${theme.colors.successText}18` }]}>
                                 <Ionicons name="create-outline" size={20} color={theme.colors.successText} />
                             </View>
                             <View style={{ flex: 1 }}>
@@ -332,19 +334,14 @@ export default function UploadScreen({ navigation }) {
                     </View>
 
 
-                    {/* ── AI FEATURES ── */}
-                    <View style={styles.sectionDivider}>
-                        <View style={styles.dividerLine} />
-                        <Text style={styles.sectionLabel}>AI FEATURES</Text>
-                        <View style={styles.dividerLine} />
-                    </View>
-
-                    {/* Everything below spends credits. */}
+                    {/* Everything below spends credits, which the caption says
+                        once here rather than on each card. */}
+                    <SectionHeader label="AI features" caption="Uses credits" tone="credit" />
 
                     {/* Scan Receipt — 1 credit per successful extraction */}
                     <View style={styles.card}>
                         <View style={styles.cardHeader}>
-                            <View style={[styles.cardIcon, { backgroundColor: theme.colors.warningBg }]}>
+                            <View style={[styles.cardIcon, { backgroundColor: `${theme.colors.warningText}18` }]}>
                                 <Ionicons name="receipt-outline" size={20} color={theme.colors.warningText} />
                             </View>
                             <View style={{ flex: 1 }}>
@@ -377,7 +374,7 @@ export default function UploadScreen({ navigation }) {
                     {/* 4. Extract Text from Image (OCR) — costs credits */}
                     <View style={styles.card}>
                         <View style={styles.cardHeader}>
-                            <View style={[styles.cardIcon, { backgroundColor: theme.colors.warningBg }]}>
+                            <View style={[styles.cardIcon, { backgroundColor: `${theme.colors.warning}18` }]}>
                                 <Ionicons name="scan-outline" size={20} color={theme.colors.warning} />
                             </View>
                             <View style={{ flex: 1 }}>
@@ -459,12 +456,7 @@ export default function UploadScreen({ navigation }) {
                         )}
                     </View>
 
-                    {/* ── Advanced ── */}
-                    <View style={styles.sectionDivider}>
-                        <View style={styles.dividerLine} />
-                        <Text style={styles.sectionLabel}>DEVICE STORAGE</Text>
-                        <View style={styles.dividerLine} />
-                    </View>
+                    <SectionHeader label="Device storage" caption="Runs on this device" />
 
                     {/* 5. Storage Studio — the single home for all five cleaners.
                         This card used to be "Junk Wiper", which was the SAME
@@ -475,7 +467,7 @@ export default function UploadScreen({ navigation }) {
                         think they have missed something. One door now. */}
                     <View style={styles.card}>
                         <View style={styles.cardHeader}>
-                            <View style={[styles.cardIcon, { backgroundColor: theme.colors.dangerBg }]}>
+                            <View style={[styles.cardIcon, { backgroundColor: `${theme.colors.danger}18` }]}>
                                 <Ionicons name="sparkles-outline" size={20} color={theme.colors.danger} />
                             </View>
                             <View style={{ flex: 1 }}>
@@ -540,6 +532,38 @@ function SectionCard({ icon, title, subtitle, onPress, disabled, actionLabel, ac
     );
 }
 
+/**
+ * SectionHeader — the group label, plus the one fact that actually varies
+ * between groups: what tapping something in it costs.
+ *
+ * Replaces a centred "──── LABEL ────" rule. That rule drew three horizontal
+ * lines down a screen that is already a stack of bordered cards, and the extra
+ * lines competed with the card edges instead of separating anything.
+ */
+function SectionHeader({ label, caption, tone }) {
+    const { theme } = useTheme();
+    const styles = useThemedStyles(makeStyles);
+    const credit = tone === "credit";
+    return (
+        <View style={styles.sectionHeader}>
+            <View
+                style={[
+                    styles.sectionRule,
+                    { backgroundColor: credit ? theme.colors.warningText : theme.colors.primary },
+                ]}
+            />
+            <Text style={styles.sectionLabel}>{label}</Text>
+            <View style={{ flex: 1 }} />
+            <View style={[styles.sectionCaption, credit && styles.sectionCaptionCredit]}>
+                {credit ? <Ionicons name="flash" size={10} color={theme.colors.warningText} /> : null}
+                <Text style={[styles.sectionCaptionText, credit && styles.sectionCaptionTextCredit]}>
+                    {caption}
+                </Text>
+            </View>
+        </View>
+    );
+}
+
 function ActionBtn({ icon, label, onPress, disabled, color, full }) {
     const { theme } = useTheme();
     const styles = useThemedStyles(makeStyles);
@@ -599,26 +623,32 @@ function FreeBadge() {
 const makeStyles = (t) =>
     StyleSheet.create({
     container: { padding: 16, gap: 14, paddingBottom: 40 },
-    header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 2 },
-    hTitle: { color: t.colors.textPrimary, fontSize: 26, fontWeight: "800" },
+    header: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 2 },
+    hTitle: { color: t.colors.textPrimary, fontSize: 28, fontWeight: "800", letterSpacing: -0.5 },
+    hSubtitle: { color: t.colors.textMuted, fontSize: 13, fontWeight: "500", marginTop: 2 },
     creditBadge: {
         flexDirection: "row", alignItems: "center", gap: 5,
-        backgroundColor: t.colors.accentBg,
+        // Was accentBg (blue) inside warningBorder (amber). One hue now.
+        backgroundColor: t.colors.warningBg,
         borderWidth: 1, borderColor: t.colors.warningBorder,
-        paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999,
+        paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999,
+        minHeight: 36,
     },
-    creditText: { color: t.colors.warningText, fontWeight: "700", fontSize: 13 },
+    creditText: { color: t.colors.warningText, fontWeight: "800", fontSize: 14 },
     card: {
         backgroundColor: t.colors.glass,
         borderWidth: 1, borderColor: t.colors.glassBorder,
-        borderRadius: 20, padding: 14, gap: 12,
-        shadowColor: t.colors.primary, shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.1, shadowRadius: 18, elevation: 4,
+        borderRadius: 20, padding: 16, gap: 14,
+        // Lighter and lower than before. At opacity 0.1 / radius 18 every card
+        // carried a visible blue halo, and eight haloes down a scroll read as
+        // fog rather than depth.
+        shadowColor: "#0B1228", shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.06, shadowRadius: 12, elevation: 2,
     },
     cardHeader: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
-    cardIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-    cardTitle: { color: t.colors.textPrimary, fontWeight: "700", fontSize: 15 },
-    cardSubtitle: { color: t.colors.textMuted, fontWeight: "500", fontSize: 12, marginTop: 3, lineHeight: 16 },
+    cardIcon: { width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+    cardTitle: { color: t.colors.textPrimary, fontWeight: "800", fontSize: 16, letterSpacing: -0.2 },
+    cardSubtitle: { color: t.colors.textMuted, fontWeight: "500", fontSize: 13, marginTop: 4, lineHeight: 18 },
     cardActions: { flexDirection: "row", gap: 10, flexWrap: "wrap" },
     actionBtn: {
         flexDirection: "row", alignItems: "center", gap: 7,
@@ -668,9 +698,18 @@ const makeStyles = (t) =>
         borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3,
     },
     freeBadgeText: { color: t.colors.accentText, fontWeight: "800", fontSize: 11, letterSpacing: 0.5 },
-    sectionDivider: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 6, marginBottom: 2 },
-    dividerLine: { flex: 1, height: 1, backgroundColor: t.colors.separator },
-    sectionLabel: { color: t.colors.textMuted, fontWeight: "700", fontSize: 11, letterSpacing: 1.5 },
+    sectionHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10, marginBottom: 0 },
+    // A short accent stub reads as a marker; a full-width rule read as a border.
+    sectionRule: { width: 3, height: 14, borderRadius: 2 },
+    sectionLabel: { color: t.colors.textPrimary, fontWeight: "800", fontSize: 13, letterSpacing: 0.2 },
+    sectionCaption: {
+        flexDirection: "row", alignItems: "center", gap: 3,
+        backgroundColor: t.colors.glassSoft,
+        borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3,
+    },
+    sectionCaptionCredit: { backgroundColor: t.colors.warningBg },
+    sectionCaptionText: { color: t.colors.textMuted, fontWeight: "700", fontSize: 11 },
+    sectionCaptionTextCredit: { color: t.colors.warningText },
     upgradeBanner: {
         flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
         backgroundColor: t.colors.infoBg,

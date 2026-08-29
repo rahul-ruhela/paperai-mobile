@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import CameraPermissionGate from "../ui/CameraPermissionGate";
+import { usePhotoPermission } from "../hooks/usePhotoPermission";
 import { Ionicons } from "@expo/vector-icons";
 import * as SecureStore from "expo-secure-store";
 import * as MediaLibrary from "expo-media-library";
@@ -64,6 +65,8 @@ export default function CameraDocumentScanScreen({ navigation }) {
     const [capturing, setCapturing] = useState(false);
     const [busy, setBusy] = useState(false);       // save / export / analyze in flight
     const cameraRef = useRef(null);
+    // Declared above the early permission returns — hooks cannot sit behind them.
+    const { ensureAccess, permissionSheet } = usePhotoPermission();
 
     // ── Permission gates ───────────────────────────────────────────────────────
     if (!permission) {
@@ -123,18 +126,16 @@ export default function CameraDocumentScanScreen({ navigation }) {
         if (!pages.length || busy) return;
         try {
             setBusy(true);
-            const perm = await MediaLibrary.requestPermissionsAsync();
-            if (!perm.granted) {
-                Alert.alert(
-                    "Photo Access Needed",
-                    "Allow photo access so scanned pages can be saved to your library.",
-                    [
-                        { text: "Cancel", style: "cancel" },
-                        { text: "Open Settings", onPress: () => Linking.openSettings() },
-                    ]
-                );
-                return;
-            }
+            // Add-only access: saving a scan does not need to read the library,
+            // and asking for less is both the smaller prompt and the easier
+            // 5.1.1 story. The explainer runs before the system dialog.
+            const granted = await ensureAccess({
+                writeOnly: true,
+                title: "Save to your Photos",
+                reason:
+                    "Paper AI adds the pages you just scanned to your photo library. It only adds \u2014 it does not read or change the photos already there.",
+            });
+            if (!granted) return;
             for (const p of pages) await MediaLibrary.saveToLibraryAsync(p.uri);
             Alert.alert("Saved", `${pages.length} page${pages.length > 1 ? "s" : ""} saved to your Photos.`);
         } catch (err) {
@@ -233,6 +234,8 @@ export default function CameraDocumentScanScreen({ navigation }) {
                         }
                     />
                 </SafeAreaView>
+
+                {permissionSheet}
 
                 {/* Free actions */}
                 <View style={styles.reviewBottomBar}>

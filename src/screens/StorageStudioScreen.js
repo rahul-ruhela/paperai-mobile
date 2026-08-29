@@ -39,6 +39,15 @@ import { useFeatureAccess } from "../hooks/useFeatureAccess";
  * than it speaks. See projectStorage.
  */
 
+// Three layers, not five.
+//
+// Screenshots, Blurry Photos and Similar Photos were three separate scans over
+// the SAME photo library, and the two paid ones already shared one 64x64 sample
+// per photo — so running them apart charged twice for work that happens once.
+// They are now a single "Photo Cleanup" pass at 3 credits.
+//
+// The three old modes still exist in StorageScanScreen and their credit keys
+// are still seeded server-side: the App Store build in review routes to them.
 const LAYERS = [
     {
         key: "duplicates",
@@ -46,43 +55,28 @@ const LAYERS = [
         title: "Duplicate Cleaner",
         subtitle: "Exact copies, repeated filenames and burst shots",
         icon: "duplicate-outline",
+        tone: "primary",
         route: "JunkWiper",
     },
     {
-        key: "screenshots",
-        featureKey: "screenshot_cleaner",
-        title: "Screenshots",
-        subtitle: "Every screenshot on this device, largest first",
-        icon: "phone-portrait-outline",
+        key: "photos",
+        featureKey: "photo_cleanup",
+        title: "Photo Cleanup",
+        subtitle: "Screenshots, blurry shots and near-identical photos in one scan",
+        icon: "sparkles-outline",
+        tone: "accentText",
         route: "StorageScan",
-        params: { mode: "screenshots" },
+        params: { mode: "photos" },
     },
     {
         key: "large",
         featureKey: "large_video_finder",
         title: "Large Files",
-        subtitle: "Photos and videos over 50 MB, grouped by size",
+        subtitle: "Your biggest photos and videos — choose 10, 20, 30 or 50 MB",
         icon: "film-outline",
+        tone: "warningText",
         route: "StorageScan",
         params: { mode: "large" },
-    },
-    {
-        key: "blurry",
-        featureKey: "blurry_detector",
-        title: "Blurry Photos",
-        subtitle: "Out-of-focus shots, scored on this device",
-        icon: "eye-off-outline",
-        route: "StorageScan",
-        params: { mode: "blurry" },
-    },
-    {
-        key: "similar",
-        featureKey: "similar_photos",
-        title: "Similar Photos",
-        subtitle: "Near-identical shots grouped so you keep the best one",
-        icon: "copy-outline",
-        route: "StorageScan",
-        params: { mode: "similar" },
     },
 ];
 
@@ -123,6 +117,15 @@ export default function StorageStudioScreen({ navigation }) {
     const last = history[0];
     const forecast = projectStorage(history, disk.free);
 
+    // The bar says how urgent this is without needing a sentence. Thresholds
+    // are the ones iOS itself starts warning at, not round numbers.
+    const pressureColor =
+        usedPct == null || usedPct < 75
+            ? theme.colors.successText
+            : usedPct < 90
+              ? theme.colors.warningText
+              : theme.colors.dangerText;
+
     function forecastLine() {
         if (!forecastAccess.allowed) {
             return "Storage Forecast estimates when your device runs out of space, from the scans you have already run.";
@@ -151,12 +154,28 @@ export default function StorageStudioScreen({ navigation }) {
                             </Text>
                         ) : (
                             <>
+                                {/* Free space is the number someone opens this
+                                    screen to find, so it is the number that is
+                                    large. "Used of total" is the context, not
+                                    the headline. */}
+                                <View style={styles.diskRow}>
+                                    <Text style={styles.diskFree}>{formatSize(disk.free)}</Text>
+                                    <Text style={styles.diskFreeLabel}>free</Text>
+                                    <View style={{ flex: 1 }} />
+                                    <Text style={[styles.diskPct, { color: pressureColor }]}>
+                                        {usedPct}% full
+                                    </Text>
+                                </View>
                                 <View style={styles.barTrack}>
-                                    <View style={[styles.barFill, { width: `${usedPct}%` }]} />
+                                    <View
+                                        style={[
+                                            styles.barFill,
+                                            { width: `${usedPct}%`, backgroundColor: pressureColor },
+                                        ]}
+                                    />
                                 </View>
                                 <Text style={styles.diskText}>
-                                    {formatSize(used)} used of {formatSize(disk.total)} ·{" "}
-                                    {formatSize(disk.free)} free
+                                    {formatSize(used)} used of {formatSize(disk.total)}
                                 </Text>
                             </>
                         )}
@@ -197,7 +216,9 @@ export default function StorageStudioScreen({ navigation }) {
                             Nothing here deletes anything on its own. Every cleaner shows you what
                             it found and waits for you to choose.
                         </Text>
-                        {LAYERS.map((layer) => (
+                        {LAYERS.map((layer, i) => {
+                            const tone = theme.colors[layer.tone] ?? theme.colors.accentText;
+                            return (
                             <FeatureLock
                                 key={layer.key}
                                 featureKey={layer.featureKey}
@@ -211,15 +232,20 @@ export default function StorageStudioScreen({ navigation }) {
                                     onPress={() => navigation.navigate(layer.route, layer.params)}
                                     style={({ pressed }) => [
                                         styles.layer,
-                                        pressed && { opacity: 0.8 },
+                                        // The rule separates rows; above the
+                                        // first one it was just a line under
+                                        // the paragraph.
+                                        i === 0 && styles.layerFirst,
+                                        pressed && styles.layerPressed,
                                     ]}
                                 >
-                                    <View style={styles.layerIcon}>
-                                        <Ionicons
-                                            name={layer.icon}
-                                            size={18}
-                                            color={theme.colors.accentText}
-                                        />
+                                    <View
+                                        style={[
+                                            styles.layerIcon,
+                                            { backgroundColor: `${tone}18`, borderColor: `${tone}44` },
+                                        ]}
+                                    >
+                                        <Ionicons name={layer.icon} size={18} color={tone} />
                                     </View>
                                     <View style={styles.layerText}>
                                         <Text style={styles.layerTitle}>{layer.title}</Text>
@@ -232,7 +258,8 @@ export default function StorageStudioScreen({ navigation }) {
                                     />
                                 </Pressable>
                             </FeatureLock>
-                        ))}
+                            );
+                        })}
                     </View>
 
                     <View style={styles.card}>
@@ -260,20 +287,23 @@ const makeStyles = (t) =>
             borderWidth: 1,
             borderColor: t.colors.glassBorder,
             borderRadius: 20,
-            padding: 14,
+            padding: 16,
             gap: 8,
-            shadowColor: t.colors.primary,
-            shadowOffset: { width: 0, height: 8 },
-            shadowOpacity: 0.1,
-            shadowRadius: 18,
-            elevation: 4,
+            // Matches the Tools tab: a low neutral shadow instead of a blue
+            // halo, which stacked into fog across a scroll of cards.
+            shadowColor: "#0B1228",
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.06,
+            shadowRadius: 12,
+            elevation: 2,
         },
+        // Was uppercase muted 15px — a heading wearing a caption's clothes.
         section: {
-            color: t.colors.textMuted,
-            fontSize: 15,
-            fontWeight: "700",
-            textTransform: "uppercase",
-            letterSpacing: 0.4,
+            color: t.colors.textPrimary,
+            fontSize: 16,
+            fontWeight: "800",
+            letterSpacing: -0.2,
+            marginBottom: 2,
         },
         hint: { color: t.colors.textMuted, fontSize: 12, fontWeight: "500", lineHeight: 17 },
         forecast: { color: t.colors.textSecondary, fontSize: 13, fontWeight: "600", lineHeight: 19 },
@@ -284,8 +314,12 @@ const makeStyles = (t) =>
             backgroundColor: t.colors.glassSoft,
             overflow: "hidden",
         },
-        barFill: { height: 10, borderRadius: 999, backgroundColor: t.colors.primary },
-        diskText: { color: t.colors.textPrimary, fontSize: 13, fontWeight: "700" },
+        barFill: { height: 10, borderRadius: 999 },
+        diskRow: { flexDirection: "row", alignItems: "baseline", gap: 5 },
+        diskFree: { color: t.colors.textPrimary, fontSize: 30, fontWeight: "800", letterSpacing: -1 },
+        diskFreeLabel: { color: t.colors.textMuted, fontSize: 14, fontWeight: "700" },
+        diskPct: { fontSize: 13, fontWeight: "800" },
+        diskText: { color: t.colors.textMuted, fontSize: 12, fontWeight: "600" },
 
         clear: { alignSelf: "flex-start", minHeight: 44, justifyContent: "center" },
         clearText: { color: t.colors.accentText, fontWeight: "700", fontSize: 13 },
@@ -294,21 +328,21 @@ const makeStyles = (t) =>
             flexDirection: "row",
             alignItems: "center",
             gap: 12,
-            paddingVertical: 12,
+            paddingVertical: 13,
             borderTopWidth: 1,
             borderTopColor: t.colors.border,
         },
+        layerFirst: { borderTopWidth: 0, marginTop: 2 },
+        layerPressed: { opacity: 0.7, backgroundColor: t.colors.glassSoft, borderRadius: 12 },
         layerIcon: {
-            width: 34,
-            height: 34,
-            borderRadius: 12,
+            width: 38,
+            height: 38,
+            borderRadius: 13,
             alignItems: "center",
             justifyContent: "center",
-            backgroundColor: t.colors.infoBg,
             borderWidth: 1,
-            borderColor: t.colors.infoBorder,
         },
         layerText: { flex: 1 },
         layerTitle: { color: t.colors.textPrimary, fontWeight: "800", fontSize: 15 },
-        layerSub: { color: t.colors.textMuted, fontWeight: "600", fontSize: 12, marginTop: 2 },
+        layerSub: { color: t.colors.textMuted, fontWeight: "500", fontSize: 12, marginTop: 3, lineHeight: 16 },
     });

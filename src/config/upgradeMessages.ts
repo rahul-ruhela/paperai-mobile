@@ -30,6 +30,7 @@ export const UPGRADE_MESSAGES: Record<string, string> = {
     summarize_text: "Get instant summaries with Essential.",
     receipt_extraction: "Turn receipts into expenses with Essential.",
     smart_reminders: "Never miss a due date with Essential.",
+    photo_cleanup: "Clear screenshots, blurry shots and near-identical photos in one scan with Essential.",
     blurry_detector: "Find blurry shots automatically with Essential.",
 
     // Plus

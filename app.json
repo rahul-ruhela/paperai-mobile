@@ -58,6 +58,7 @@
       [
         "expo-camera",
         {
+          "//": "microphonePermission stays FALSE until voice input actually ships. The app only SPEAKS today (expo-speech drives AVSpeechSynthesizer, which is output-only and needs no permission) and never records. Declaring NSMicrophoneUsageDescription for a feature that does not exist yet is a guideline 2.1 / 5.1.1 flag, and it puts a microphone row in the user's privacy settings that nothing ever uses. When voice input lands, replace false with this specific string: \"Paper AI Assistant records your voice only while you hold the mic button, so you can dictate a task or a note instead of typing it. Recording stops when you let go.\" A generic string such as \"Allow Paper AI to access your microphone\" is a 5.1.1 rejection on its own.",
           "cameraPermission": "Paper AI Assistant needs camera access to scan documents and receipts and extract text from them.",
           "microphonePermission": false
         }

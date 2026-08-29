@@ -1,6 +1,8 @@
 import {
     BLUR_THRESHOLD,
     SIZE_BANDS,
+    LARGE_FILE_THRESHOLDS_MB,
+    bandsForThreshold,
     averageHash,
     bandLargeAssets,
     buildAnalysisPayload,
@@ -367,5 +369,42 @@ describe("buildAnalysisPayload", () => {
             screenshotBytes: 0,
             bands: [],
         });
+    });
+});
+
+describe("large-file size thresholds", () => {
+    const MB = 1024 * 1024;
+
+    it("defaults to the 50 MB floor, so a 12 MB photo is not a large file", () => {
+        expect(bandLargeAssets([photo("a", { fileSize: 12 * MB })])).toEqual([]);
+    });
+
+    it("finds that same photo once the floor is lowered to 10 MB", () => {
+        const bands = bandLargeAssets([photo("a", { fileSize: 12 * MB })], { minMb: 10 });
+        expect(bands).toHaveLength(1);
+        expect(bands[0].items).toHaveLength(1);
+        expect(bands[0].label).toBe("10 – 20 MB");
+    });
+
+    it.each(LARGE_FILE_THRESHOLDS_MB)("never reports a file under the %i MB floor", (minMb) => {
+        const under = photo("under", { fileSize: (minMb - 1) * MB });
+        const over = photo("over", { fileSize: (minMb + 1) * MB });
+        const bands = bandLargeAssets([under, over], { minMb });
+        const ids = bands.flatMap((b) => b.items.map((i) => i.id));
+        expect(ids).toContain("over");
+        expect(ids).not.toContain("under");
+    });
+
+    it("keeps bands ordered largest first at every threshold", () => {
+        for (const minMb of LARGE_FILE_THRESHOLDS_MB) {
+            const mins = bandsForThreshold(minMb).map((b) => b.minBytes);
+            expect([...mins].sort((a, b) => b - a)).toEqual(mins);
+        }
+    });
+
+    // A bad threshold must not produce an empty ladder, which would report
+    // "nothing found" on a device that is actually full.
+    it.each([0, 7, 999, null, undefined, "10"])("falls back to the default for %p", (bad) => {
+        expect(bandsForThreshold(bad)).toEqual(bandsForThreshold(50));
     });
 });

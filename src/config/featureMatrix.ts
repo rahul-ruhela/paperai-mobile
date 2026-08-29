@@ -49,6 +49,10 @@ export const FEATURES: FeatureDefinition[] = [
     { key: "storage_studio", name: "Storage Studio", requiredTier: "free", onDevice: true, backendVerified: false },
     { key: "screenshot_cleaner", name: "Screenshot Cleaner", requiredTier: "free", onDevice: true, backendVerified: false },
     { key: "large_video_finder", name: "Large Video Finder", requiredTier: "free", onDevice: true, backendVerified: false },
+    // Merged photo cleanup — see the note in Services/FeatureMatrix.cs for why
+    // this is Essential rather than Plus, and why the three keys it replaces
+    // are still registered below.
+    { key: "photo_cleanup", name: "Photo Cleanup", requiredTier: "essential", onDevice: true, backendVerified: true, creditFeatureKey: "photo_cleanup_scan" },
     { key: "blurry_detector", name: "Blurry Photo Detector", requiredTier: "essential", onDevice: true, backendVerified: true, creditFeatureKey: "blurry_photo_scan" },
     { key: "similar_photos", name: "Similar Photo Grouping", requiredTier: "plus", onDevice: true, backendVerified: true, creditFeatureKey: "similar_photo_scan" },
 

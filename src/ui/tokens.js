@@ -102,6 +102,22 @@ const lightColors = {
 
     white: "#FFFFFF",
     black: "#111111",
+
+    // ── Scanning radar ──────────────────────────────────────────────────────
+    // The radar was built against a dark navy panel and hardcoded its whole
+    // palette, so in light mode the panel, its text and its accents were all
+    // wrong together. Both schemes are defined here so a change to one is a
+    // visible omission in the other.
+    radarText: "#0F1B3D",
+    radarMuted: "#5B6B8C",
+    radarAccent: "#0369A1",
+    radarWarn: "#B91C1C",
+    radarDivider: "rgba(15,27,61,0.18)",
+    // Base RGB for every radar ring, chip and fill, so one token drives
+    // all their alpha variants instead of thirteen literals per scheme.
+    radarTintRgb: "3,105,161",
+    radarSweepFrom: "rgba(3,105,161,0)",
+    radarSweepTo: "rgba(3,105,161,0.42)",
 };
 
 const darkColors = {
@@ -171,6 +187,16 @@ const darkColors = {
 
     white: "#FFFFFF",
     black: "#111111",
+
+    // See the note in the light palette — both schemes live together.
+    radarText: "#FFFFFF",
+    radarMuted: "#94A3B8",
+    radarAccent: "#7DD3FC",
+    radarWarn: "#FCA5A5",
+    radarDivider: "rgba(148,163,184,0.25)",
+    radarTintRgb: "56,189,248",
+    radarSweepFrom: "rgba(56,189,248,0)",
+    radarSweepTo: "rgba(56,189,248,0.55)",
 };
 
 const lightGradients = {
@@ -178,6 +204,11 @@ const lightGradients = {
     accent: ["#FFD54A", "#FFEA9A"],
     danger: ["#FF5A5F", "#FF8A8E"],
     background: ["#F5F7FB", "#EEF2FB", "#F5F7FB"],
+    // The scanning radar. It used to hardcode the dark navy ramp in both
+    // appearances, so a light-mode scan dropped a near-black panel into an
+    // otherwise pale screen. Defined per scheme here so there is one place
+    // to change it and no way to forget the other mode.
+    radar: ["#E8EEFB", "#DCE7FA", "#EAF0FC"],
 };
 
 const darkGradients = {
@@ -185,6 +216,7 @@ const darkGradients = {
     accent: ["#FFD54A", "#FFE79A"],
     danger: ["#FF5A5F", "#FF8A8E"],
     background: ["#050816", "#070B1E", "#0B1228"],
+    radar: ["#0A1230", "#0B1B44", "#08122E"],
 };
 
 /* =======================

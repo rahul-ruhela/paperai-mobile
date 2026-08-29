@@ -92,6 +92,9 @@ const BACKEND_FEATURES: { key: string; requiredTier: string; creditFeatureKey?: 
     { key: "storage_studio", requiredTier: "free" },
     { key: "screenshot_cleaner", requiredTier: "free" },
     { key: "large_video_finder", requiredTier: "free" },
+    // Merged photo cleanup. Essential, the LOWER of the two tiers it replaces,
+    // so no Essential subscriber loses the blurry scan they have today.
+    { key: "photo_cleanup", requiredTier: "essential", creditFeatureKey: "photo_cleanup_scan" },
     { key: "blurry_detector", requiredTier: "essential", creditFeatureKey: "blurry_photo_scan" },
     { key: "similar_photos", requiredTier: "plus", creditFeatureKey: "similar_photo_scan" },
     { key: "ai_storage_analysis", requiredTier: "advance", creditFeatureKey: "ai_storage_analysis" },

@@ -51,28 +51,45 @@ export default function VoiceSettingsSection({ navigation, firstName: firstNameP
     // is empty, so a failed profile fetch costs a nicety and nothing else.
     const [firstName, setFirstName] = useState(firstNameProp ?? "");
     const [playing, setPlaying] = useState(false);
-    const [error, setError] = useState(false);
+    // Distinct from "no panel": the SETTINGS could not be loaded, but the panel
+    // and its sample still work. Previously one failed request took the whole
+    // section away — including "Play sample", which needs no server at all.
+    const [prefsFailed, setPrefsFailed] = useState(false);
 
     useEffect(() => {
         let alive = true;
         (async () => {
-            try {
-                const [loaded, installed] = await Promise.all([
-                    getVoicePreferences(),
-                    listVoices(),
-                ]);
-                if (!alive) return;
-                setPrefs(loaded);
-                setVoices(installed);
+            // Deliberately NOT Promise.all. Speech synthesis is entirely
+            // on-device, so an unreachable API must not be able to silence the
+            // sample — that is exactly what it used to do, and it looked like a
+            // broken speech feature rather than a failed network call.
+            const installed = await listVoices();
+            if (alive) setVoices(installed);
 
-                if (!firstNameProp) {
-                    // Was reading profile.name; the endpoint returns fullName,
-                    // so the sample never greeted anyone by name.
-                    const first = await getFirstName();
-                    if (alive && first) setFirstName(first);
-                }
+            try {
+                const loaded = await getVoicePreferences();
+                if (alive) setPrefs(loaded);
             } catch {
-                if (alive) setError(true);
+                // Local defaults, so every control has a sane position and the
+                // sample can be played while the settings are unavailable.
+                if (alive) {
+                    setPrefsFailed(true);
+                    setPrefs({
+                        available: false,
+                        enabled: false,
+                        voiceId: "",
+                        rate: 1,
+                        tone: TONES.FRIENDLY,
+                        speakOnTap: true,
+                    });
+                }
+            }
+
+            if (!firstNameProp) {
+                // Was reading profile.name; the endpoint returns fullName,
+                // so the sample never greeted anyone by name.
+                const first = await getFirstName();
+                if (alive && first) setFirstName(first);
             }
         })();
         return () => {
@@ -112,15 +129,6 @@ export default function VoiceSettingsSection({ navigation, firstName: firstNameP
             onDone: () => setPlaying(false),
         });
         if (!result.spoken) setPlaying(false);
-    }
-
-    if (error) {
-        return (
-            <View style={styles.card}>
-                <Text style={styles.section}>Voice Companion</Text>
-                <Text style={styles.hint}>Voice settings are unavailable right now.</Text>
-            </View>
-        );
     }
 
     if (!prefs) {
@@ -163,6 +171,15 @@ export default function VoiceSettingsSection({ navigation, firstName: firstNameP
                 The speaker button on a task always works, on every plan. This panel is about
                 reminders speaking by themselves.
             </Text>
+
+            {/* Says which half is unavailable. "Play sample" below still works,
+                because nothing about speaking is server-side. */}
+            {prefsFailed ? (
+                <Text style={styles.hint}>
+                    Your saved voice settings could not be loaded, so these controls show
+                    defaults and changes will not save. You can still play a sample.
+                </Text>
+            ) : null}
 
             <View style={styles.row}>
                 <View style={styles.rowText}>

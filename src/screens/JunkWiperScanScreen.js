@@ -27,6 +27,7 @@ import { listDocuments, deleteDocument } from "../api/documents";
 import { useTheme } from "../ui/ThemeProvider";
 import useThemedStyles from "../ui/useThemedStyles";
 import { showEntitlementDenial } from "../ui/FeatureLock";
+import { usePhotoPermission } from "../hooks/usePhotoPermission";
 import {
     buildDocumentDuplicateGroups,
     buildDuplicateGroups,
@@ -35,7 +36,13 @@ import {
     formatSize,
     isVideoAsset,
 } from "../services/cleanerService";
-// ── Junk Wiper — the duplicate scan screen ────────────────────────────────────
+// ── Duplicate Cleaner — the duplicate scan screen ─────────────────────────────
+//
+// The file, the route name ("JunkWiper") and the entitlement key (deep_clean)
+// all keep their original names so existing navigate() calls and entitlement
+// lookups are untouched. Only what the user READS changed: this screen and
+// Storage Studio's "Duplicate Cleaner" have always been the same feature, and
+// showing two names for it made people look for a second one that isn't there.
 // This is the Basic Cleaner from docs/smart-cleaner-spec.md, and the entry point
 // Storage Studio hands off to for duplicates. It owns permission, the credit
 // reservation, the review list and deletion.
@@ -108,12 +115,13 @@ export default function JunkWiperScanScreen({ navigation }) {
     const txnIdRef = useRef(null);
 
     const [accessLevel, setAccessLevel] = useState(null); // null | 'all' | 'limited'
+    const { ensureAccess, permissionSheet } = usePhotoPermission();
     const [confirmModal, setConfirmModal] = useState({ visible: false, loading: false });
     const [featureCfg, setFeatureCfg] = useState({
         creditCost: 3,
         userNoticeTitle: "Start Duplicate Scan",
         userNoticeMessage:
-            "Junk Wiper scans the photos, videos and PaperAI documents you allow, and reports duplicate copies. Nothing is deleted automatically — you review and confirm before anything is removed.",
+            "Duplicate Cleaner scans the photos, videos and PaperAI documents you allow, and reports duplicate copies. Nothing is deleted automatically — you review and confirm before anything is removed.",
     });
 
     // ── Jarvis animation refs ─────────────────────────────────────────────────
@@ -208,39 +216,31 @@ export default function JunkWiperScanScreen({ navigation }) {
     async function requestScan() {
         if (preparing) return;
         setPreparing(true);
-        let perm;
+        let privilege;
         try {
-            // requestPermissionsAsync(writeOnly=false) asks for full read+write access
-            perm = await MediaLibrary.requestPermissionsAsync(false);
+            // The explainer runs first and always ends at the system dialog.
+            // Previously this called requestPermissionsAsync() cold and only
+            // explained itself in the Alert that followed a refusal — which iOS
+            // gives no way to act on, since the dialog is shown exactly once.
+            privilege = await ensureAccess({
+                title: "Duplicate Cleaner needs your photos",
+                reason:
+                    "Duplicate Cleaner compares the photos in your library on this device to find exact copies, repeated filenames and burst shots. It works best with access to all photos.",
+            });
         } finally {
             setPreparing(false);
         }
 
-        if (perm.status === "denied") {
-            Alert.alert(
-                "Photo Access Denied",
-                "Junk Wiper needs full access to your photo library to find duplicates.\n\nGo to Settings → Paper AI Assistant → Photos → Select \"All Photos\".",
-                [
-                    { text: "Cancel", style: "cancel" },
-                    { text: "Open Settings", onPress: () => Linking.openSettings() },
-                ]
-            );
-            return;
-        }
-
-        if (perm.status !== "granted") {
-            Alert.alert("Permission Required", "Photo library access is required to scan for duplicates.");
-            return;
-        }
-
-        const privilege = perm.accessPrivileges ?? "all";
+        // The sheet has already said where the user stands — a second Alert on
+        // top of it would just be the same message twice.
+        if (!privilege) return;
         setAccessLevel(privilege);
 
         if (privilege === "limited") {
             // User gave limited access — let them expand selection first
             Alert.alert(
                 "Limited Photo Access",
-                "You've only allowed access to selected photos. For Junk Wiper to find all duplicates it needs access to your full photo library.\n\nChoose an option:",
+                "You've only allowed access to selected photos. For Duplicate Cleaner to find all duplicates it needs access to your full photo library.\n\nChoose an option:",
                 [
                     {
                         text: "Expand Access (Recommended)",
@@ -623,7 +623,7 @@ export default function JunkWiperScanScreen({ navigation }) {
                         <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.backBtn}>
                             <Ionicons name="chevron-back" size={20} color={theme.colors.accentText} />
                         </Pressable>
-                        <Text style={styles.headerTitle}>Junk Wiper</Text>
+                        <Text style={styles.headerTitle}>Duplicate Cleaner</Text>
                         <View style={{ width: 36 }} />
                     </View>
 
@@ -643,7 +643,7 @@ export default function JunkWiperScanScreen({ navigation }) {
                             </View>
                             <Text style={styles.idleTitle}>Ready to Scan</Text>
                             <Text style={styles.idleBody}>
-                                Junk Wiper finds duplicate photos, videos and PaperAI
+                                Duplicate Cleaner finds duplicate photos, videos and PaperAI
                                 documents — exact copies, the same file saved across
                                 albums, burst-shot clusters, and documents uploaded twice.
                             </Text>
@@ -703,7 +703,7 @@ export default function JunkWiperScanScreen({ navigation }) {
                     {/* ──────────── SCANNING — PREMIUM RADAR ──────────── */}
                     {phase === "scanning" && (
                         <LinearGradient
-                            colors={["#0A1230", "#0B1B44", "#08122E"]}
+                            colors={theme.gradients.radar}
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 1 }}
                             style={styles.radarScreen}
@@ -737,7 +737,7 @@ export default function JunkWiperScanScreen({ navigation }) {
                                 <View style={styles.radarClip}>
                                     <Animated.View style={[styles.sweepRotor, { transform: [{ rotate: radarRot }] }]}>
                                         <LinearGradient
-                                            colors={["rgba(56,189,248,0)", "rgba(56,189,248,0.55)"]}
+                                            colors={[theme.colors.radarSweepFrom, theme.colors.radarSweepTo]}
                                             start={{ x: 0, y: 1 }}
                                             end={{ x: 1, y: 0 }}
                                             style={styles.sweepBeam}
@@ -766,7 +766,7 @@ export default function JunkWiperScanScreen({ navigation }) {
                                     { icon: "trash-outline", label: "Trash" },
                                 ].map((c, i) => (
                                     <Animated.View key={c.label} style={[styles.categoryChip, { opacity: categoryFades[i] }]}>
-                                        <Ionicons name={c.icon} size={16} color="#7DD3FC" />
+                                        <Ionicons name={c.icon} size={16} color={theme.colors.radarAccent} />
                                         <Text style={styles.categoryLabel}>{c.label}</Text>
                                     </Animated.View>
                                 ))}
@@ -780,12 +780,12 @@ export default function JunkWiperScanScreen({ navigation }) {
                                 </View>
                                 <View style={styles.radarStatDivider} />
                                 <View style={styles.radarStat}>
-                                    <Text style={[styles.radarStatVal, liveFound > 0 && { color: "#FCA5A5" }]}>{liveFound}</Text>
+                                    <Text style={[styles.radarStatVal, liveFound > 0 && { color: theme.colors.radarWarn }]}>{liveFound}</Text>
                                     <Text style={styles.radarStatLabel}>Duplicates</Text>
                                 </View>
                                 <View style={styles.radarStatDivider} />
                                 <View style={styles.radarStat}>
-                                    <Text style={[styles.radarStatVal, { color: "#7DD3FC" }]}>{formatSize(liveBytes)}</Text>
+                                    <Text style={[styles.radarStatVal, { color: theme.colors.radarAccent }]}>{formatSize(liveBytes)}</Text>
                                     <Text style={styles.radarStatLabel}>Junk size</Text>
                                 </View>
                             </View>
@@ -797,7 +797,7 @@ export default function JunkWiperScanScreen({ navigation }) {
 
                             {/* Safety note */}
                             <View style={styles.radarSafety}>
-                                <Ionicons name="shield-checkmark-outline" size={14} color="#7DD3FC" />
+                                <Ionicons name="shield-checkmark-outline" size={14} color={theme.colors.radarAccent} />
                                 <Text style={styles.radarSafetyText}>Nothing will be deleted without your confirmation.</Text>
                             </View>
 
@@ -968,6 +968,8 @@ export default function JunkWiperScanScreen({ navigation }) {
                     bytesFreed={celebration ?? ""}
                     onDone={() => setCelebration(null)}
                 />
+
+                {permissionSheet}
             </SafeAreaView>
 
             <ConfirmActionSheet
@@ -1252,8 +1254,8 @@ const makeStyles = (t) =>
         alignItems: "center",
         gap: 18,
         borderWidth: 1,
-        borderColor: "rgba(56,189,248,0.18)",
-        shadowColor: "#0A1230",
+        borderColor: `rgba(${t.colors.radarTintRgb},0.18)`,
+        shadowColor: t.colors.radarText,
         shadowOffset: { width: 0, height: 10 },
         shadowOpacity: 0.4,
         shadowRadius: 20,
@@ -1266,24 +1268,24 @@ const makeStyles = (t) =>
     radarPulse: {
         position: "absolute",
         width: 230, height: 230, borderRadius: 115,
-        backgroundColor: "rgba(56,189,248,0.18)",
+        backgroundColor: `rgba(${t.colors.radarTintRgb},0.18)`,
     },
     radarRing: {
         position: "absolute",
         borderRadius: 999,
         borderWidth: 1,
-        borderColor: "rgba(56,189,248,0.22)",
+        borderColor: `rgba(${t.colors.radarTintRgb},0.22)`,
     },
     radarRingOuter: { width: 220, height: 220 },
-    radarRingMid: { width: 152, height: 152, borderColor: "rgba(56,189,248,0.28)" },
-    radarRingInner: { width: 84, height: 84, borderColor: "rgba(56,189,248,0.34)" },
+    radarRingMid: { width: 152, height: 152, borderColor: `rgba(${t.colors.radarTintRgb},0.28)` },
+    radarRingInner: { width: 84, height: 84, borderColor: `rgba(${t.colors.radarTintRgb},0.34)` },
     radarCrossH: {
         position: "absolute", width: 220, height: 1,
-        backgroundColor: "rgba(56,189,248,0.14)",
+        backgroundColor: `rgba(${t.colors.radarTintRgb},0.14)`,
     },
     radarCrossV: {
         position: "absolute", width: 1, height: 220,
-        backgroundColor: "rgba(56,189,248,0.14)",
+        backgroundColor: `rgba(${t.colors.radarTintRgb},0.14)`,
     },
     // Clip container keeps the rotating sweep inside the circular dish
     radarClip: {
@@ -1316,18 +1318,18 @@ const makeStyles = (t) =>
         width: 84, height: 84, borderRadius: 42,
         alignItems: "center", justifyContent: "center",
         backgroundColor: "rgba(9,18,46,0.65)",
-        borderWidth: 1, borderColor: "rgba(56,189,248,0.4)",
+        borderWidth: 1, borderColor: `rgba(${t.colors.radarTintRgb},0.4)`,
     },
     radarPct: { color: t.colors.white, fontSize: 28, fontWeight: "900", letterSpacing: -1 },
-    radarCenterLabel: { color: "#7DD3FC", fontSize: 10, fontWeight: "800", letterSpacing: 2 },
+    radarCenterLabel: { color: t.colors.radarAccent, fontSize: 10, fontWeight: "800", letterSpacing: 2 },
 
     radarMsg: { color: "#BAE6FD", fontWeight: "700", fontSize: 14, textAlign: "center" },
 
     categoryRow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 8 },
     categoryChip: {
         flexDirection: "row", alignItems: "center", gap: 5,
-        backgroundColor: "rgba(56,189,248,0.10)",
-        borderWidth: 1, borderColor: "rgba(56,189,248,0.25)",
+        backgroundColor: `rgba(${t.colors.radarTintRgb},0.10)`,
+        borderWidth: 1, borderColor: `rgba(${t.colors.radarTintRgb},0.25)`,
         borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6,
     },
     categoryLabel: { color: "#E0F2FE", fontWeight: "700", fontSize: 11 },
@@ -1335,14 +1337,14 @@ const makeStyles = (t) =>
     radarStatsRow: {
         flexDirection: "row", alignItems: "center",
         backgroundColor: "rgba(255,255,255,0.05)",
-        borderWidth: 1, borderColor: "rgba(56,189,248,0.18)",
+        borderWidth: 1, borderColor: `rgba(${t.colors.radarTintRgb},0.18)`,
         borderRadius: 16, paddingVertical: 12, paddingHorizontal: 12,
         alignSelf: "stretch",
     },
     radarStat: { flex: 1, alignItems: "center", gap: 2 },
-    radarStatVal: { color: t.colors.white, fontWeight: "900", fontSize: 18 },
-    radarStatLabel: { color: "#94A3B8", fontWeight: "700", fontSize: 10, letterSpacing: 0.4 },
-    radarStatDivider: { width: 1, height: 34, backgroundColor: "rgba(148,163,184,0.25)" },
+    radarStatVal: { color: t.colors.radarText, fontWeight: "900", fontSize: 18 },
+    radarStatLabel: { color: t.colors.radarMuted, fontWeight: "700", fontSize: 10, letterSpacing: 0.4 },
+    radarStatDivider: { width: 1, height: 34, backgroundColor: t.colors.radarDivider },
 
     radarBarTrack: {
         alignSelf: "stretch", height: 5, borderRadius: 3,
@@ -1353,8 +1355,8 @@ const makeStyles = (t) =>
 
     radarSafety: {
         flexDirection: "row", alignItems: "center", gap: 7,
-        backgroundColor: "rgba(56,189,248,0.08)",
-        borderWidth: 1, borderColor: "rgba(56,189,248,0.20)",
+        backgroundColor: `rgba(${t.colors.radarTintRgb},0.08)`,
+        borderWidth: 1, borderColor: `rgba(${t.colors.radarTintRgb},0.20)`,
         borderRadius: 12, padding: 10, alignSelf: "stretch",
     },
     radarSafetyText: { flex: 1, color: "#CBD5E1", fontSize: 12, fontWeight: "700", lineHeight: 17 },
@@ -1362,7 +1364,7 @@ const makeStyles = (t) =>
     radarCancel: {
         paddingVertical: 12, paddingHorizontal: 28, borderRadius: 16,
         backgroundColor: "rgba(255,255,255,0.06)",
-        borderWidth: 1, borderColor: "rgba(148,163,184,0.3)",
+        borderWidth: 1, borderColor: `rgba(${t.colors.radarTintRgb},0.3)`,
     },
     radarCancelText: { color: "#CBD5E1", fontWeight: "800" },
 
